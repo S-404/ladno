@@ -16,6 +16,7 @@ type IBarStore interface {
 	Fetch()
 	Clear()
 	GetDataItem(item binding.DataItem) *entity.Person
+	GetItemByIndex(index int) *entity.Person
 }
 
 type BarStore struct {
@@ -47,7 +48,12 @@ func (s *BarStore) GetIsFetching() *binding.Bool {
 }
 
 func (s *BarStore) FetchAsync() {
+	if isFetching, _ := s.IsFetching.Get(); isFetching {
+		fmt.Println("already fetching")
+		return
+	}
 	s.IsFetching.Set(true)
+	s.Items.Set([]any{})
 	s.barService.FetchPersonsAsync(func(data []entity.Person, err error) {
 		fmt.Println("fetched async")
 		if err != nil {
@@ -84,4 +90,19 @@ func (s *BarStore) GetDataItem(item binding.DataItem) *entity.Person {
 	}
 
 	return &person
+}
+
+func (s *BarStore) GetItemByIndex(index int) *entity.Person {
+	item, err := s.Items.GetItem(index)
+	if err != nil {
+		return nil
+	}
+
+	untyped, err := item.(binding.Untyped).Get()
+	if err != nil {
+		return nil
+	}
+
+	v := untyped.(entity.Person)
+	return &v
 }

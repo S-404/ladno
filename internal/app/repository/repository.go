@@ -1,11 +1,13 @@
 package repository
 
 type Repository struct {
-	Foo IFooRepository
+	Foo       IFooRepository
+	Workspace IWorkspaceRepository
 }
 
 func NewRepository() *Repository {
 	return &Repository{
-		Foo: NewFooRepository(),
+		Foo:       NewFooRepository(),
+		Workspace: NewWorkspaceRepository(),
 	}
 }

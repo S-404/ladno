@@ -30,8 +30,9 @@ func (s *BarService) DoSomething() {
 }
 
 func (s *BarService) FetchPersons() ([]entity.Person, error) {
-	// Искусственная задержка на 2 секунды
+	// Искусственная задержка
 	time.Sleep(3 * time.Second)
+
 	url := "https://jsonplaceholder.typicode.com/users"
 	resp, err := http.Get(url)
 	if err != nil {
@@ -54,7 +55,7 @@ func (s *BarService) FetchPersons() ([]entity.Person, error) {
 
 func (s *BarService) FetchPersonsAsync(cb func([]entity.Person, error)) {
 	go func() {
-		// Искусственная задержка на 2 секунды
+		// Искусственная задержка
 		time.Sleep(3 * time.Second)
 
 		url := "https://jsonplaceholder.typicode.com/users"

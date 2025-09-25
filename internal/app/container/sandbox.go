@@ -6,7 +6,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/widget"
-	"github.com/s-404/goose/internal/app/components"
+	"github.com/s-404/goose/internal/app/components/ui"
 	"github.com/s-404/goose/internal/app/entity/shared"
 )
 
@@ -23,8 +23,12 @@ func SandboxContainer(app *shared.App) fyne.CanvasObject {
 			}
 		})
 
-	activity := components.NewActivity(app.Store.Bar.GetIsFetching())
-	activity2 := components.NewActivity(app.Store.Bar.GetIsFetching())
+	list.OnSelected = func(id widget.ListItemID) {
+		selected := app.Store.Bar.GetItemByIndex(id)
+		fmt.Println("SandboxContainer list.OnSelected", selected.Name, selected.Id)
+	}
+
+	loader := ui.NewLoader(app.Store.Bar.GetIsFetching())
 
 	fetchData := func() {
 		app.Store.Bar.Fetch()
@@ -40,12 +44,13 @@ func SandboxContainer(app *shared.App) fyne.CanvasObject {
 
 	fetchBtn := widget.NewButton("Fetch data", fetchData)
 	fetchAsyncBtn := widget.NewButton("Fetch data async", fetchDataAsync)
-	stack := container.NewStack(fetchAsyncBtn, activity)
-	clearBtn := widget.NewButton("clear", clearData)
-	stack2 := container.NewStack(widget.NewLabel("a"), activity2)
 
-	controlPanel := container.NewVBox(fetchBtn, stack, clearBtn, stack2)
-	listBox := container.NewHScroll(list)
+	clearBtn := widget.NewButton("clear", clearData)
+
+	controlPanel := container.NewVBox(fetchBtn, fetchAsyncBtn, clearBtn)
+
+	listBoxWithLoader := container.NewStack(container.NewVBox(loader), list)
+	listBox := container.NewHScroll(listBoxWithLoader)
 
 	return container.NewHSplit(
 		controlPanel,

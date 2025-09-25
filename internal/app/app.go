@@ -2,8 +2,11 @@ package app
 
 import (
 	"fyne.io/fyne/v2"
-	"github.com/s-404/goose/internal/app/container"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
 	"github.com/s-404/goose/internal/app/entity/shared"
+
+	"github.com/s-404/goose/internal/app/layout"
 	"github.com/s-404/goose/internal/app/repository"
 	"github.com/s-404/goose/internal/app/service"
 	"github.com/s-404/goose/internal/app/store"
@@ -17,6 +20,17 @@ func Init(window fyne.Window) {
 		Store:  *newStore,
 		Window: window,
 	}
+	fyne.CurrentApp().Storage().RootURI().Path()
 
-	container.App(&app)
+	tabs := container.NewAppTabs(
+		container.NewTabItemWithIcon("collections", theme.HomeIcon(), layout.CollectionsLayout(&app)),
+		container.NewTabItemWithIcon("sandbox", theme.BrokenImageIcon(), layout.SandboxLayout(&app)),
+		container.NewTabItemWithIcon("envs", theme.StorageIcon(), layout.EnvsLayout(&app)),
+		container.NewTabItemWithIcon("settings", theme.SettingsIcon(), layout.SettingsLayout(&app)),
+	)
+	tabs.SetTabLocation(container.TabLocationLeading)
+
+	header := layout.HeaderLayout(&app)
+
+	app.Window.SetContent(container.NewAdaptiveGrid(1, container.NewBorder(header, nil, nil, nil, tabs)))
 }

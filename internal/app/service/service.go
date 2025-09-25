@@ -3,13 +3,15 @@ package service
 import "github.com/s-404/goose/internal/app/repository"
 
 type Service struct {
-	Foo IFooService
-	Bar IBarService
+	Foo       IFooService
+	Bar       IBarService
+	Workspace IWorkspaceService
 }
 
 func NewService(repos *repository.Repository) *Service {
 	return &Service{
-		Foo: NewFooService(repos.Foo),
-		Bar: NewBarService(),
+		Foo:       NewFooService(repos.Foo),
+		Bar:       NewBarService(),
+		Workspace: newWorkspaceService(repos.Workspace),
 	}
 }
