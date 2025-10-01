@@ -1,21 +1,8 @@
 package entity
 
-type AuthType string
-
-const (
-	AuthTypeInherited AuthType = "Inherited"
-	AuthTypeNoAuth    AuthType = "NoAuth"
-	AuthTypeBasic     AuthType = "Basic"
-	AuthTypeJWT       AuthType = "JWT"
-)
-
-type AuthData struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
-	Type  string `json:"type"`
-}
+import "github.com/s-404/goose/internal/app/entity/constants"
 
 type Auth struct {
-	Type AuthType   `json:"type"`
-	Data []AuthData `json:"data"`
+	Type constants.AuthType `json:"type"`
+	Data []Variable         `json:"data"`
 }

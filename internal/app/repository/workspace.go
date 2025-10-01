@@ -11,7 +11,7 @@ import (
 type IWorkspaceRepository interface {
 	FindById(id string) *entity.Workspace
 	List(titleSearch string) []*entity.Workspace
-	FindAllLightweight() []entity.WorkspaceListItem
+	FindAllLightweight() []entity.WorkspaceLightWeight
 	FindAll() []*entity.Workspace
 	Save(workspace *entity.Workspace) error
 	Delete(id string) error
@@ -24,7 +24,7 @@ type WorkspaceRepository struct {
 
 func NewWorkspaceRepository() *WorkspaceRepository {
 	return &WorkspaceRepository{
-		workspaces: mock.MockWorkspaceData(),
+		workspaces: mock.WorkspaceData(),
 	}
 }
 
@@ -46,7 +46,7 @@ func (r *WorkspaceRepository) List(titleSearch string) []*entity.Workspace {
 
 	var result []*entity.Workspace
 	for _, workspace := range r.workspaces {
-		if strings.Contains(strings.ToLower(workspace.Title), strings.ToLower(titleSearch)) {
+		if strings.Contains(strings.ToLower(workspace.Name), strings.ToLower(titleSearch)) {
 			result = append(result, workspace)
 		}
 	}
@@ -63,15 +63,15 @@ func (r *WorkspaceRepository) FindAll() []*entity.Workspace {
 	return result
 }
 
-func (r *WorkspaceRepository) FindAllLightweight() []entity.WorkspaceListItem {
+func (r *WorkspaceRepository) FindAllLightweight() []entity.WorkspaceLightWeight {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	items := make([]entity.WorkspaceListItem, len(r.workspaces))
+	items := make([]entity.WorkspaceLightWeight, len(r.workspaces))
 	for i, workspace := range r.workspaces {
-		items[i] = entity.WorkspaceListItem{
-			Id:    workspace.Id,
-			Title: workspace.Title,
+		items[i] = entity.WorkspaceLightWeight{
+			Id:   workspace.Id,
+			Name: workspace.Name,
 		}
 	}
 	return items

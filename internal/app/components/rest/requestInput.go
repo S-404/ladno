@@ -12,7 +12,7 @@ import (
 
 func NewRequestInput(methods []string, requestString binding.String, onSend func(), window fyne.Window) fyne.CanvasObject {
 	methodSelect := widget.NewSelect(methods, func(s string) {
-		fmt.Printf("selected method: %s", s)
+		fmt.Printf("selected method: %s\n", s)
 	})
 
 	//requestInput := widget.NewEntryWithData(requestString)

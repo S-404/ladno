@@ -7,7 +7,7 @@ import (
 )
 
 type IWorkspaceService interface {
-	List(cb func([]entity.WorkspaceListItem, error))
+	List(cb func([]entity.WorkspaceLightWeight, error))
 	FindAll(cb func([]*entity.Workspace, error))
 	Find(id string, cb func(*entity.Workspace, error))
 }
@@ -22,7 +22,7 @@ func newWorkspaceService(workspaceRepository repository.IWorkspaceRepository) *W
 	}
 }
 
-func (s *WorkspaceService) List(cb func([]entity.WorkspaceListItem, error)) {
+func (s *WorkspaceService) List(cb func([]entity.WorkspaceLightWeight, error)) {
 	go func() {
 		// Искусственная задержка
 		time.Sleep(1 * time.Second)

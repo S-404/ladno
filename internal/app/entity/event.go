@@ -1,23 +1,18 @@
 package entity
 
-type EnvEventAction string
-
-const (
-	EnvEventActionSet   EnvEventAction = "set"
-	EnvEventActionClear EnvEventAction = "clear"
-)
+import "github.com/s-404/goose/internal/app/entity/constants"
 
 type PreRequestEnvEvent struct {
-	EnvKey string         `json:"envKey"`
-	Action EnvEventAction `json:"action"`
-	Value  string         `json:"value"`
+	EnvKey string                   `json:"envKey"`
+	Action constants.EnvEventAction `json:"action"`
+	Value  string                   `json:"value"`
 }
 
 type PostRequestEnvEvent struct {
-	EnvKey   string         `json:"envKey"`
-	Action   EnvEventAction `json:"action"`
-	Value    string         `json:"value"`
-	JSONPath string         `json:"JSONPath"`
+	EnvKey   string                   `json:"envKey"`
+	Action   constants.EnvEventAction `json:"action"`
+	Value    string                   `json:"value"`
+	JSONPath string                   `json:"JSONPath"`
 }
 
 type Event struct {

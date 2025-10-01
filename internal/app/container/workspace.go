@@ -20,7 +20,7 @@ func WorkspaceContainer(app *shared.App) fyne.CanvasObject {
 		func(item binding.DataItem, obj fyne.CanvasObject) {
 			ws := app.Store.Workspace.GetWorkspaceListItemDataItem(item)
 			if ws != nil {
-				obj.(*widget.Label).SetText(fmt.Sprintf("%s", ws.Title))
+				obj.(*widget.Label).SetText(fmt.Sprintf("%s", ws.Name))
 			}
 		},
 	)
@@ -40,7 +40,7 @@ func WorkspaceContainer(app *shared.App) fyne.CanvasObject {
 	list.OnSelected = func(id widget.ListItemID) {
 		selected := app.Store.Workspace.GetWorkspaceListItemByIndex(id)
 		app.Store.Workspace.FetchWorkspace(selected.Id)
-		btn.Text = selected.Title
+		btn.Text = selected.Name
 		btn.Refresh()
 		dlg.Hide()
 	}

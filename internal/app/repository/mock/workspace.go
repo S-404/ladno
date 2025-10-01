@@ -1,56 +1,33 @@
 package mock
 
 import (
-	"github.com/google/uuid"
 	"github.com/s-404/goose/internal/app/entity"
+	"github.com/s-404/goose/internal/app/entity/constants"
 )
 
-// MockWorkspaceData возвращает мок данные для workspace
-func MockWorkspaceData() []*entity.Workspace {
+// WorkspaceData возвращает мок данные для workspace
+func WorkspaceData() []*entity.Workspace {
 	return []*entity.Workspace{
 		{
 			Id:               "ws-001",
-			Title:            "Основное рабочее пространство",
+			Name:             "Основное рабочее пространство",
 			ConnectionConfig: "postgresql://localhost:5432/main",
-			CollectionItems: []entity.CollectionItem{
+			Collection: []entity.Collection{
 				{
-					Id:    uuid.NewString(),
-					Title: "Пользователи",
-					Auth: entity.Auth{
-						Type: "JWT",
-						Data: []entity.AuthData{
-							{
-								Key:   "Token",
-								Type:  "string",
-								Value: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
-							},
-						},
-					},
-					Event: entity.Event{
-						PreRequest: []entity.PreRequestEnvEvent{
-							{
-								EnvKey: "token2",
-								Action: entity.EnvEventActionClear,
-							},
-						},
-						PostRequest: []entity.PostRequestEnvEvent{
-							{
-								EnvKey:   "token",
-								Action:   entity.EnvEventActionSet,
-								JSONPath: "data.token",
-							},
-						},
-					},
-				},
-				{
-					Id:    "col-002",
-					Title: "Заказы",
-					Auth: entity.Auth{
-						Type: "basic",
-						Data: []entity.AuthData{
-							{Key: "Token",
-								Type:  "string",
-								Value: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+					Id:   "c-001",
+					Name: "Коллекция1",
+					Item: []entity.CollectionItem{
+						{
+							Id:   "i-001",
+							Name: "Пользователи",
+							Request: &entity.ItemRequest{
+								Method: constants.PUT,
+								Url: entity.RequestUrl{
+									Raw: "{{host}}/api/user/:id",
+									Variable: []entity.Variable{
+										{Key: "id", Value: "1", Type: "string"},
+									},
+								},
 							},
 						},
 					},
@@ -59,35 +36,43 @@ func MockWorkspaceData() []*entity.Workspace {
 		},
 		{
 			Id:               "ws-002",
-			Title:            "Тестовое окружение",
-			ConnectionConfig: "postgresql://test-db:5432/test",
-			CollectionItems: []entity.CollectionItem{
+			Name:             "Заказы",
+			ConnectionConfig: "postgresql://localhost:5432/main",
+			Collection: []entity.Collection{
 				{
-					Id:    uuid.NewString(),
-					Title: "API Тесты",
-				},
-			},
-		},
-		{
-			Id:               "ws-003",
-			Title:            "Продакшен сервер",
-			ConnectionConfig: "postgresql://prod-db:5432/production",
-			CollectionItems: []entity.CollectionItem{
-				{
-					Id:    uuid.NewString(),
-					Title: "Мониторинг",
-					Auth: entity.Auth{
-						Type: "apiKey",
+					Id:   "c-002",
+					Name: "Коллекция1",
+					Item: []entity.CollectionItem{
+						{
+							Id:   "i-002",
+							Name: "Order",
+							Item: []entity.CollectionItem{
+								{
+									Id:   "i-003",
+									Name: "create",
+									Request: &entity.ItemRequest{
+										Method: constants.POST,
+										Url: entity.RequestUrl{
+											Raw: "{{host}}/api/order/",
+										},
+									},
+								},
+								{
+									Id:   "i-004",
+									Name: "upd",
+									Request: &entity.ItemRequest{
+										Method: constants.PUT,
+										Url: entity.RequestUrl{
+											Raw: "{{host}}/api/order/:id",
+											Variable: []entity.Variable{
+												{Key: "id", Value: "22", Type: "string"},
+											},
+										},
+									},
+								},
+							},
+						},
 					},
-					Event: entity.Event{},
-				},
-				{
-					Id:    "col-005",
-					Title: "Аналитика",
-					Auth: entity.Auth{
-						Type: "oauth2",
-					},
-					Event: entity.Event{},
 				},
 			},
 		},

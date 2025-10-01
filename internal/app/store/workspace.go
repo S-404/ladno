@@ -11,11 +11,11 @@ import (
 type IWorkspaceStore interface {
 	FetchWorkspaceList()
 	GetItems() *binding.UntypedList
-	GetWorkspaceListItemDataItem(item binding.DataItem) *entity.WorkspaceListItem
-	GetWorkspaceListItemByIndex(index int) *entity.WorkspaceListItem
+	GetWorkspaceListItemDataItem(item binding.DataItem) *entity.WorkspaceLightWeight
+	GetWorkspaceListItemByIndex(index int) *entity.WorkspaceLightWeight
 
 	FetchWorkspace(id string)
-	GetItem() *binding.Untyped
+	GetItem() binding.Untyped
 	GetWorkspaceDataItem(item binding.DataItem) *entity.Workspace
 
 	GetIsFetching() *binding.Bool
@@ -23,7 +23,6 @@ type IWorkspaceStore interface {
 
 type WorkspaceStore struct {
 	Items            binding.UntypedList
-	IsFetchingList   binding.Bool
 	Item             binding.Untyped
 	IsFetching       binding.Bool
 	workspaceService service.IWorkspaceService
@@ -33,7 +32,6 @@ func NewWorkspaceStore(service service.IWorkspaceService) *WorkspaceStore {
 	store := WorkspaceStore{
 		Items:            binding.NewUntypedList(),
 		Item:             binding.NewUntyped(),
-		IsFetchingList:   binding.NewBool(),
 		IsFetching:       binding.NewBool(),
 		workspaceService: service,
 	}
@@ -45,16 +43,16 @@ func (s *WorkspaceStore) GetItems() *binding.UntypedList {
 	return &s.Items
 }
 
-func (s *WorkspaceStore) GetItem() *binding.Untyped {
-	return &s.Item
+func (s *WorkspaceStore) GetItem() binding.Untyped {
+	return s.Item
 }
 
 func (s *WorkspaceStore) GetIsFetching() *binding.Bool {
-	return &s.IsFetchingList
+	return &s.IsFetching
 }
 
 func (s *WorkspaceStore) FetchWorkspace(id string) {
-	if isFetching, _ := s.IsFetchingList.Get(); isFetching {
+	if isFetching, _ := s.IsFetching.Get(); isFetching {
 		fmt.Println("already fetching")
 		return
 	}
@@ -69,19 +67,20 @@ func (s *WorkspaceStore) FetchWorkspace(id string) {
 			fmt.Printf("not found")
 			return
 		}
-		s.Item.Set(&data)
-		s.IsFetchingList.Set(false)
+
+		s.Item.Set(data)
+		s.IsFetching.Set(false)
 	})
 }
 
 func (s *WorkspaceStore) FetchWorkspaceList() {
-	if isFetching, _ := s.IsFetchingList.Get(); isFetching {
+	if isFetching, _ := s.IsFetching.Get(); isFetching {
 		fmt.Println("already fetching")
 		return
 	}
-	s.IsFetchingList.Set(true)
+	s.IsFetching.Set(true)
 	s.ClearList()
-	s.workspaceService.List(func(data []entity.WorkspaceListItem, err error) {
+	s.workspaceService.List(func(data []entity.WorkspaceLightWeight, err error) {
 		if err != nil {
 			fmt.Printf("fetch async with err: %s", err.Error())
 			return
@@ -90,7 +89,7 @@ func (s *WorkspaceStore) FetchWorkspaceList() {
 			return
 		}
 		s.Items.Set(utils.UnpackArray(data))
-		s.IsFetchingList.Set(false)
+		s.IsFetching.Set(false)
 	})
 }
 
@@ -103,22 +102,22 @@ func (s *WorkspaceStore) GetWorkspaceDataItem(item binding.DataItem) *entity.Wor
 	if err != nil {
 		return nil
 	}
-
-	ws, ok := val.(entity.Workspace)
+	debugBindingData(item)
+	ws, ok := val.(*entity.Workspace)
 	if !ok {
 		return nil
 	}
 
-	return &ws
+	return ws
 }
 
-func (s *WorkspaceStore) GetWorkspaceListItemDataItem(item binding.DataItem) *entity.WorkspaceListItem {
+func (s *WorkspaceStore) GetWorkspaceListItemDataItem(item binding.DataItem) *entity.WorkspaceLightWeight {
 	val, err := item.(binding.Untyped).Get()
 	if err != nil {
 		return nil
 	}
 
-	ws, ok := val.(entity.WorkspaceListItem)
+	ws, ok := val.(entity.WorkspaceLightWeight)
 	if !ok {
 		return nil
 	}
@@ -126,7 +125,7 @@ func (s *WorkspaceStore) GetWorkspaceListItemDataItem(item binding.DataItem) *en
 	return &ws
 }
 
-func (s *WorkspaceStore) GetWorkspaceListItemByIndex(index int) *entity.WorkspaceListItem {
+func (s *WorkspaceStore) GetWorkspaceListItemByIndex(index int) *entity.WorkspaceLightWeight {
 	item, err := s.Items.GetItem(index)
 	if err != nil {
 		return nil
@@ -137,6 +136,31 @@ func (s *WorkspaceStore) GetWorkspaceListItemByIndex(index int) *entity.Workspac
 		return nil
 	}
 
-	v := untyped.(entity.WorkspaceListItem)
+	v := untyped.(entity.WorkspaceLightWeight)
 	return &v
+}
+
+func debugBindingData(item binding.DataItem) {
+	fmt.Println("=== Debug Binding Data ===")
+
+	if untyped, ok := item.(binding.Untyped); ok {
+		data, err := untyped.Get()
+		if err != nil {
+			fmt.Printf("Error getting data: %v\n", err)
+			return
+		}
+
+		fmt.Printf("Data type: %T\n", data)
+		fmt.Printf("Data value: %+v\n", data)
+
+		// Попробуем рекурсивно проверить если это другой binding
+		if innerUntyped, ok := data.(binding.Untyped); ok {
+			fmt.Println("Found nested binding.Untyped")
+			debugBindingData(innerUntyped)
+		} else if innerDataItem, ok := data.(binding.DataItem); ok {
+			fmt.Println("Found nested DataItem")
+			debugBindingData(innerDataItem)
+		}
+	}
+	fmt.Println("=== End Debug ===")
 }
