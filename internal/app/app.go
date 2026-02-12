@@ -4,12 +4,12 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
-	"github.com/s-404/goose/internal/app/entity/shared"
+	"github.com/s-404/ladno/internal/app/entity/shared"
 
-	"github.com/s-404/goose/internal/app/layout"
-	"github.com/s-404/goose/internal/app/repository"
-	"github.com/s-404/goose/internal/app/service"
-	"github.com/s-404/goose/internal/app/store"
+	"github.com/s-404/ladno/internal/app/layout"
+	"github.com/s-404/ladno/internal/app/repository"
+	"github.com/s-404/ladno/internal/app/service"
+	"github.com/s-404/ladno/internal/app/store"
 )
 
 func Init(window fyne.Window) {

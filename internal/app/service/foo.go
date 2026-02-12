@@ -3,7 +3,7 @@ package service
 import (
 	"fmt"
 
-	"github.com/s-404/goose/internal/app/repository"
+	"github.com/s-404/ladno/internal/app/repository"
 )
 
 type IFooService interface {

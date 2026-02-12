@@ -3,9 +3,9 @@ package store
 import (
 	"fmt"
 	"fyne.io/fyne/v2/data/binding"
-	"github.com/s-404/goose/internal/app/entity"
-	"github.com/s-404/goose/internal/app/service"
-	"github.com/s-404/goose/internal/app/utils"
+	"github.com/s-404/ladno/internal/app/entity"
+	"github.com/s-404/ladno/internal/app/service"
+	"github.com/s-404/ladno/internal/app/utils"
 )
 
 type IWorkspaceStore interface {

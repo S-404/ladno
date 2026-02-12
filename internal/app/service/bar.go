@@ -3,7 +3,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/s-404/goose/internal/app/entity"
+	"github.com/s-404/ladno/internal/app/entity"
 	"io"
 	"net/http"
 	"time"

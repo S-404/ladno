@@ -1,8 +1,8 @@
 package mock
 
 import (
-	"github.com/s-404/goose/internal/app/entity"
-	"github.com/s-404/goose/internal/app/entity/constants"
+	"github.com/s-404/ladno/internal/app/entity"
+	"github.com/s-404/ladno/internal/app/entity/constants"
 )
 
 // WorkspaceData возвращает мок данные для workspace

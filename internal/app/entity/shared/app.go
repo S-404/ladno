@@ -2,7 +2,7 @@ package shared
 
 import (
 	"fyne.io/fyne/v2"
-	"github.com/s-404/goose/internal/app/store"
+	"github.com/s-404/ladno/internal/app/store"
 )
 
 type App struct {

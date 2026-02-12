@@ -2,8 +2,8 @@ package repository
 
 import (
 	"fmt"
-	"github.com/s-404/goose/internal/app/entity"
-	"github.com/s-404/goose/internal/app/repository/mock"
+	"github.com/s-404/ladno/internal/app/entity"
+	"github.com/s-404/ladno/internal/app/repository/mock"
 	"strings"
 	"sync"
 )

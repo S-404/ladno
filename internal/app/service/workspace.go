@@ -1,8 +1,8 @@
 package service
 
 import (
-	"github.com/s-404/goose/internal/app/entity"
-	"github.com/s-404/goose/internal/app/repository"
+	"github.com/s-404/ladno/internal/app/entity"
+	"github.com/s-404/ladno/internal/app/repository"
 	"time"
 )
 

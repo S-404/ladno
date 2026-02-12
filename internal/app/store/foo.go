@@ -3,7 +3,7 @@ package store
 import (
 	"fmt"
 	"fyne.io/fyne/v2/data/binding"
-	"github.com/s-404/goose/internal/app/service"
+	"github.com/s-404/ladno/internal/app/service"
 	"time"
 )
 

@@ -1,6 +1,6 @@
 package entity
 
-import "github.com/s-404/goose/internal/app/entity/constants"
+import "github.com/s-404/ladno/internal/app/entity/constants"
 
 type RequestUrl struct {
 	Raw      string     `json:"raw"`

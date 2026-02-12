@@ -6,8 +6,8 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/widget"
-	"github.com/s-404/goose/internal/app/components/ui"
-	"github.com/s-404/goose/internal/app/entity/shared"
+	"github.com/s-404/ladno/internal/app/components/ui"
+	"github.com/s-404/ladno/internal/app/entity/shared"
 )
 
 func SandboxContainer(app *shared.App) fyne.CanvasObject {

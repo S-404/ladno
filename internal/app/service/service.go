@@ -1,6 +1,6 @@
 package service
 
-import "github.com/s-404/goose/internal/app/repository"
+import "github.com/s-404/ladno/internal/app/repository"
 
 type Service struct {
 	Foo       IFooService

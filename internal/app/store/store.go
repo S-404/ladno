@@ -1,7 +1,7 @@
 package store
 
 import (
-	"github.com/s-404/goose/internal/app/service"
+	"github.com/s-404/ladno/internal/app/service"
 )
 
 type Store struct {
