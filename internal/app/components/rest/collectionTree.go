@@ -46,20 +46,26 @@ func NewCollectionTree() *CollectionTree {
 		},
 		func(branch bool) fyne.CanvasObject {
 			icon := widget.NewIcon(theme.DocumentIcon())
+			icon.Resize(fyne.NewSize(theme.IconInlineSize(), theme.IconInlineSize()))
+
 			label := widget.NewLabel("")
 			label.Truncation = fyne.TextTruncateEllipsis
-			return container.NewHBox(icon, label)
+
+			return container.NewBorder(nil, nil, icon, nil, label)
 		},
 		func(uid widget.TreeNodeID, branch bool, obj fyne.CanvasObject) {
 			ct.mu.RLock()
 			label := ct.nodes[uid]
 			ct.mu.RUnlock()
 
-			hbox := obj.(*fyne.Container)
-			hbox.Objects[0].(*widget.Icon).SetResource(
-				map[bool]fyne.Resource{true: theme.FolderIcon(), false: theme.DocumentIcon()}[branch],
+			c := obj.(*fyne.Container)
+			c.Objects[1].(*widget.Icon).SetResource(
+				map[bool]fyne.Resource{
+					true:  theme.FolderIcon(),
+					false: theme.DocumentIcon(),
+				}[branch],
 			)
-			hbox.Objects[1].(*widget.Label).SetText(label)
+			c.Objects[0].(*widget.Label).SetText(label)
 		},
 	)
 
@@ -76,7 +82,6 @@ func (ct *CollectionTree) SetCollections(collections []entity.Collection) {
 		childIDs[""] = append(childIDs[""], colUID)
 		nodes[colUID] = col.Name
 		branches[colUID] = len(col.Item) > 0
-
 		fillItems(col.Item, colUID, childIDs, nodes, branches)
 	}
 
