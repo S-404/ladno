@@ -72,6 +72,35 @@ func WorkspaceData() []*entity.Workspace {
 								},
 							},
 						},
+						{
+							Id:   "i-005",
+							Name: "another Order",
+							Item: []entity.CollectionItem{
+								{
+									Id:   "i-006",
+									Name: "get",
+									Request: &entity.ItemRequest{
+										Method: constants.GET,
+										Url: entity.RequestUrl{
+											Raw: "{{host}}/api/another/order/",
+										},
+									},
+								},
+								{
+									Id:   "i-007",
+									Name: "upd",
+									Request: &entity.ItemRequest{
+										Method: constants.PUT,
+										Url: entity.RequestUrl{
+											Raw: "{{host}}/api/another/order/:id",
+											Variable: []entity.Variable{
+												{Key: "id", Value: "33", Type: "string"},
+											},
+										},
+									},
+								},
+							},
+						},
 					},
 				},
 			},
