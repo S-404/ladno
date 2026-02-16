@@ -11,22 +11,25 @@ import (
 	"github.com/s-404/ladno/internal/app/entity"
 )
 
+type treeNode struct {
+	label string
+	item  entity.CollectionItem
+}
+
 type CollectionTree struct {
 	widget.BaseWidget
 
 	mu       sync.RWMutex
 	childIDs map[string][]string
-	nodes    map[string]string // uid -> label
-	branches map[string]bool   // uid -> isBranch
+	nodes    map[string]treeNode
 
 	tree *widget.Tree
 }
 
-func NewCollectionTree() *CollectionTree {
+func NewCollectionTree(onSelectItem func(item entity.CollectionItem)) *CollectionTree {
 	ct := &CollectionTree{
 		childIDs: map[string][]string{"": {}},
-		nodes:    map[string]string{},
-		branches: map[string]bool{},
+		nodes:    map[string]treeNode{},
 	}
 	ct.ExtendBaseWidget(ct)
 
@@ -42,20 +45,22 @@ func NewCollectionTree() *CollectionTree {
 			}
 			ct.mu.RLock()
 			defer ct.mu.RUnlock()
-			return ct.branches[uid]
+			n, ok := ct.nodes[uid]
+			if !ok {
+				return false
+			}
+			return len(n.item.Item) > 0
 		},
 		func(branch bool) fyne.CanvasObject {
 			icon := widget.NewIcon(theme.DocumentIcon())
 			icon.Resize(fyne.NewSize(theme.IconInlineSize(), theme.IconInlineSize()))
-
 			label := widget.NewLabel("")
 			label.Truncation = fyne.TextTruncateEllipsis
-
 			return container.NewBorder(nil, nil, icon, nil, label)
 		},
 		func(uid widget.TreeNodeID, branch bool, obj fyne.CanvasObject) {
 			ct.mu.RLock()
-			label := ct.nodes[uid]
+			n := ct.nodes[uid]
 			ct.mu.RUnlock()
 
 			c := obj.(*fyne.Container)
@@ -65,30 +70,45 @@ func NewCollectionTree() *CollectionTree {
 					false: theme.DocumentIcon(),
 				}[branch],
 			)
-			c.Objects[0].(*widget.Label).SetText(label)
+			c.Objects[0].(*widget.Label).SetText(n.label)
 		},
 	)
+
+	ct.tree.OnSelected = func(uid widget.TreeNodeID) {
+		ct.mu.RLock()
+		n, ok := ct.nodes[uid]
+		ct.mu.RUnlock()
+
+		if !ok || onSelectItem == nil {
+			return
+		}
+		onSelectItem(n.item)
+	}
 
 	return ct
 }
 
 func (ct *CollectionTree) SetCollections(collections []entity.Collection) {
 	childIDs := map[string][]string{"": {}}
-	nodes := map[string]string{}
-	branches := map[string]bool{}
+	nodes := map[string]treeNode{}
 
 	for _, col := range collections {
 		colUID := "col:" + col.Id
 		childIDs[""] = append(childIDs[""], colUID)
-		nodes[colUID] = col.Name
-		branches[colUID] = len(col.Item) > 0
-		fillItems(col.Item, colUID, childIDs, nodes, branches)
+		nodes[colUID] = treeNode{
+			label: col.Name,
+			item: entity.CollectionItem{
+				Id:   col.Id,
+				Name: col.Name,
+				Item: col.Item,
+			},
+		}
+		fillItems(col.Item, colUID, childIDs, nodes)
 	}
 
 	ct.mu.Lock()
 	ct.childIDs = childIDs
 	ct.nodes = nodes
-	ct.branches = branches
 	ct.mu.Unlock()
 
 	ct.tree.Refresh()
@@ -106,13 +126,12 @@ func (ct *CollectionTree) CreateRenderer() fyne.WidgetRenderer {
 }
 
 func fillItems(
-	items []entity.CollectionItem,
+	collectionItems []entity.CollectionItem,
 	parentUID string,
 	childIDs map[string][]string,
-	nodes map[string]string,
-	branches map[string]bool,
+	nodes map[string]treeNode,
 ) {
-	for _, item := range items {
+	for _, item := range collectionItems {
 		uid := "item:" + item.Id
 		childIDs[parentUID] = append(childIDs[parentUID], uid)
 
@@ -121,11 +140,10 @@ func fillItems(
 			label = fmt.Sprintf("[%s] %s", item.Request.Method, item.Name)
 		}
 
-		nodes[uid] = label
-		branches[uid] = len(item.Item) > 0
+		nodes[uid] = treeNode{label: label, item: item}
 
 		if len(item.Item) > 0 {
-			fillItems(item.Item, uid, childIDs, nodes, branches)
+			fillItems(item.Item, uid, childIDs, nodes)
 		}
 	}
 }
