@@ -12,14 +12,18 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// --- Токенизатор URL ---
+// url tokenizer
 
 type tokenKind int
 
 const (
-	tokenPlain     tokenKind = iota
-	tokenVariable            // {{...}}
-	tokenPathParam           // :param
+	tokenPlain       tokenKind = iota
+	tokenVariable              // {{...}}
+	tokenPathParam             // :param
+	tokenQueryKey              // ?key= or &key=
+	tokenQueryEquals           // =
+	tokenQueryValue            // value after =
+	tokenQuerySep              // ? and &
 )
 
 type urlToken struct {
@@ -27,7 +31,42 @@ type urlToken struct {
 	kind tokenKind
 }
 
+// parseURL split url per tokens
 func parseURL(raw string) []urlToken {
+	qIdx := queryStart(raw)
+
+	if qIdx == -1 {
+		// if no query part then only path parsing
+		return parsePath(raw)
+	}
+
+	tokens := parsePath(raw[:qIdx])
+	tokens = append(tokens, parseQuery(raw[qIdx:])...)
+	return tokens
+}
+
+// queryStart returns index of first '?' outside {{...}}
+func queryStart(raw string) int {
+	i := 0
+	for i < len(raw) {
+		if i+1 < len(raw) && raw[i] == '{' && raw[i+1] == '{' {
+			end := strings.Index(raw[i:], "}}")
+			if end == -1 {
+				return -1
+			}
+			i += end + 2
+			continue
+		}
+		if raw[i] == '?' {
+			return i
+		}
+		i++
+	}
+	return -1
+}
+
+// parsePath  URL part before '?' — variables and path-parameters
+func parsePath(raw string) []urlToken {
 	var tokens []urlToken
 	plain := &strings.Builder{}
 	i := 0
@@ -54,7 +93,7 @@ func parseURL(raw string) []urlToken {
 			continue
 		}
 
-		// :param — пропускаем ://
+		// skip :param
 		if raw[i] == ':' {
 			if i+2 < len(raw) && raw[i+1] == '/' && raw[i+2] == '/' {
 				plain.WriteByte(raw[i])
@@ -83,30 +122,129 @@ func parseURL(raw string) []urlToken {
 	return tokens
 }
 
+// parseQuery handle query-string starts with '?'
+func parseQuery(raw string) []urlToken {
+	var tokens []urlToken
+	i := 0
+
+	for i < len(raw) {
+		// ? or & separator
+		if raw[i] == '?' || raw[i] == '&' {
+			tokens = append(tokens, urlToken{string(raw[i]), tokenQuerySep})
+			i++
+
+			// read key to the '=' / '&' / end
+			j := i
+			for j < len(raw) && raw[j] != '=' && raw[j] != '&' {
+				j++
+			}
+			if j > i {
+				tokens = append(tokens, urlToken{raw[i:j], tokenQueryKey})
+				i = j
+			}
+
+			// read '='
+			if i < len(raw) && raw[i] == '=' {
+				tokens = append(tokens, urlToken{"=", tokenQueryEquals})
+				i++
+
+				// read value to the '&' or end, with highlight {{var}} and :param
+				tokens = append(tokens, parseQueryValue(raw, &i)...)
+			}
+			continue
+		}
+		i++
+	}
+
+	return tokens
+}
+
+// parseQueryValue read value of query-parameter to the '&' or end.
+// highlights {{var}} and :param.
+func parseQueryValue(raw string, i *int) []urlToken {
+	var tokens []urlToken
+	plain := &strings.Builder{}
+
+	flush := func() {
+		if plain.Len() > 0 {
+			tokens = append(tokens, urlToken{plain.String(), tokenQueryValue})
+			plain.Reset()
+		}
+	}
+
+	for *i < len(raw) {
+		// end of value
+		if raw[*i] == '&' {
+			break
+		}
+
+		// {{variable}} at value
+		if *i+1 < len(raw) && raw[*i] == '{' && raw[*i+1] == '{' {
+			flush()
+			end := strings.Index(raw[*i:], "}}")
+			if end == -1 {
+				plain.WriteString(raw[*i:])
+				*i = len(raw)
+				break
+			}
+			end += *i + 2
+			tokens = append(tokens, urlToken{raw[*i:end], tokenVariable})
+			*i = end
+			continue
+		}
+
+		// :param at value
+		if raw[*i] == ':' {
+			flush()
+			j := *i + 1
+			for j < len(raw) && raw[j] != '&' && isParamChar(raw[j]) {
+				j++
+			}
+			if j > *i+1 {
+				tokens = append(tokens, urlToken{raw[*i:j], tokenPathParam})
+				*i = j
+				continue
+			}
+			plain.WriteByte(raw[*i])
+			*i++
+			continue
+		}
+
+		plain.WriteByte(raw[*i])
+		*i++
+	}
+	flush()
+	return tokens
+}
+
 func isParamChar(c byte) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
 		(c >= '0' && c <= '9') || c == '_' || c == '-'
 }
 
-// tokenColor возвращает цвет для типа токена
+// tokenColor returns color for token type
 func tokenColor(kind tokenKind) color.Color {
 	switch kind {
 	case tokenVariable:
-		return color.NRGBA{R: 255, G: 165, B: 0, A: 255} // оранжевый
+		return color.NRGBA{R: 255, G: 165, B: 0, A: 255} // оранжевый  {{var}}
 	case tokenPathParam:
-		return color.NRGBA{R: 86, G: 182, B: 255, A: 255} // голубой
+		return color.NRGBA{R: 86, G: 182, B: 255, A: 255} // голубой    :param
+	case tokenQueryKey:
+		return color.NRGBA{R: 130, G: 210, B: 130, A: 255} // зелёный    key
+	case tokenQueryEquals, tokenQuerySep:
+		return color.NRGBA{R: 140, G: 140, B: 140, A: 255} // серый      ? & =
+	case tokenQueryValue:
+		return theme.Color(theme.ColorNameForeground) // обычный    value
 	default:
 		return theme.Color(theme.ColorNameForeground)
 	}
 }
 
-// --- highlightDisplay — display-слой через canvas.Text в HBox ---
+// --- highlightDisplay — display-layer through canvas.Text in HBox ---
 
-// highlightDisplay отображает подсвеченный URL как набор canvas.Text.
-// Не использует widget.RichText — только canvas объекты в контейнере.
 type highlightDisplay struct {
 	widget.BaseWidget
-	box *fyne.Container // container.NewHBox с canvas.Text элементами
+	box *fyne.Container
 }
 
 func newHighlightDisplay() *highlightDisplay {
@@ -140,7 +278,7 @@ func (h *highlightDisplay) MinSize() fyne.Size {
 	return h.box.MinSize()
 }
 
-// --- urlEntry — Entry с перехватом FocusLost ---
+// --- urlEntry — Entry with interceptor FocusLost ---
 
 type urlEntry struct {
 	widget.Entry
@@ -162,18 +300,17 @@ func (e *urlEntry) FocusLost() {
 	}
 }
 
-// --- UrlInput ---
+func (e *urlEntry) KeyDown(key *fyne.KeyEvent) {
+	switch key.Name {
+	case fyne.KeyReturn, fyne.KeyEscape:
+		if cnv := fyne.CurrentApp().Driver().CanvasForObject(e); cnv != nil {
+			cnv.Unfocus()
+		}
+	default:
+		e.Entry.KeyDown(key)
+	}
+}
 
-// UrlInput — адресная строка в стиле Postman.
-//
-// display режим: подсвеченный URL ({{var}} оранжевый, :param голубой)
-// edit режим:    обычный Entry при клике, возврат в display при потере фокуса
-//
-// Использование:
-//
-//	val := binding.NewString()
-//	val.Set("{{host}}/api/user/:id")
-//	input := ui.NewUrlInput(val)
 type UrlInput struct {
 	widget.BaseWidget
 
@@ -205,19 +342,16 @@ func NewUrlInput(value binding.String) *UrlInput {
 	u.border.StrokeWidth = theme.InputBorderSize()
 	u.border.CornerRadius = theme.InputRadiusSize()
 
-	// Слушаем изменения для обновления display
 	value.AddListener(binding.NewDataListener(func() {
 		raw, _ := value.Get()
 		u.display.SetText(raw)
 	}))
 
-	// Начальное состояние — display режим
 	u.entry.Hide()
 
 	return u
 }
 
-// Tapped — клик переключает в режим редактирования
 func (u *UrlInput) Tapped(_ *fyne.PointEvent) {
 	if !u.focused {
 		u.focused = true
