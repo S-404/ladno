@@ -7,6 +7,7 @@ import (
 type Store struct {
 	Env       IEnvStore
 	Log       ILogStore
+	Nats      INatsStore
 	Rest      IRestStore
 	Selection ISelectionStore
 	Workspace IWorkspaceStore
@@ -19,6 +20,7 @@ func NewStore(service *service.Service) *Store {
 	return &Store{
 		Env:       envStore,
 		Log:       logStore,
+		Nats:      NewNatsStore(service.Nats, envStore, logStore),
 		Rest:      NewRestStore(service.Rest, envStore, logStore),
 		Selection: NewSelectionStore(wsStore),
 		Workspace: wsStore,

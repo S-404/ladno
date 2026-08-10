@@ -16,6 +16,7 @@ import (
 
 func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 	selStore := app.Store.Selection
+	natsStore := app.Store.Nats
 
 	empty := container.NewCenter(widget.NewLabel("Select a collection or request"))
 
@@ -33,9 +34,15 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			if sel == nil || sel.Kind != entity.SelectionCollection {
 				return
 			}
-			// Persist connection fields, then stub connect until NATS client exists.
 			selStore.UpdateCollection(sel.CollectionID, save.Name, save.Auth, save.Nats)
-			colSettings.SetConnectStatus("Connect is not implemented yet")
+			if save.Nats == nil {
+				colSettings.SetConnectStatus("Host/port required")
+				return
+			}
+			colSettings.SetConnectStatus("Connecting…")
+			natsStore.Connect(sel.CollectionID, save.Name, *save.Nats, func(ok bool, status string) {
+				colSettings.SetConnectStatus(status)
+			})
 		},
 	})
 
@@ -92,6 +99,9 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		switch sel.Kind {
 		case entity.SelectionCollection:
 			colSettings.Set(sel.Name, sel.Auth, sel.Nats, sel.CollectionType)
+			if sel.CollectionType == constants.CollectionTypeNATS && natsStore.IsConnected(sel.CollectionID) {
+				colSettings.SetConnectStatus("Connected")
+			}
 			show(1)
 		case entity.SelectionFolder:
 			folderSettings.Set(sel.Name, sel.Auth)

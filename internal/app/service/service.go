@@ -4,6 +4,7 @@ import "github.com/s-404/ladno/internal/app/repository"
 
 type Service struct {
 	Env       IEnvService
+	Nats      INatsService
 	Rest      IRestService
 	Workspace IWorkspaceService
 }
@@ -11,6 +12,7 @@ type Service struct {
 func NewService(repos *repository.Repository) *Service {
 	return &Service{
 		Env:       NewEnvService(repos.Env),
+		Nats:      NewNatsService(),
 		Rest:      NewRestService(),
 		Workspace: newWorkspaceService(repos.Workspace),
 	}
