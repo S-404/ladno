@@ -99,7 +99,7 @@ func EnvContainer(app *shared.App) fyne.CanvasObject {
 		list.Refresh()
 	}))
 
-	newBtn := widget.NewButtonWithIcon("New", theme.ContentAddIcon(), func() {
+	newBtn := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
 		entry := widget.NewEntry()
 		entry.SetText("New Environment")
 		dialog.ShowForm("New environment", "Create", "Cancel", []*widget.FormItem{
@@ -116,11 +116,11 @@ func EnvContainer(app *shared.App) fyne.CanvasObject {
 		}, app.Window)
 	})
 
-	cloneBtn := widget.NewButtonWithIcon("Clone", theme.ContentCopyIcon(), func() {
+	cloneBtn := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
 		envStore.CloneSelected()
 	})
 
-	deleteBtn := widget.NewButtonWithIcon("Delete", theme.DeleteIcon(), func() {
+	deleteBtn := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
 		val, _ := envStore.GetSelected().Get()
 		env, _ := val.(*entity.Env)
 		if env == nil {
@@ -133,16 +133,7 @@ func EnvContainer(app *shared.App) fyne.CanvasObject {
 		}, app.Window)
 	})
 
-	useBtn := widget.NewButtonWithIcon("Use", theme.ConfirmIcon(), func() {
-		val, _ := envStore.GetSelected().Get()
-		env, _ := val.(*entity.Env)
-		if env == nil {
-			return
-		}
-		envStore.SetActive(env.Id)
-	})
-
-	toolbar := container.NewHBox(newBtn, cloneBtn, deleteBtn, useBtn)
+	toolbar := container.NewHBox(newBtn, cloneBtn, deleteBtn)
 	loader := ui.NewLoader(envStore.GetIsFetching())
 
 	left := container.NewBorder(
