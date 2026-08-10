@@ -6,15 +6,18 @@ import (
 
 type Store struct {
 	Env       IEnvStore
+	Log       ILogStore
 	Rest      IRestStore
 	Workspace IWorkspaceStore
 }
 
 func NewStore(service *service.Service) *Store {
 	envStore := NewEnvStore(service.Env)
+	logStore := NewLogStore()
 	return &Store{
 		Env:       envStore,
-		Rest:      NewRestStore(service.Rest, envStore),
+		Log:       logStore,
+		Rest:      NewRestStore(service.Rest, envStore, logStore),
 		Workspace: NewWorkspaceStore(service.Workspace),
 	}
 }

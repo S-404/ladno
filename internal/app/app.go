@@ -29,6 +29,10 @@ func Init(window fyne.Window) {
 	tabs.SetTabLocation(container.TabLocationLeading)
 
 	header := layout.HeaderLayout(&app)
+	logs := layout.LogsLayout(&app)
 
-	app.Window.SetContent(container.NewBorder(header, nil, nil, nil, tabs))
+	body := container.NewVSplit(tabs, logs)
+	body.SetOffset(0.82)
+
+	app.Window.SetContent(container.NewBorder(header, nil, nil, nil, body))
 }

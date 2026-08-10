@@ -37,29 +37,35 @@ func (s *RestService) Send(req entity.RestRequest, cb func(*entity.RestResponse)
 
 func (s *RestService) sendSync(req entity.RestRequest) *entity.RestResponse {
 	start := time.Now()
+	method := strings.ToUpper(req.Method)
+
+	fail := func(resolvedURL, errMsg string) *entity.RestResponse {
+		return &entity.RestResponse{
+			Method:   method,
+			URL:      resolvedURL,
+			Error:    errMsg,
+			Duration: time.Since(start),
+			Request: &entity.RestRequestSnapshot{
+				Method: method,
+				URL:    resolvedURL,
+				Body:   previewBody(req),
+			},
+		}
+	}
 
 	resolvedURL, err := resolveURL(req.URL, req.PathParams)
 	if err != nil {
-		return &entity.RestResponse{
-			Error:    err.Error(),
-			Duration: time.Since(start),
-		}
+		return fail(req.URL, err.Error())
 	}
 
-	body, contentType, err := buildBody(req)
+	bodyReader, bodyText, contentType, err := buildBody(req)
 	if err != nil {
-		return &entity.RestResponse{
-			Error:    err.Error(),
-			Duration: time.Since(start),
-		}
+		return fail(resolvedURL, err.Error())
 	}
 
-	httpReq, err := http.NewRequest(strings.ToUpper(req.Method), resolvedURL, body)
+	httpReq, err := http.NewRequest(method, resolvedURL, bodyReader)
 	if err != nil {
-		return &entity.RestResponse{
-			Error:    err.Error(),
-			Duration: time.Since(start),
-		}
+		return fail(resolvedURL, err.Error())
 	}
 
 	hasContentType := false
@@ -76,12 +82,22 @@ func (s *RestService) sendSync(req entity.RestRequest) *entity.RestResponse {
 		httpReq.Header.Set("Content-Type", contentType)
 	}
 
+	snapshot := &entity.RestRequestSnapshot{
+		Method:  method,
+		URL:     resolvedURL,
+		Headers: cloneHeader(httpReq.Header),
+		Body:    bodyText,
+	}
+
 	resp, err := s.client.Do(httpReq)
 	duration := time.Since(start)
 	if err != nil {
 		return &entity.RestResponse{
+			Method:   method,
+			URL:      resolvedURL,
 			Error:    err.Error(),
 			Duration: duration,
+			Request:  snapshot,
 		}
 	}
 	defer resp.Body.Close()
@@ -89,20 +105,52 @@ func (s *RestService) sendSync(req entity.RestRequest) *entity.RestResponse {
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10 MB
 	if err != nil {
 		return &entity.RestResponse{
+			Method:     method,
+			URL:        resolvedURL,
 			StatusCode: resp.StatusCode,
 			Status:     resp.Status,
 			Headers:    resp.Header,
 			Error:      fmt.Sprintf("read body: %v", err),
 			Duration:   duration,
+			Request:    snapshot,
 		}
 	}
 
 	return &entity.RestResponse{
+		Method:     method,
+		URL:        resolvedURL,
 		StatusCode: resp.StatusCode,
 		Status:     resp.Status,
 		Headers:    resp.Header,
 		Body:       string(respBody),
 		Duration:   duration,
+		Request:    snapshot,
+	}
+}
+
+func cloneHeader(h http.Header) map[string][]string {
+	out := make(map[string][]string, len(h))
+	for k, vals := range h {
+		cp := make([]string, len(vals))
+		copy(cp, vals)
+		out[k] = cp
+	}
+	return out
+}
+
+func previewBody(req entity.RestRequest) string {
+	switch req.BodyMode {
+	case entity.RestBodyFormData:
+		var parts []string
+		for _, row := range req.FormData {
+			if row.Key == "" {
+				continue
+			}
+			parts = append(parts, row.Key+"="+row.Value)
+		}
+		return strings.Join(parts, "&")
+	default:
+		return req.RawBody
 	}
 }
 
@@ -112,7 +160,6 @@ func resolveURL(raw string, pathParams map[string]string) (string, error) {
 		return "", fmt.Errorf("url is empty")
 	}
 
-	// Подставляем :param в path (не трогая {{vars}} и authority).
 	resolved := substitutePathParams(raw, pathParams)
 
 	if !strings.Contains(resolved, "://") {
@@ -188,10 +235,10 @@ func isParamChar(c byte) bool {
 		(c >= '0' && c <= '9') || c == '_' || c == '-'
 }
 
-func buildBody(req entity.RestRequest) (io.Reader, string, error) {
+func buildBody(req entity.RestRequest) (io.Reader, string, string, error) {
 	method := strings.ToUpper(req.Method)
 	if method == http.MethodGet || method == http.MethodHead {
-		return nil, "", nil
+		return nil, "", "", nil
 	}
 
 	switch req.BodyMode {
@@ -203,22 +250,23 @@ func buildBody(req entity.RestRequest) (io.Reader, string, error) {
 				continue
 			}
 			if err := w.WriteField(row.Key, row.Value); err != nil {
-				return nil, "", err
+				return nil, "", "", err
 			}
 		}
 		if err := w.Close(); err != nil {
-			return nil, "", err
+			return nil, "", "", err
 		}
-		return &buf, w.FormDataContentType(), nil
+		bodyBytes := buf.Bytes()
+		return bytes.NewReader(bodyBytes), string(bodyBytes), w.FormDataContentType(), nil
 	default:
 		if req.RawBody == "" {
-			return nil, "", nil
+			return nil, "", "", nil
 		}
 		ct := "text/plain"
 		trimmed := strings.TrimSpace(req.RawBody)
 		if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
 			ct = "application/json"
 		}
-		return strings.NewReader(req.RawBody), ct, nil
+		return strings.NewReader(req.RawBody), req.RawBody, ct, nil
 	}
 }

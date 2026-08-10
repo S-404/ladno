@@ -22,12 +22,15 @@ type RestRequest struct {
 
 // RestResponse — результат выполнения HTTP-запроса.
 type RestResponse struct {
+	Method     string
+	URL        string // итоговый URL после path params
 	StatusCode int
 	Status     string
 	Headers    map[string][]string
 	Body       string
 	Duration   time.Duration
 	Error      string
+	Request    *RestRequestSnapshot
 }
 
 // RestDraft — черновик запроса в UI.

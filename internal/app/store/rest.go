@@ -25,15 +25,17 @@ type RestStore struct {
 	IsSending   binding.Bool
 	restService service.IRestService
 	envStore    IEnvStore
+	logStore    ILogStore
 }
 
-func NewRestStore(restService service.IRestService, envStore IEnvStore) *RestStore {
+func NewRestStore(restService service.IRestService, envStore IEnvStore, logStore ILogStore) *RestStore {
 	return &RestStore{
 		Draft:       binding.NewUntyped(),
 		Response:    binding.NewUntyped(),
 		IsSending:   binding.NewBool(),
 		restService: restService,
 		envStore:    envStore,
+		logStore:    logStore,
 	}
 }
 
@@ -75,8 +77,58 @@ func (s *RestStore) Send(req entity.RestRequest) {
 		fyne.Do(func() {
 			_ = s.Response.Set(resp)
 			_ = s.IsSending.Set(false)
+			s.logRest(resp)
 		})
 	})
+}
+
+func (s *RestStore) logRest(resp *entity.RestResponse) {
+	if s.logStore == nil {
+		return
+	}
+	s.logStore.Append(&entity.LogEntry{
+		Kind:       "rest",
+		Message:    formatRestResult(resp),
+		Detail:     FormatRestLogDetail(resp),
+		StatusCode: statusCodeOf(resp),
+		IsError:    isRestError(resp),
+	})
+}
+
+func statusCodeOf(resp *entity.RestResponse) int {
+	if resp == nil {
+		return 0
+	}
+	return resp.StatusCode
+}
+
+func isRestError(resp *entity.RestResponse) bool {
+	if resp == nil {
+		return true
+	}
+	return resp.Error != "" && resp.StatusCode == 0
+}
+
+func formatRestResult(resp *entity.RestResponse) string {
+	if resp == nil {
+		return "no response"
+	}
+	method := resp.Method
+	if method == "" {
+		method = "?"
+	}
+	url := resp.URL
+	if url == "" {
+		url = "?"
+	}
+	dur := resp.Duration.Milliseconds()
+	if resp.Error != "" && resp.StatusCode == 0 {
+		return fmt.Sprintf("ERR %s %s (%d ms): %s", method, url, dur, resp.Error)
+	}
+	if resp.Error != "" {
+		return fmt.Sprintf("%d %s %s (%d ms): %s", resp.StatusCode, method, url, dur, resp.Error)
+	}
+	return fmt.Sprintf("%d %s %s (%d ms)", resp.StatusCode, method, url, dur)
 }
 
 func applyEnvVars(req entity.RestRequest, vars map[string]string) entity.RestRequest {
