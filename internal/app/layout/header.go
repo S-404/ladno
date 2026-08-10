@@ -1,19 +1,23 @@
 package layout
 
 import (
+	"image/color"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	appContainer "github.com/s-404/ladno/internal/app/container"
 	"github.com/s-404/ladno/internal/app/entity/shared"
-	"image/color"
 )
 
 func HeaderLayout(app *shared.App) fyne.CanvasObject {
 	return container.NewBorder(
 		nil,
 		makeLine(),
-		appContainer.WorkspaceContainer(app),
+		container.NewHBox(
+			appContainer.WorkspaceContainer(app),
+			appContainer.EnvSelectorContainer(app),
+		),
 		nil,
 		nil,
 	)

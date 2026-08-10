@@ -23,7 +23,7 @@ func WorkspaceData() []*entity.Workspace {
 							Request: &entity.ItemRequest{
 								Method: constants.GET,
 								Url: entity.RequestUrl{
-									Raw: "https://jsonplaceholder.typicode.com/posts/:id",
+									Raw: "{{baseUrl}}/posts/:id",
 									Variable: []entity.Variable{
 										{Key: "id", Value: "1", Type: "string"},
 									},
@@ -36,7 +36,7 @@ func WorkspaceData() []*entity.Workspace {
 							Request: &entity.ItemRequest{
 								Method: constants.GET,
 								Url: entity.RequestUrl{
-									Raw: "https://jsonplaceholder.typicode.com/posts?_limit=5",
+									Raw: "{{baseUrl}}/posts?_limit=5",
 								},
 							},
 						},
@@ -47,9 +47,10 @@ func WorkspaceData() []*entity.Workspace {
 								Method: constants.POST,
 								Header: []entity.Variable{
 									{Key: "Content-Type", Value: "application/json"},
+									{Key: "Authorization", Value: "Bearer {{token}}"},
 								},
 								Url: entity.RequestUrl{
-									Raw: "https://jsonplaceholder.typicode.com/posts",
+									Raw: "{{baseUrl}}/posts",
 								},
 							},
 						},
@@ -62,7 +63,7 @@ func WorkspaceData() []*entity.Workspace {
 									{Key: "Content-Type", Value: "application/json"},
 								},
 								Url: entity.RequestUrl{
-									Raw: "https://jsonplaceholder.typicode.com/posts/:id",
+									Raw: "{{baseUrl}}/posts/:id",
 									Variable: []entity.Variable{
 										{Key: "id", Value: "1", Type: "string"},
 									},
@@ -75,7 +76,7 @@ func WorkspaceData() []*entity.Workspace {
 							Request: &entity.ItemRequest{
 								Method: constants.DELETE,
 								Url: entity.RequestUrl{
-									Raw: "https://jsonplaceholder.typicode.com/posts/:id",
+									Raw: "{{baseUrl}}/posts/:id",
 									Variable: []entity.Variable{
 										{Key: "id", Value: "1", Type: "string"},
 									},

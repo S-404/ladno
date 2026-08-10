@@ -13,7 +13,7 @@ import (
 func RestContainer(app *shared.App) fyne.CanvasObject {
 	restStore := app.Store.Rest
 	requestURL := binding.NewString()
-	_ = requestURL.Set("https://jsonplaceholder.typicode.com/posts/1")
+	_ = requestURL.Set("{{baseUrl}}/posts/1")
 
 	methods := []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
 

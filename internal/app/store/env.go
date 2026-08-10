@@ -1,0 +1,291 @@
+package store
+
+import (
+	"fmt"
+
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/data/binding"
+	"github.com/s-404/ladno/internal/app/entity"
+	"github.com/s-404/ladno/internal/app/service"
+	"github.com/s-404/ladno/internal/app/utils"
+)
+
+type IEnvStore interface {
+	FetchList()
+	GetItems() *binding.UntypedList
+	GetSelected() binding.Untyped
+	Select(id string)
+	GetActiveID() binding.String
+	SetActive(id string)
+	GetIsFetching() *binding.Bool
+	Create(name string)
+	SaveSelected(name string, vars []entity.EnvVariable)
+	DeleteSelected()
+	CloneSelected()
+	ActiveVariables() map[string]string
+	GetItemByIndex(index int) *entity.Env
+	GetEnvDataItem(item binding.DataItem) *entity.Env
+}
+
+type EnvStore struct {
+	Items      binding.UntypedList
+	Selected   binding.Untyped
+	ActiveID   binding.String
+	IsFetching binding.Bool
+	envService service.IEnvService
+}
+
+func NewEnvStore(envService service.IEnvService) *EnvStore {
+	return &EnvStore{
+		Items:      binding.NewUntypedList(),
+		Selected:   binding.NewUntyped(),
+		ActiveID:   binding.NewString(),
+		IsFetching: binding.NewBool(),
+		envService: envService,
+	}
+}
+
+func (s *EnvStore) GetItems() *binding.UntypedList {
+	return &s.Items
+}
+
+func (s *EnvStore) GetSelected() binding.Untyped {
+	return s.Selected
+}
+
+func (s *EnvStore) GetActiveID() binding.String {
+	return s.ActiveID
+}
+
+func (s *EnvStore) GetIsFetching() *binding.Bool {
+	return &s.IsFetching
+}
+
+func (s *EnvStore) FetchList() {
+	if fetching, _ := s.IsFetching.Get(); fetching {
+		return
+	}
+	_ = s.IsFetching.Set(true)
+	s.envService.List(func(data []*entity.Env, err error) {
+		fyne.Do(func() {
+			defer s.IsFetching.Set(false)
+			if err != nil {
+				fmt.Printf("env list error: %v\n", err)
+				return
+			}
+			_ = s.Items.Set(utils.UnpackArray(data))
+
+			activeID, _ := s.ActiveID.Get()
+			if activeID == "" && len(data) > 0 {
+				_ = s.ActiveID.Set(data[0].Id)
+			}
+			if sel := s.selectedEnv(); sel == nil && len(data) > 0 {
+				_ = s.Selected.Set(data[0])
+			}
+		})
+	})
+}
+
+func (s *EnvStore) Select(id string) {
+	items, err := s.Items.Get()
+	if err != nil {
+		return
+	}
+	for _, item := range items {
+		env, ok := item.(*entity.Env)
+		if ok && env != nil && env.Id == id {
+			_ = s.Selected.Set(env)
+			return
+		}
+	}
+}
+
+func (s *EnvStore) SetActive(id string) {
+	_ = s.ActiveID.Set(id)
+}
+
+func (s *EnvStore) Create(name string) {
+	s.envService.Create(&entity.Env{Name: name, Variables: []entity.EnvVariable{}}, func(created *entity.Env, err error) {
+		fyne.Do(func() {
+			if err != nil {
+				fmt.Printf("env create error: %v\n", err)
+				return
+			}
+			s.appendItem(created)
+			_ = s.Selected.Set(created)
+			if active, _ := s.ActiveID.Get(); active == "" {
+				_ = s.ActiveID.Set(created.Id)
+			}
+		})
+	})
+}
+
+func (s *EnvStore) SaveSelected(name string, vars []entity.EnvVariable) {
+	sel := s.selectedEnv()
+	if sel == nil {
+		return
+	}
+	copied := make([]entity.EnvVariable, len(vars))
+	copy(copied, vars)
+	sel.Name = name
+	sel.Variables = copied
+	s.replaceItem(sel)
+
+	updated := &entity.Env{
+		Id:        sel.Id,
+		Name:      name,
+		Variables: copied,
+	}
+	s.envService.Update(updated, func(saved *entity.Env, err error) {
+		fyne.Do(func() {
+			if err != nil {
+				fmt.Printf("env update error: %v\n", err)
+				return
+			}
+			s.replaceItem(saved)
+		})
+	})
+}
+
+func (s *EnvStore) DeleteSelected() {
+	sel := s.selectedEnv()
+	if sel == nil {
+		return
+	}
+	id := sel.Id
+	s.envService.Delete(id, func(err error) {
+		fyne.Do(func() {
+			if err != nil {
+				fmt.Printf("env delete error: %v\n", err)
+				return
+			}
+			s.removeItem(id)
+			if active, _ := s.ActiveID.Get(); active == id {
+				items, _ := s.Items.Get()
+				if len(items) > 0 {
+					if env, ok := items[0].(*entity.Env); ok && env != nil {
+						_ = s.ActiveID.Set(env.Id)
+						_ = s.Selected.Set(env)
+						return
+					}
+				}
+				_ = s.ActiveID.Set("")
+				_ = s.Selected.Set(nil)
+			} else {
+				items, _ := s.Items.Get()
+				if len(items) > 0 {
+					if env, ok := items[0].(*entity.Env); ok {
+						_ = s.Selected.Set(env)
+						return
+					}
+				}
+				_ = s.Selected.Set(nil)
+			}
+		})
+	})
+}
+
+func (s *EnvStore) CloneSelected() {
+	sel := s.selectedEnv()
+	if sel == nil {
+		return
+	}
+	s.envService.Clone(sel.Id, func(cloned *entity.Env, err error) {
+		fyne.Do(func() {
+			if err != nil {
+				fmt.Printf("env clone error: %v\n", err)
+				return
+			}
+			s.appendItem(cloned)
+			_ = s.Selected.Set(cloned)
+		})
+	})
+}
+
+func (s *EnvStore) ActiveVariables() map[string]string {
+	activeID, _ := s.ActiveID.Get()
+	if activeID == "" {
+		return nil
+	}
+	items, err := s.Items.Get()
+	if err != nil {
+		return nil
+	}
+	for _, item := range items {
+		env, ok := item.(*entity.Env)
+		if !ok || env == nil || env.Id != activeID {
+			continue
+		}
+		out := make(map[string]string)
+		for _, v := range env.Variables {
+			if v.Enabled && v.Key != "" {
+				out[v.Key] = v.Value
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+func (s *EnvStore) GetItemByIndex(index int) *entity.Env {
+	item, err := s.Items.GetItem(index)
+	if err != nil {
+		return nil
+	}
+	return s.GetEnvDataItem(item)
+}
+
+func (s *EnvStore) GetEnvDataItem(item binding.DataItem) *entity.Env {
+	val, err := item.(binding.Untyped).Get()
+	if err != nil {
+		return nil
+	}
+	env, ok := val.(*entity.Env)
+	if !ok {
+		return nil
+	}
+	return env
+}
+
+func (s *EnvStore) selectedEnv() *entity.Env {
+	val, err := s.Selected.Get()
+	if err != nil || val == nil {
+		return nil
+	}
+	env, ok := val.(*entity.Env)
+	if !ok {
+		return nil
+	}
+	return env
+}
+
+func (s *EnvStore) appendItem(env *entity.Env) {
+	items, _ := s.Items.Get()
+	items = append(items, env)
+	_ = s.Items.Set(items)
+}
+
+func (s *EnvStore) replaceItem(env *entity.Env) {
+	items, _ := s.Items.Get()
+	for i, item := range items {
+		existing, ok := item.(*entity.Env)
+		if ok && existing != nil && existing.Id == env.Id {
+			items[i] = env
+			_ = s.Items.Set(items)
+			return
+		}
+	}
+}
+
+func (s *EnvStore) removeItem(id string) {
+	items, _ := s.Items.Get()
+	next := make([]any, 0, len(items))
+	for _, item := range items {
+		env, ok := item.(*entity.Env)
+		if ok && env != nil && env.Id == id {
+			continue
+		}
+		next = append(next, item)
+	}
+	_ = s.Items.Set(next)
+}
