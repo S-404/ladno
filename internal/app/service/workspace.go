@@ -3,7 +3,6 @@ package service
 import (
 	"github.com/s-404/ladno/internal/app/entity"
 	"github.com/s-404/ladno/internal/app/repository"
-	"time"
 )
 
 type IWorkspaceService interface {
@@ -25,7 +24,7 @@ func newWorkspaceService(workspaceRepository repository.IWorkspaceRepository) *W
 func (s *WorkspaceService) List(cb func([]entity.WorkspaceLightWeight, error)) {
 	go func() {
 		// Искусственная задержка
-		time.Sleep(1 * time.Second)
+		//time.Sleep(1 * time.Second)
 		data := s.workspaceRepository.FindAllLightweight()
 		cb(data, nil)
 	}()
@@ -34,7 +33,7 @@ func (s *WorkspaceService) List(cb func([]entity.WorkspaceLightWeight, error)) {
 func (s *WorkspaceService) FindAll(cb func([]*entity.Workspace, error)) {
 	go func() {
 		// Искусственная задержка
-		time.Sleep(1 * time.Second)
+		//time.Sleep(1 * time.Second)
 		data := s.workspaceRepository.FindAll()
 		cb(data, nil)
 	}()
@@ -43,7 +42,7 @@ func (s *WorkspaceService) FindAll(cb func([]*entity.Workspace, error)) {
 func (s *WorkspaceService) Find(id string, cb func(*entity.Workspace, error)) {
 	go func() {
 		// Искусственная задержка
-		time.Sleep(1 * time.Second)
+		//time.Sleep(1 * time.Second)
 		data := s.workspaceRepository.FindById(id)
 		cb(data, nil)
 	}()
