@@ -257,19 +257,6 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 		fyne.Do(refreshConnected)
 	})
 
-	wsItem.AddListener(binding.NewDataListener(func() {
-		workspace := wsStore.GetWorkspaceDataItem(wsItem)
-		if workspace == nil {
-			log.Printf("[collections] workspace listener: nil")
-			tree.SetCollections(nil)
-			selStore.ClearSelection()
-			return
-		}
-		log.Printf("[collections] workspace listener: refresh tree cols=%d", len(workspace.Collections))
-		tree.SetCollections(workspace.Collections)
-		refreshConnected()
-	}))
-
 	addMenu := fyne.NewMenu("",
 		fyne.NewMenuItem("REST collection", func() { createCollection(constants.CollectionTypeREST) }),
 		fyne.NewMenuItem("gRPC collection", func() { createCollection(constants.CollectionTypeGRPC) }),
@@ -281,7 +268,31 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 		widget.ShowPopUpMenuAtRelativePosition(addMenu, win.Canvas(), fyne.NewPos(0, addBtn.Size().Height), addBtn)
 	})
 	addBtn.Importance = widget.LowImportance
+	addBtn.Hide()
 	toolbar := container.NewBorder(nil, nil, nil, addBtn, nil)
+
+	syncAddBtn := func() {
+		if wsStore.GetSelectedWorkspace() == nil {
+			addBtn.Hide()
+		} else {
+			addBtn.Show()
+		}
+		toolbar.Refresh()
+	}
+	wsItem.AddListener(binding.NewDataListener(func() {
+		workspace := wsStore.GetWorkspaceDataItem(wsItem)
+		if workspace == nil {
+			log.Printf("[collections] workspace listener: nil")
+			tree.SetCollections(nil)
+			selStore.ClearSelection()
+			syncAddBtn()
+			return
+		}
+		log.Printf("[collections] workspace listener: refresh tree cols=%d", len(workspace.Collections))
+		tree.SetCollections(workspace.Collections)
+		refreshConnected()
+		syncAddBtn()
+	}))
 
 	return container.NewBorder(
 		toolbar,

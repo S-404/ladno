@@ -8,6 +8,7 @@ import (
 const (
 	prefMessageLimitKey    = "messageHistoryLimit"
 	prefThemeKey           = "uiTheme"
+	prefLastWorkspaceKey   = "lastWorkspaceId"
 	defaultMessageLimit    = 1000
 	minMessageLimit        = 10
 	maxMessageLimitAllowed = 100000
@@ -23,6 +24,9 @@ type ISettingsStore interface {
 	GetTheme() string
 	SetTheme(name string) string
 	ApplyTheme()
+
+	GetLastWorkspaceID() string
+	SetLastWorkspaceID(id string)
 }
 
 type SettingsStore struct{}
@@ -65,6 +69,14 @@ func (s *SettingsStore) ApplyTheme() {
 	default:
 		fyne.CurrentApp().Settings().SetTheme(uitheme.Dark())
 	}
+}
+
+func (s *SettingsStore) GetLastWorkspaceID() string {
+	return s.prefs().String(prefLastWorkspaceKey)
+}
+
+func (s *SettingsStore) SetLastWorkspaceID(id string) {
+	s.prefs().SetString(prefLastWorkspaceKey, id)
 }
 
 func clampMessageLimit(n int) int {
