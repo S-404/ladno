@@ -4,6 +4,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
+	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity/shared"
 
 	"github.com/s-404/ladno/internal/app/layout"
@@ -31,8 +32,11 @@ func Init(window fyne.Window) {
 	header := layout.HeaderLayout(&app)
 	logs := layout.LogsLayout(&app)
 
-	body := container.NewVSplit(tabs, logs)
-	body.SetOffset(0.82)
+	body := container.NewVSplit(
+		ui.NewMinSizeBox(fyne.NewSize(200, 100), tabs),
+		ui.NewMinSizeBox(fyne.NewSize(200, 64), logs),
+	)
+	body.SetOffset(0.75)
 
 	app.Window.SetContent(container.NewBorder(header, nil, nil, nil, body))
 }

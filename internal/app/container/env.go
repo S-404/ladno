@@ -157,7 +157,10 @@ func EnvContainer(app *shared.App) fyne.CanvasObject {
 		varsTable,
 	)
 
-	split := container.NewHSplit(left, editor)
+	split := container.NewHSplit(
+		ui.NewMinSizeBox(fyne.NewSize(140, 80), left),
+		ui.NewMinSizeBox(fyne.NewSize(200, 80), editor),
+	)
 	split.SetOffset(0.28)
 
 	envStore.FetchList()

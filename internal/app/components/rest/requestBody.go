@@ -60,7 +60,6 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) *RequestB
 	})
 
 	rawScroll := container.NewScroll(rawEntry)
-	rawScroll.SetMinSize(fyne.NewSize(0, 200))
 
 	stack := container.NewStack(rawScroll, formTable)
 

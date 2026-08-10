@@ -17,23 +17,18 @@ type RequestParamsView struct {
 	SetPathParams func(vals map[string]string)
 }
 
-// NewRequestParams возвращает таб Params с двумя секциями:
-//   - Path Variables — параметры (:key) найденные в пути URL
-//   - Query Params   — query-строка (?key=value)
+// NewRequestParams возвращает таб Params:
+//   - Path Variables — только если в URL есть :param (без checkbox)
+//   - Query Params — сразу после path
 //
-// Важные инварианты:
-//   - URL всегда хранит шаблон с токенами (:id, {{host}}) — path params его НЕ меняют
-//   - Path Variables используются только при отправке запроса (подстановка на стороне сервиса)
-//   - Query params двусторонние: таблица ↔ URL, с сохранением порядка строк
+// Общий скролл, высота не ограничена (как логи).
 func NewRequestParams(requestURL binding.String) *RequestParamsView {
 	var syncing bool
-
 	var pathParamNames []string
 
-	pathTable := ui.NewKVTableReadOnly(nil, nil)
+	pathTable := ui.NewKVTablePathVars(nil, nil)
 
 	var queryRows []ui.KVRow
-
 	queryTable := ui.NewKVTable(nil, func(rows []ui.KVRow) {
 		if syncing || requestURL == nil {
 			return
@@ -42,8 +37,28 @@ func NewRequestParams(requestURL binding.String) *RequestParamsView {
 		syncing = true
 		defer func() { syncing = false }()
 		raw, _ := requestURL.Get()
-		requestURL.Set(applyQueryParams(raw, rows))
+		_ = requestURL.Set(applyQueryParams(raw, rows))
 	})
+
+	pathHeader := sectionLabel("Path Variables")
+	pathSection := container.NewVBox(pathHeader, pathTable)
+	pathSection.Hide()
+
+	querySection := container.NewVBox(
+		sectionLabel("Query Params"),
+		queryTable,
+	)
+
+	content := container.NewVBox(pathSection, querySection)
+	scroll := container.NewVScroll(content)
+
+	updatePathVisibility := func(names []string) {
+		if len(names) == 0 {
+			pathSection.Hide()
+			return
+		}
+		pathSection.Show()
+	}
 
 	if requestURL != nil {
 		requestURL.AddListener(binding.NewDataListener(func() {
@@ -70,6 +85,7 @@ func NewRequestParams(requestURL binding.String) *RequestParamsView {
 				syncing = true
 				pathTable.SetRows(newRows)
 				syncing = false
+				updatePathVisibility(newNames)
 			}
 
 			newQueryRows := parseQueryOrdered(raw)
@@ -83,24 +99,12 @@ func NewRequestParams(requestURL binding.String) *RequestParamsView {
 		}))
 	}
 
-	pathSection := container.NewBorder(
-		sectionLabel("Path Variables"),
-		nil, nil, nil,
-		pathTable,
-	)
-
-	querySection := container.NewBorder(
-		sectionLabel("Query Params"),
-		nil, nil, nil,
-		queryTable,
-	)
-
 	return &RequestParamsView{
-		Object: container.NewVBox(pathSection, querySection),
+		Object: scroll,
 		GetPathParams: func() map[string]string {
 			vals := map[string]string{}
 			for _, r := range pathTable.GetRows() {
-				if r.Enabled && r.Key != "" && r.Value != "" {
+				if r.Key != "" && r.Value != "" {
 					vals[r.Key] = r.Value
 				}
 			}
@@ -121,11 +125,10 @@ func NewRequestParams(requestURL binding.String) *RequestParamsView {
 			if changed {
 				pathTable.SetRows(rows)
 			}
+			updatePathVisibility(pathParamNames)
 		},
 	}
 }
-
-// ── URL helpers ───────────────────────────────────────────────────────────────
 
 func skipAuthority(s string) int {
 	idx := strings.Index(s, "://")

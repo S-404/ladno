@@ -62,8 +62,11 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		container.NewStack(requestTabs),
 	)
 
-	split := container.NewVSplit(request, responseView.Object())
-	split.SetOffset(.55)
+	split := container.NewVSplit(
+		ui.NewMinSizeBox(fyne.NewSize(200, 80), request),
+		ui.NewMinSizeBox(fyne.NewSize(200, 80), responseView.Object()),
+	)
+	split.SetOffset(0.55)
 
 	isSending := restStore.GetIsSending()
 	(*isSending).AddListener(binding.NewDataListener(func() {
