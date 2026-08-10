@@ -117,9 +117,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 			FormRows: variablesToKVRows(draft.FormData),
 		})
 
-		if len(draft.PathParams) > 0 {
-			paramsView.SetPathParams(draft.PathParams)
-		}
+		paramsView.SetPathParams(draft.PathParams)
 	}))
 
 	return split

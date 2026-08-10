@@ -60,6 +60,26 @@ func NewRequestParams(requestURL binding.String) *RequestParamsView {
 		pathSection.Show()
 	}
 
+	rebuildPathRows := func(names []string, vals map[string]string) {
+		pathParamNames = names
+		newRows := make([]ui.KVRow, len(names))
+		for i, name := range names {
+			val := ""
+			if vals != nil {
+				val = vals[name]
+			}
+			newRows[i] = ui.KVRow{
+				Enabled: true,
+				Key:     name,
+				Value:   val,
+			}
+		}
+		syncing = true
+		pathTable.SetRows(newRows)
+		syncing = false
+		updatePathVisibility(names)
+	}
+
 	if requestURL != nil {
 		requestURL.AddListener(binding.NewDataListener(func() {
 			if syncing {
@@ -69,23 +89,12 @@ func NewRequestParams(requestURL binding.String) *RequestParamsView {
 
 			newNames := extractPathParamNames(raw)
 			if !equalStringSlices(newNames, pathParamNames) {
-				pathParamNames = newNames
+				// при ручном редактировании URL сохраняем уже введённые значения
 				existingVals := map[string]string{}
 				for _, r := range pathTable.GetRows() {
 					existingVals[r.Key] = r.Value
 				}
-				newRows := make([]ui.KVRow, len(newNames))
-				for i, name := range newNames {
-					newRows[i] = ui.KVRow{
-						Enabled: true,
-						Key:     name,
-						Value:   existingVals[name],
-					}
-				}
-				syncing = true
-				pathTable.SetRows(newRows)
-				syncing = false
-				updatePathVisibility(newNames)
+				rebuildPathRows(newNames, existingVals)
 			}
 
 			newQueryRows := parseQueryOrdered(raw)
@@ -110,22 +119,16 @@ func NewRequestParams(requestURL binding.String) *RequestParamsView {
 			}
 			return vals
 		},
+		// SetPathParams полностью заменяет значения path variables (без наследования от предыдущего запроса).
 		SetPathParams: func(vals map[string]string) {
 			if vals == nil {
-				return
+				vals = map[string]string{}
 			}
-			rows := pathTable.GetRows()
-			changed := false
-			for i, r := range rows {
-				if v, ok := vals[r.Key]; ok && r.Value != v {
-					rows[i].Value = v
-					changed = true
-				}
+			raw := ""
+			if requestURL != nil {
+				raw, _ = requestURL.Get()
 			}
-			if changed {
-				pathTable.SetRows(rows)
-			}
-			updatePathVisibility(pathParamNames)
+			rebuildPathRows(extractPathParamNames(raw), vals)
 		},
 	}
 }
