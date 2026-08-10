@@ -226,7 +226,7 @@ func isParamChar(c byte) bool {
 func tokenColor(kind tokenKind) color.Color {
 	switch kind {
 	case tokenVariable:
-		return color.NRGBA{R: 255, G: 165, B: 0, A: 255} // оранжевый  {{var}}
+		return EnvVarColor // оранжевый  {{var}}
 	case tokenPathParam:
 		return color.NRGBA{R: 86, G: 182, B: 255, A: 255} // голубой    :param
 	case tokenQueryKey:

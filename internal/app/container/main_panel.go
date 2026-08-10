@@ -98,6 +98,9 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 	natsStore.AddMessageListener(func() {
 		fyne.Do(refreshNatsMessages)
 	})
+	app.Store.Env.GetActiveID().AddListener(binding.NewDataListener(func() {
+		refreshNatsMessages()
+	}))
 
 	natsPanel = natsui.NewRequestView(
 		func(method constants.NatsMethod, req entity.NatsRequest) {

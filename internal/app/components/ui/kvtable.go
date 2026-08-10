@@ -141,29 +141,29 @@ func (t *KVTable) rebuild() {
 func (t *KVTable) makeRow(idx int) fyne.CanvasObject {
 	row := t.rows[idx]
 
-	keyEntry := widget.NewEntry()
-	keyEntry.PlaceHolder = "Key"
+	keyEntry := NewEnvInput()
+	keyEntry.SetPlaceHolder("Key")
 	keyEntry.SetText(row.Key)
 	if t.opts.KeyReadOnly {
 		keyEntry.Disable()
 	} else {
-		keyEntry.OnChanged = func(v string) {
+		keyEntry.OnChanged(func(v string) {
 			if idx < len(t.rows) {
 				t.rows[idx].Key = v
 				t.notify()
 			}
-		}
+		})
 	}
 
-	valEntry := widget.NewEntry()
-	valEntry.PlaceHolder = "Value"
+	valEntry := NewEnvInput()
+	valEntry.SetPlaceHolder("Value")
 	valEntry.SetText(row.Value)
-	valEntry.OnChanged = func(v string) {
+	valEntry.OnChanged(func(v string) {
 		if idx < len(t.rows) {
 			t.rows[idx].Value = v
 			t.notify()
 		}
-	}
+	})
 
 	center := container.NewGridWithColumns(2, keyEntry, valEntry)
 

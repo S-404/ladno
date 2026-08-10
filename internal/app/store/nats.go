@@ -255,6 +255,7 @@ func (s *NatsStore) AppendMessage(collectionID, subject, data string) {
 }
 
 func (s *NatsStore) MessagesText(collectionID, subjectPattern string, all bool) string {
+	subjectPattern = s.resolveEnvString(subjectPattern)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	list := s.messages[collectionID]
@@ -289,6 +290,7 @@ func (s *NatsStore) MessagesText(collectionID, subjectPattern string, all bool) 
 }
 
 func (s *NatsStore) ClearMessages(collectionID, subjectPattern string) {
+	subjectPattern = s.resolveEnvString(subjectPattern)
 	s.mu.Lock()
 	list := s.messages[collectionID]
 	if subjectPattern == "" {
@@ -676,6 +678,13 @@ func applyNatsRequestEnv(req entity.NatsRequest, envStore IEnvStore) entity.Nats
 		req.Headers = headers
 	}
 	return req
+}
+
+func (s *NatsStore) resolveEnvString(input string) string {
+	if s.envStore == nil || input == "" {
+		return input
+	}
+	return utils.SubstituteEnvVars(input, s.envStore.ActiveVariables())
 }
 
 func variablesToNatsHeader(vars []entity.Variable) nats.Header {

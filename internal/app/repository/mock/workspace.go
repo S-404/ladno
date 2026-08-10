@@ -149,9 +149,9 @@ func WorkspaceData() []*entity.Workspace {
 					Name: "Demo NATS",
 					Type: constants.CollectionTypeNATS,
 					Nats: &entity.NatsConnection{
-						Host:  "localhost",
-						Port:  "4222",
-						Token: "",
+						Host:  "{{natsHost}}",
+						Port:  "{{natsPort}}",
+						Token: "{{natsToken}}",
 					},
 					Items: []entity.CollectionItem{
 						{
@@ -159,8 +159,11 @@ func WorkspaceData() []*entity.Workspace {
 							Name: "demo.events",
 							Request: &entity.ItemRequest{
 								Nats: &entity.NatsRequest{
-									Subject: "demo.events",
-									Payload: `{"ok": true}`,
+									Subject: "{{natsSubject}}",
+									Headers: []entity.Variable{
+										{Key: "X-Token", Value: "{{token}}"},
+									},
+									Payload: `{"ok": true, "token": "{{token}}"}`,
 								},
 							},
 						},

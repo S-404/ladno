@@ -39,13 +39,15 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 
 	authPanel := ui.NewAuthPanel(ui.AuthPanelOptions{AllowInherited: false})
 
-	hostEntry := widget.NewEntry()
-	hostEntry.SetPlaceHolder("localhost")
-	portEntry := widget.NewEntry()
-	portEntry.SetPlaceHolder("4222")
-	tokenEntry := widget.NewPasswordEntry()
-	tokenEntry.SetPlaceHolder("token")
+	hostEntry := ui.NewEnvInput()
+	hostEntry.SetPlaceHolder("{{natsHost}} or localhost")
+	portEntry := ui.NewEnvInput()
+	portEntry.SetPlaceHolder("{{natsPort}} or 4222")
+	tokenEntry := ui.NewEnvInput()
+	tokenEntry.SetPlaceHolder("{{natsToken}}")
 
+	envHint := widget.NewLabel("Supports {{var}} from the active environment.")
+	envHint.TextStyle = fyne.TextStyle{Italic: true}
 	connStatus := widget.NewLabel("")
 	connStatus.TextStyle = fyne.TextStyle{Italic: true}
 
@@ -57,9 +59,9 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 		out := SettingsSave{Name: nameEntry.Text}
 		if currentType == constants.CollectionTypeNATS {
 			out.Nats = &entity.NatsConnection{
-				Host:  hostEntry.Text,
-				Port:  portEntry.Text,
-				Token: tokenEntry.Text,
+				Host:  hostEntry.Text(),
+				Port:  portEntry.Text(),
+				Token: tokenEntry.Text(),
 			}
 			out.Auth = entity.Auth{Type: constants.AuthTypeNoAuth}
 		} else {
@@ -113,6 +115,7 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 						widget.NewFormItem("Port", portEntry),
 						widget.NewFormItem("Token", tokenEntry),
 					),
+					envHint,
 					container.NewHBox(saveBtn, connBtn),
 					connStatus,
 				)),

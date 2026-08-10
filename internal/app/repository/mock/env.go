@@ -10,6 +10,10 @@ func EnvData() []*entity.Env {
 			Variables: []entity.EnvVariable{
 				{Key: "baseUrl", Value: "https://jsonplaceholder.typicode.com", Enabled: true},
 				{Key: "token", Value: "local-token", Enabled: true},
+				{Key: "natsHost", Value: "localhost", Enabled: true},
+				{Key: "natsPort", Value: "4222", Enabled: true},
+				{Key: "natsToken", Value: "", Enabled: true},
+				{Key: "natsSubject", Value: "demo.events", Enabled: true},
 			},
 		},
 		{
@@ -18,6 +22,10 @@ func EnvData() []*entity.Env {
 			Variables: []entity.EnvVariable{
 				{Key: "baseUrl", Value: "https://jsonplaceholder.typicode.com", Enabled: true},
 				{Key: "token", Value: "staging-token", Enabled: true},
+				{Key: "natsHost", Value: "localhost", Enabled: true},
+				{Key: "natsPort", Value: "4222", Enabled: true},
+				{Key: "natsToken", Value: "", Enabled: true},
+				{Key: "natsSubject", Value: "demo.events", Enabled: true},
 			},
 		},
 	}

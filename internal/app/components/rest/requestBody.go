@@ -3,7 +3,6 @@ package rest
 import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/widget"
 	"github.com/s-404/ladno/internal/app/components/ui"
 )
@@ -37,20 +36,16 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) *RequestB
 		state.Mode = BodyModeRaw
 	}
 
-	rawBinding := binding.NewString()
-	_ = rawBinding.Set(state.RawText)
-	rawEntry := widget.NewMultiLineEntry()
-	rawEntry.Bind(rawBinding)
+	rawEntry := ui.NewEnvMultiLineInput()
 	rawEntry.SetPlaceHolder("Paste JSON, XML or plain text…")
-	rawEntry.TextStyle = fyne.TextStyle{Monospace: true}
-	rawEntry.Wrapping = fyne.TextWrapOff
-	rawBinding.AddListener(binding.NewDataListener(func() {
-		v, _ := rawBinding.Get()
+	rawEntry.SetText(state.RawText)
+	rawEntry.SetMinRowsVisible(8)
+	rawEntry.OnChanged(func(v string) {
 		state.RawText = v
 		if onChange != nil {
 			onChange(state)
 		}
-	}))
+	})
 
 	formTable := ui.NewKVTable(state.FormRows, func(rows []ui.KVRow) {
 		state.FormRows = rows
@@ -59,9 +54,7 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) *RequestB
 		}
 	})
 
-	rawScroll := container.NewScroll(rawEntry)
-
-	stack := container.NewStack(rawScroll, formTable)
+	stack := container.NewStack(rawEntry, formTable)
 
 	var modeSelect *widget.Select
 
@@ -70,9 +63,9 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) *RequestB
 		switch mode {
 		case BodyModeRaw:
 			formTable.Hide()
-			rawScroll.Show()
+			rawEntry.Show()
 		case BodyModeFormData:
-			rawScroll.Hide()
+			rawEntry.Hide()
 			formTable.Show()
 		}
 		stack.Refresh()
@@ -97,12 +90,7 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) *RequestB
 	return &RequestBodyView{
 		Object: container.NewBorder(toolbar, nil, nil, nil, stack),
 		Get: func() BodyState {
-			// Entry.Bind может отставать до потери фокуса — читаем актуальный текст
-			state.RawText = rawEntry.Text
-			v, _ := rawBinding.Get()
-			if state.RawText == "" && v != "" {
-				state.RawText = v
-			}
+			state.RawText = rawEntry.Text()
 			state.FormRows = formTable.GetRows()
 			return state
 		},
@@ -111,7 +99,6 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) *RequestB
 				next.Mode = BodyModeRaw
 			}
 			state = next
-			_ = rawBinding.Set(state.RawText)
 			rawEntry.SetText(state.RawText)
 			formTable.SetRows(state.FormRows)
 			modeSelect.SetSelected(string(state.Mode))

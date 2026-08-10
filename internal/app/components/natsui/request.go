@@ -30,13 +30,15 @@ func NewRequestView(
 	statusLabel := widget.NewLabel("")
 	statusLabel.TextStyle = fyne.TextStyle{Italic: true}
 
-	subject := widget.NewEntry()
-	subject.SetPlaceHolder("subject")
-	payload := widget.NewMultiLineEntry()
-	payload.SetPlaceHolder("Payload")
+	subject := ui.NewEnvInput()
+	subject.SetPlaceHolder("{{natsSubject}} or demo.events")
+	payload := ui.NewEnvMultiLineInput()
+	payload.SetPlaceHolder(`{"ok": true, "token": "{{token}}"}`)
 	payload.SetMinRowsVisible(6)
 
 	headers := ui.NewKVTable(nil, nil)
+	envHint := widget.NewLabel("Subject, headers and payload support {{var}} from the active environment.")
+	envHint.TextStyle = fyne.TextStyle{Italic: true}
 
 	getReq := func() entity.NatsRequest {
 		rows := headers.GetRows()
@@ -48,9 +50,9 @@ func NewRequestView(
 			vars = append(vars, entity.Variable{Key: r.Key, Value: r.Value, Type: "string"})
 		}
 		return entity.NatsRequest{
-			Subject: subject.Text,
+			Subject: subject.Text(),
 			Headers: vars,
-			Payload: payload.Text,
+			Payload: payload.Text(),
 		}
 	}
 
@@ -102,6 +104,7 @@ func NewRequestView(
 			widget.NewLabel("Headers"),
 			headers,
 			widget.NewLabel("Payload"),
+			envHint,
 		),
 		container.NewVBox(container.NewHBox(buttons...), statusLabel),
 		nil, nil,
@@ -118,7 +121,7 @@ func NewRequestView(
 	v := &RequestView{
 		CanvasObject: split,
 		Messages:     messages,
-		Subject:      func() string { return subject.Text },
+		Subject:      func() string { return subject.Text() },
 	}
 	v.Get = getReq
 	v.SetRunning = func(running bool) {
