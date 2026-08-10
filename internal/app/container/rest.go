@@ -8,27 +8,33 @@ import (
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/widget"
 	"github.com/s-404/ladno/internal/app/components/rest"
+	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity/shared"
 )
 
 func RestContainer(app *shared.App) fyne.CanvasObject {
-	requestString := binding.NewString()
+	requestURL := binding.NewString()
 	methods := []string{"POST", "GET", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
 
-	requestInput := rest.NewRequestInput(methods, requestString, func() {
-		value, _ := requestString.Get()
-		fmt.Println("RestContainer requestinput", value)
+	// --- request input (method + url + send) ---
+	requestInput := rest.NewRequestInput(methods, requestURL, func() {
+		value, _ := requestURL.Get()
+		fmt.Println("RestContainer send:", value)
 	}, app.Window)
 
+	// --- request tabs ---
 	requestTabs := container.NewAppTabs(
-		container.NewTabItemWithIcon("Params", nil, rest.NewRequestParams(nil)),
-		container.NewTabItemWithIcon("Auth", nil, widget.NewLabel("auth content")),
-		container.NewTabItemWithIcon("Headers", nil, widget.NewLabel("headers content")),
-		container.NewTabItemWithIcon("Body", nil, widget.NewLabel("body content")),
-		container.NewTabItemWithIcon("Script", nil, widget.NewLabel("script content")),
+		container.NewTabItem("Params", rest.NewRequestParams(requestURL)),
+		container.NewTabItem("Headers", rest.NewRequestHeaders(nil, func(rows []ui.KVRow) {
+			fmt.Println("headers changed:", len(rows), "rows")
+		})),
+		container.NewTabItem("Auth", widget.NewLabel("auth content")),
+		container.NewTabItem("Body", rest.NewRequestBody(rest.BodyState{}, func(state rest.BodyState) {
+			fmt.Println("body changed, mode:", state.Mode)
+		})),
+		container.NewTabItem("Script", widget.NewLabel("script content")),
+		container.NewTabItem("Preview", widget.NewLabel("preview content")),
 	)
-
-	//request := container.NewStack(requestInput, requestTabs)
 
 	request := container.NewBorder(
 		requestInput,
@@ -36,15 +42,12 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		container.NewStack(requestTabs),
 	)
 
+	// --- response panel ---
 	responseLabel := widget.NewLabel("response")
 	responsePayload := widget.NewLabel("response payload")
 	response := container.NewVBox(responseLabel, responsePayload)
 
-	split := container.NewVSplit(
-		request,
-		response,
-	)
-
+	split := container.NewVSplit(request, response)
 	split.SetOffset(.7)
 
 	return split

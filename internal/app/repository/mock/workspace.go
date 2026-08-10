@@ -12,11 +12,11 @@ func WorkspaceData() []*entity.Workspace {
 			Id:               "ws-001",
 			Name:             "Основное рабочее пространство",
 			ConnectionConfig: "postgresql://localhost:5432/main",
-			Collection: []entity.Collection{
+			Collections: []entity.Collection{
 				{
 					Id:   "c-001",
 					Name: "Коллекция1",
-					Item: []entity.CollectionItem{
+					Items: []entity.CollectionItem{
 						{
 							Id:   "i-001",
 							Name: "Пользователи",
@@ -38,11 +38,11 @@ func WorkspaceData() []*entity.Workspace {
 			Id:               "ws-002",
 			Name:             "Заказы",
 			ConnectionConfig: "postgresql://localhost:5432/main",
-			Collection: []entity.Collection{
+			Collections: []entity.Collection{
 				{
 					Id:   "c-002",
 					Name: "Коллекция1",
-					Item: []entity.CollectionItem{
+					Items: []entity.CollectionItem{
 						{
 							Id:   "i-002",
 							Name: "Order",

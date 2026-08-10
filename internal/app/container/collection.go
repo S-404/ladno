@@ -28,7 +28,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 			collectionTree.SetCollections(nil)
 			return
 		}
-		collectionTree.SetCollections(workspace.Collection)
+		collectionTree.SetCollections(workspace.Collections)
 	}))
 
 	return container.NewBorder(

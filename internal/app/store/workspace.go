@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+
 	"fyne.io/fyne/v2/data/binding"
 	"github.com/s-404/ladno/internal/app/entity"
 	"github.com/s-404/ladno/internal/app/service"
@@ -23,7 +24,7 @@ type IWorkspaceStore interface {
 
 type WorkspaceStore struct {
 	Items            binding.UntypedList
-	Item             binding.Untyped
+	SelectedItem     binding.Untyped
 	IsFetching       binding.Bool
 	workspaceService service.IWorkspaceService
 }
@@ -31,7 +32,7 @@ type WorkspaceStore struct {
 func NewWorkspaceStore(service service.IWorkspaceService) *WorkspaceStore {
 	store := WorkspaceStore{
 		Items:            binding.NewUntypedList(),
-		Item:             binding.NewUntyped(),
+		SelectedItem:     binding.NewUntyped(),
 		IsFetching:       binding.NewBool(),
 		workspaceService: service,
 	}
@@ -44,7 +45,7 @@ func (s *WorkspaceStore) GetItems() *binding.UntypedList {
 }
 
 func (s *WorkspaceStore) GetItem() binding.Untyped {
-	return s.Item
+	return s.SelectedItem
 }
 
 func (s *WorkspaceStore) GetIsFetching() *binding.Bool {
@@ -57,7 +58,7 @@ func (s *WorkspaceStore) FetchWorkspace(id string) {
 		return
 	}
 	s.IsFetching.Set(true)
-	s.Item.Set(binding.NewUntyped())
+	s.SelectedItem.Set(binding.NewUntyped())
 	s.workspaceService.Find(id, func(data *entity.Workspace, err error) {
 		if err != nil {
 			fmt.Printf("fetch async with err: %s", err.Error())
@@ -68,7 +69,7 @@ func (s *WorkspaceStore) FetchWorkspace(id string) {
 			return
 		}
 
-		s.Item.Set(data)
+		s.SelectedItem.Set(data)
 		s.IsFetching.Set(false)
 	})
 }

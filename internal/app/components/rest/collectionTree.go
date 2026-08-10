@@ -100,10 +100,10 @@ func (ct *CollectionTree) SetCollections(collections []entity.Collection) {
 			item: entity.CollectionItem{
 				Id:   col.Id,
 				Name: col.Name,
-				Item: col.Item,
+				Item: col.Items,
 			},
 		}
-		fillItems(col.Item, colUID, childIDs, nodes)
+		fillItems(col.Items, colUID, childIDs, nodes)
 	}
 
 	ct.mu.Lock()
