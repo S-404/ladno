@@ -39,6 +39,7 @@ type RestDraft struct {
 	URL        string
 	PathParams map[string]string
 	Headers    []Variable
+	Auth       Auth
 	BodyMode   RestBodyMode
 	RawBody    string
 	FormData   []Variable

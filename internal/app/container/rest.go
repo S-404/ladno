@@ -12,6 +12,7 @@ import (
 
 func RestContainer(app *shared.App) fyne.CanvasObject {
 	restStore := app.Store.Rest
+	selStore := app.Store.Selection
 	envStore := app.Store.Env
 	requestURL := binding.NewString()
 	_ = requestURL.Set("{{baseUrl}}/posts/1")
@@ -58,10 +59,21 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 	previewView = rest.NewPreviewView(func() string {
 		return restStore.Preview(buildReq())
 	})
+	authPanel := ui.NewAuthPanel(ui.AuthPanelOptions{
+		AllowInherited: true,
+		OnSave: func(auth entity.Auth) {
+			sel := currentSelection(selStore.GetSelection())
+			if sel == nil || sel.Kind != entity.SelectionRequest {
+				return
+			}
+			selStore.UpdateRequestAuth(sel.CollectionID, sel.ItemID, auth)
+		},
+	})
 
 	requestTabs := container.NewAppTabs(
 		container.NewTabItem("Params", paramsView.Object),
 		container.NewTabItem("Headers", headersTable),
+		container.NewTabItem("Auth", authPanel.CanvasObject),
 		container.NewTabItem("Body", bodyView.Object),
 		container.NewTabItem("Preview", previewView.Object),
 	)
@@ -121,6 +133,8 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		headerRows := variablesToKVRows(draft.Headers)
 		headers = headerRows
 		headersTable.SetRows(headerRows)
+
+		authPanel.Set(draft.Auth)
 
 		mode := rest.BodyModeRaw
 		if draft.BodyMode == entity.RestBodyFormData {

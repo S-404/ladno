@@ -19,6 +19,8 @@ type IWorkspaceStore interface {
 	FetchWorkspace(id string)
 	GetItem() binding.Untyped
 	GetWorkspaceDataItem(item binding.DataItem) *entity.Workspace
+	GetSelectedWorkspace() *entity.Workspace
+	PublishWorkspace(ws *entity.Workspace)
 
 	GetIsFetching() *binding.Bool
 }
@@ -118,6 +120,18 @@ func (s *WorkspaceStore) GetWorkspaceDataItem(item binding.DataItem) *entity.Wor
 	}
 
 	return ws
+}
+
+func (s *WorkspaceStore) GetSelectedWorkspace() *entity.Workspace {
+	return s.GetWorkspaceDataItem(s.SelectedItem)
+}
+
+// PublishWorkspace re-publishes the selected workspace so UI bindings refresh.
+func (s *WorkspaceStore) PublishWorkspace(ws *entity.Workspace) {
+	if ws == nil {
+		return
+	}
+	_ = s.SelectedItem.Set(ws)
 }
 
 func (s *WorkspaceStore) GetWorkspaceListItemDataItem(item binding.DataItem) *entity.WorkspaceLightWeight {

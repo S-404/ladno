@@ -16,6 +16,8 @@ func WorkspaceData() []*entity.Workspace {
 				{
 					Id:   "c-001",
 					Name: "JSONPlaceholder",
+					Type: constants.CollectionTypeREST,
+					Auth: entity.Auth{Type: constants.AuthTypeNoAuth},
 					Items: []entity.CollectionItem{
 						{
 							Id:   "i-001",
@@ -80,6 +82,85 @@ func WorkspaceData() []*entity.Workspace {
 									Variable: []entity.Variable{
 										{Key: "id", Value: "1", Type: "string"},
 									},
+								},
+							},
+						},
+						{
+							Id:   "f-001",
+							Name: "Extras",
+							Auth: entity.Auth{Type: constants.AuthTypeInherited},
+							Item: []entity.CollectionItem{
+								{
+									Id:   "i-006",
+									Name: "Health",
+									Request: &entity.ItemRequest{
+										Method: constants.GET,
+										Url: entity.RequestUrl{
+											Raw: "{{baseUrl}}/",
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+				{
+					Id:   "c-002",
+					Name: "Demo gRPC",
+					Type: constants.CollectionTypeGRPC,
+					Auth: entity.Auth{Type: constants.AuthTypeNoAuth},
+					Items: []entity.CollectionItem{
+						{
+							Id:   "g-001",
+							Name: "GetUser",
+							Request: &entity.ItemRequest{
+								Grpc: &entity.GrpcRequest{
+									Target: "localhost:50051",
+									Method: "demo.UserService/GetUser",
+									Metadata: []entity.Variable{
+										{Key: "authorization", Value: "Bearer {{token}}"},
+									},
+									Message: `{"id": "1"}`,
+								},
+							},
+						},
+					},
+				},
+				{
+					Id:   "c-003",
+					Name: "Demo WebSocket",
+					Type: constants.CollectionTypeWS,
+					Auth: entity.Auth{Type: constants.AuthTypeNoAuth},
+					Items: []entity.CollectionItem{
+						{
+							Id:   "w-001",
+							Name: "Echo",
+							Request: &entity.ItemRequest{
+								Ws: &entity.WsRequest{
+									URL:     "wss://echo.websocket.events",
+									Message: "hello",
+								},
+							},
+						},
+					},
+				},
+				{
+					Id:   "c-004",
+					Name: "Demo NATS",
+					Type: constants.CollectionTypeNATS,
+					Nats: &entity.NatsConnection{
+						Host:  "localhost",
+						Port:  "4222",
+						Token: "",
+					},
+					Items: []entity.CollectionItem{
+						{
+							Id:   "n-001",
+							Name: "Publish events",
+							Request: &entity.ItemRequest{
+								Nats: &entity.NatsRequest{
+									Subject: "demo.events",
+									Payload: `{"ok": true}`,
 								},
 							},
 						},

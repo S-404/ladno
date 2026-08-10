@@ -19,21 +19,23 @@ type WorkspaceLightWeight struct {
 }
 
 type Collection struct {
-	Id        string           `json:"id"`
-	Version   int              `json:"version"`
-	Type      string           `json:"type"`
-	Name      string           `json:"name"`
-	Auth      Auth             `json:"auth"`
-	Event     Event            `json:"event"`
-	Items     []CollectionItem `json:"items"`
-	CreatedAt time.Time        `json:"createdAt"`
-	UpdatedAt time.Time        `json:"updatedAt"`
-	DeletedAt *time.Time       `json:"deletedAt"`
+	Id        string                   `json:"id"`
+	Version   int                      `json:"version"`
+	Type      constants.CollectionType `json:"type"`
+	Name      string                   `json:"name"`
+	Auth      Auth                     `json:"auth"`
+	Nats      *NatsConnection          `json:"nats,omitempty"`
+	Event     Event                    `json:"event"`
+	Items     []CollectionItem         `json:"items"`
+	CreatedAt time.Time                `json:"createdAt"`
+	UpdatedAt time.Time                `json:"updatedAt"`
+	DeletedAt *time.Time               `json:"deletedAt"`
 }
 
 type CollectionItem struct {
 	Id      string           `json:"id"`
 	Name    string           `json:"name"`
+	Auth    Auth             `json:"auth"`
 	Request *ItemRequest     `json:"request"`
 	Item    []CollectionItem `json:"item"`
 }
@@ -44,6 +46,35 @@ type ItemRequest struct {
 	Auth   Auth                    `json:"auth"`
 	Event  Event                   `json:"event"`
 	Url    RequestUrl              `json:"url"`
+	Grpc   *GrpcRequest            `json:"grpc,omitempty"`
+	Ws     *WsRequest              `json:"ws,omitempty"`
+	Nats   *NatsRequest            `json:"nats,omitempty"`
+}
+
+type GrpcRequest struct {
+	Target   string     `json:"target"`
+	Method   string     `json:"method"`
+	Metadata []Variable `json:"metadata"`
+	Message  string     `json:"message"`
+}
+
+type WsRequest struct {
+	URL     string     `json:"url"`
+	Headers []Variable `json:"headers"`
+	Message string     `json:"message"`
+}
+
+type NatsRequest struct {
+	Subject string     `json:"subject"`
+	Headers []Variable `json:"headers"`
+	Payload string     `json:"payload"`
+}
+
+// NatsConnection — подключение на уровне NATS-коллекции (host/port/token).
+type NatsConnection struct {
+	Host  string `json:"host"`
+	Port  string `json:"port"`
+	Token string `json:"token"`
 }
 
 type RequestUrl struct {

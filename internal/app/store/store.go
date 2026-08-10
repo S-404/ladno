@@ -8,16 +8,19 @@ type Store struct {
 	Env       IEnvStore
 	Log       ILogStore
 	Rest      IRestStore
+	Selection ISelectionStore
 	Workspace IWorkspaceStore
 }
 
 func NewStore(service *service.Service) *Store {
 	envStore := NewEnvStore(service.Env)
 	logStore := NewLogStore()
+	wsStore := NewWorkspaceStore(service.Workspace)
 	return &Store{
 		Env:       envStore,
 		Log:       logStore,
 		Rest:      NewRestStore(service.Rest, envStore, logStore),
-		Workspace: NewWorkspaceStore(service.Workspace),
+		Selection: NewSelectionStore(wsStore),
+		Workspace: wsStore,
 	}
 }

@@ -10,7 +10,7 @@ import (
 
 func CollectionsLayout(app *shared.App) fyne.CanvasObject {
 	left := appContainer.CollectionContainer(app)
-	right := appContainer.RestContainer(app)
+	right := appContainer.MainPanelContainer(app)
 
 	split := container.NewHSplit(
 		ui.NewMinSizeBox(fyne.NewSize(120, 80), left),

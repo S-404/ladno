@@ -5,38 +5,83 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/widget"
-	"github.com/s-404/ladno/internal/app/components/rest"
+	"github.com/s-404/ladno/internal/app/components/collection"
 	"github.com/s-404/ladno/internal/app/entity"
+	"github.com/s-404/ladno/internal/app/entity/constants"
 	"github.com/s-404/ladno/internal/app/entity/shared"
 )
 
 func CollectionContainer(app *shared.App) fyne.CanvasObject {
 	wsStore := app.Store.Workspace
+	selStore := app.Store.Selection
 	restStore := app.Store.Rest
 	wsItem := wsStore.GetItem()
 
-	onSelectCollectionItem := func(item entity.CollectionItem) {
-		if item.Request == nil {
-			return
-		}
-		restStore.SetDraft(draftFromCollectionItem(item))
-	}
-
-	collectionTree := rest.NewCollectionTree(onSelectCollectionItem)
+	tree := collection.NewTree(collection.SelectHandler{
+		OnCollection: func(col entity.Collection) {
+			col.Type = constants.NormalizeCollectionType(col.Type)
+			var nats *entity.NatsConnection
+			if col.Nats != nil {
+				cp := *col.Nats
+				nats = &cp
+			}
+			selStore.SetSelection(entity.Selection{
+				Kind:           entity.SelectionCollection,
+				CollectionID:   col.Id,
+				CollectionType: col.Type,
+				Name:           col.Name,
+				Auth:           col.Auth,
+				Nats:           nats,
+			})
+		},
+		OnFolder: func(col entity.Collection, item entity.CollectionItem, path []string) {
+			col.Type = constants.NormalizeCollectionType(col.Type)
+			selStore.SetSelection(entity.Selection{
+				Kind:           entity.SelectionFolder,
+				CollectionID:   col.Id,
+				CollectionType: col.Type,
+				ItemID:         item.Id,
+				Path:           path,
+				Name:           item.Name,
+				Auth:           item.Auth,
+			})
+		},
+		OnRequest: func(col entity.Collection, item entity.CollectionItem, path []string) {
+			col.Type = constants.NormalizeCollectionType(col.Type)
+			auth := entity.Auth{Type: constants.AuthTypeInherited}
+			if item.Request != nil {
+				auth = item.Request.Auth
+			}
+			selStore.SetSelection(entity.Selection{
+				Kind:           entity.SelectionRequest,
+				CollectionID:   col.Id,
+				CollectionType: col.Type,
+				ItemID:         item.Id,
+				Path:           path,
+				Name:           item.Name,
+				Auth:           auth,
+				Request:        item.Request,
+			})
+			if col.Type == constants.CollectionTypeREST && item.Request != nil {
+				restStore.SetDraft(draftFromCollectionItem(item))
+			}
+		},
+	})
 
 	wsItem.AddListener(binding.NewDataListener(func() {
 		workspace := wsStore.GetWorkspaceDataItem(wsItem)
 		if workspace == nil {
-			collectionTree.SetCollections(nil)
+			tree.SetCollections(nil)
+			selStore.ClearSelection()
 			return
 		}
-		collectionTree.SetCollections(workspace.Collections)
+		tree.SetCollections(workspace.Collections)
 	}))
 
 	return container.NewBorder(
 		widget.NewToolbar(),
 		nil, nil, nil,
-		container.NewScroll(collectionTree),
+		container.NewScroll(tree),
 	)
 }
 
@@ -53,6 +98,7 @@ func draftFromCollectionItem(item entity.CollectionItem) entity.RestDraft {
 		URL:        req.Url.Raw,
 		PathParams: pathParams,
 		Headers:    req.Header,
+		Auth:       req.Auth,
 		BodyMode:   entity.RestBodyRaw,
 	}
 }
