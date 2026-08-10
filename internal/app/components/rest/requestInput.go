@@ -1,8 +1,6 @@
 package rest
 
 import (
-	"fmt"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
@@ -10,29 +8,48 @@ import (
 	"github.com/s-404/ladno/internal/app/components/ui"
 )
 
-func NewRequestInput(methods []string, requestString binding.String, onSend func(), window fyne.Window) fyne.CanvasObject {
+type RequestInputView struct {
+	Object    fyne.CanvasObject
+	GetMethod func() string
+	SetMethod func(method string)
+}
+
+func NewRequestInput(methods []string, requestString binding.String, onSend func()) *RequestInputView {
 	input := ui.NewUrlInput(requestString)
 
+	selected := ""
+	if len(methods) > 0 {
+		selected = methods[0]
+	}
+
 	methodSelect := widget.NewSelect(methods, func(s string) {
-		fmt.Printf("selected method: %s\n", s)
+		selected = s
 	})
 
 	requestButton := widget.NewButton("Send", onSend)
-	requestButton.Resize(fyne.NewSize(300, requestButton.Size().Height))
 
 	if len(methods) == 0 {
 		methodSelect.Hide()
 	} else {
-		methodSelect.SetSelected(methods[0])
+		methodSelect.SetSelected(selected)
 	}
 
 	border := container.NewBorder(
 		nil,
 		nil,
-		methodSelect,  // Left
-		requestButton, // Right
-		input,         // Center
+		methodSelect,
+		requestButton,
+		input,
 	)
 
-	return border
+	return &RequestInputView{
+		Object: border,
+		GetMethod: func() string {
+			return selected
+		},
+		SetMethod: func(method string) {
+			selected = method
+			methodSelect.SetSelected(method)
+		},
+	}
 }

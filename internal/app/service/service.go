@@ -3,15 +3,13 @@ package service
 import "github.com/s-404/ladno/internal/app/repository"
 
 type Service struct {
-	Foo       IFooService
-	Bar       IBarService
+	Rest      IRestService
 	Workspace IWorkspaceService
 }
 
 func NewService(repos *repository.Repository) *Service {
 	return &Service{
-		Foo:       NewFooService(repos.Foo),
-		Bar:       NewBarService(),
+		Rest:      NewRestService(),
 		Workspace: newWorkspaceService(repos.Workspace),
 	}
 }

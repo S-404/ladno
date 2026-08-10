@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	myApp := app.New()
+	myApp := app.NewWithID("com.s404.ladno")
 	myWindow := myApp.NewWindow("ladno")
 	myWindow.Resize(fyne.NewSize(1280, 800))
 	ladnoApp.Init(myWindow)

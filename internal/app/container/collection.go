@@ -1,8 +1,6 @@
 package container
 
 import (
-	"fmt"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
@@ -14,10 +12,14 @@ import (
 
 func CollectionContainer(app *shared.App) fyne.CanvasObject {
 	wsStore := app.Store.Workspace
+	restStore := app.Store.Rest
 	wsItem := wsStore.GetItem()
 
 	onSelectCollectionItem := func(item entity.CollectionItem) {
-		fmt.Printf("selected collection item %s\n", item.Id)
+		if item.Request == nil {
+			return
+		}
+		restStore.SetDraft(draftFromCollectionItem(item))
 	}
 
 	collectionTree := rest.NewCollectionTree(onSelectCollectionItem)
@@ -36,4 +38,21 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 		nil, nil, nil,
 		container.NewScroll(collectionTree),
 	)
+}
+
+func draftFromCollectionItem(item entity.CollectionItem) entity.RestDraft {
+	req := item.Request
+	pathParams := map[string]string{}
+	for _, v := range req.Url.Variable {
+		if v.Key != "" {
+			pathParams[v.Key] = v.Value
+		}
+	}
+	return entity.RestDraft{
+		Method:     string(req.Method),
+		URL:        req.Url.Raw,
+		PathParams: pathParams,
+		Headers:    req.Header,
+		BodyMode:   entity.RestBodyRaw,
+	}
 }

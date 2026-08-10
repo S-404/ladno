@@ -23,17 +23,22 @@ type BodyState struct {
 	FormRows []ui.KVRow
 }
 
+type RequestBodyView struct {
+	Object fyne.CanvasObject
+	Get    func() BodyState
+	Set    func(state BodyState)
+}
+
 // NewRequestBody возвращает таб Body.
 // onChange вызывается при любом изменении содержимого.
-func NewRequestBody(initial BodyState, onChange func(state BodyState)) fyne.CanvasObject {
+func NewRequestBody(initial BodyState, onChange func(state BodyState)) *RequestBodyView {
 	state := initial
 	if state.Mode == "" {
 		state.Mode = BodyModeRaw
 	}
 
-	// --- raw editor ---
 	rawBinding := binding.NewString()
-	rawBinding.Set(state.RawText)
+	_ = rawBinding.Set(state.RawText)
 	rawEntry := widget.NewMultiLineEntry()
 	rawEntry.Bind(rawBinding)
 	rawEntry.SetPlaceHolder("Paste JSON, XML or plain text…")
@@ -47,7 +52,6 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) fyne.Canv
 		}
 	}))
 
-	// --- form-data editor ---
 	formTable := ui.NewKVTable(state.FormRows, func(rows []ui.KVRow) {
 		state.FormRows = rows
 		if onChange != nil {
@@ -55,12 +59,12 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) fyne.Canv
 		}
 	})
 
-	// --- content stack ---
 	rawScroll := container.NewScroll(rawEntry)
 	rawScroll.SetMinSize(fyne.NewSize(0, 200))
 
-	// Показываем нужный редактор
 	stack := container.NewStack(rawScroll, formTable)
+
+	var modeSelect *widget.Select
 
 	applyMode := func(mode BodyMode) {
 		state.Mode = mode
@@ -78,12 +82,10 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) fyne.Canv
 		}
 	}
 
-	// Инициализация видимости
 	applyMode(state.Mode)
 
-	// --- mode selector ---
 	modes := []string{string(BodyModeRaw), string(BodyModeFormData)}
-	modeSelect := widget.NewSelect(modes, func(s string) {
+	modeSelect = widget.NewSelect(modes, func(s string) {
 		applyMode(BodyMode(s))
 	})
 	modeSelect.SetSelected(string(state.Mode))
@@ -93,9 +95,20 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) fyne.Canv
 		modeSelect,
 	)
 
-	return container.NewBorder(
-		toolbar,
-		nil, nil, nil,
-		stack,
-	)
+	return &RequestBodyView{
+		Object: container.NewBorder(toolbar, nil, nil, nil, stack),
+		Get: func() BodyState {
+			return state
+		},
+		Set: func(next BodyState) {
+			if next.Mode == "" {
+				next.Mode = BodyModeRaw
+			}
+			state = next
+			_ = rawBinding.Set(state.RawText)
+			formTable.SetRows(state.FormRows)
+			modeSelect.SetSelected(string(state.Mode))
+			applyMode(state.Mode)
+		},
+	}
 }

@@ -3,6 +3,7 @@ package store
 import (
 	"fmt"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/data/binding"
 	"github.com/s-404/ladno/internal/app/entity"
 	"github.com/s-404/ladno/internal/app/service"
@@ -58,19 +59,23 @@ func (s *WorkspaceStore) FetchWorkspace(id string) {
 		return
 	}
 	s.IsFetching.Set(true)
-	s.SelectedItem.Set(binding.NewUntyped())
+	_ = s.SelectedItem.Set(nil)
 	s.workspaceService.Find(id, func(data *entity.Workspace, err error) {
-		if err != nil {
-			fmt.Printf("fetch async with err: %s", err.Error())
-			return
-		}
-		if data == nil {
-			fmt.Printf("not found")
-			return
-		}
+		fyne.Do(func() {
+			if err != nil {
+				fmt.Printf("fetch async with err: %s", err.Error())
+				s.IsFetching.Set(false)
+				return
+			}
+			if data == nil {
+				fmt.Printf("not found")
+				s.IsFetching.Set(false)
+				return
+			}
 
-		s.SelectedItem.Set(data)
-		s.IsFetching.Set(false)
+			_ = s.SelectedItem.Set(data)
+			s.IsFetching.Set(false)
+		})
 	})
 }
 
@@ -82,15 +87,19 @@ func (s *WorkspaceStore) FetchWorkspaceList() {
 	s.IsFetching.Set(true)
 	s.ClearList()
 	s.workspaceService.List(func(data []entity.WorkspaceLightWeight, err error) {
-		if err != nil {
-			fmt.Printf("fetch async with err: %s", err.Error())
-			return
-		}
-		if data == nil {
-			return
-		}
-		s.Items.Set(utils.UnpackArray(data))
-		s.IsFetching.Set(false)
+		fyne.Do(func() {
+			if err != nil {
+				fmt.Printf("fetch async with err: %s", err.Error())
+				s.IsFetching.Set(false)
+				return
+			}
+			if data == nil {
+				s.IsFetching.Set(false)
+				return
+			}
+			_ = s.Items.Set(utils.UnpackArray(data))
+			s.IsFetching.Set(false)
+		})
 	})
 }
 
@@ -103,7 +112,6 @@ func (s *WorkspaceStore) GetWorkspaceDataItem(item binding.DataItem) *entity.Wor
 	if err != nil {
 		return nil
 	}
-	debugBindingData(item)
 	ws, ok := val.(*entity.Workspace)
 	if !ok {
 		return nil
@@ -139,29 +147,4 @@ func (s *WorkspaceStore) GetWorkspaceListItemByIndex(index int) *entity.Workspac
 
 	v := untyped.(entity.WorkspaceLightWeight)
 	return &v
-}
-
-func debugBindingData(item binding.DataItem) {
-	fmt.Println("=== Debug Binding Data ===")
-
-	if untyped, ok := item.(binding.Untyped); ok {
-		data, err := untyped.Get()
-		if err != nil {
-			fmt.Printf("Error getting data: %v\n", err)
-			return
-		}
-
-		fmt.Printf("Data type: %T\n", data)
-		fmt.Printf("Data value: %+v\n", data)
-
-		// Попробуем рекурсивно проверить если это другой binding
-		if innerUntyped, ok := data.(binding.Untyped); ok {
-			fmt.Println("Found nested binding.Untyped")
-			debugBindingData(innerUntyped)
-		} else if innerDataItem, ok := data.(binding.DataItem); ok {
-			fmt.Println("Found nested DataItem")
-			debugBindingData(innerDataItem)
-		}
-	}
-	fmt.Println("=== End Debug ===")
 }

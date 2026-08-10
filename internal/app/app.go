@@ -20,11 +20,9 @@ func Init(window fyne.Window) {
 		Store:  *newStore,
 		Window: window,
 	}
-	fyne.CurrentApp().Storage().RootURI().Path()
 
 	tabs := container.NewAppTabs(
 		container.NewTabItemWithIcon("collections", theme.HomeIcon(), layout.CollectionsLayout(&app)),
-		container.NewTabItemWithIcon("sandbox", theme.BrokenImageIcon(), layout.SandboxLayout(&app)),
 		container.NewTabItemWithIcon("envs", theme.StorageIcon(), layout.EnvsLayout(&app)),
 		container.NewTabItemWithIcon("settings", theme.SettingsIcon(), layout.SettingsLayout(&app)),
 	)
@@ -32,5 +30,5 @@ func Init(window fyne.Window) {
 
 	header := layout.HeaderLayout(&app)
 
-	app.Window.SetContent(container.NewAdaptiveGrid(1, container.NewBorder(header, nil, nil, nil, tabs)))
+	app.Window.SetContent(container.NewBorder(header, nil, nil, nil, tabs))
 }

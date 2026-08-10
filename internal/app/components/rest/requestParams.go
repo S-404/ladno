@@ -10,6 +10,13 @@ import (
 	"github.com/s-404/ladno/internal/app/components/ui"
 )
 
+// RequestParamsView — таб Params с path/query.
+type RequestParamsView struct {
+	Object        fyne.CanvasObject
+	GetPathParams func() map[string]string
+	SetPathParams func(vals map[string]string)
+}
+
 // NewRequestParams возвращает таб Params с двумя секциями:
 //   - Path Variables — параметры (:key) найденные в пути URL
 //   - Query Params   — query-строка (?key=value)
@@ -18,19 +25,12 @@ import (
 //   - URL всегда хранит шаблон с токенами (:id, {{host}}) — path params его НЕ меняют
 //   - Path Variables используются только при отправке запроса (подстановка на стороне сервиса)
 //   - Query params двусторонние: таблица ↔ URL, с сохранением порядка строк
-func NewRequestParams(requestURL binding.String) fyne.CanvasObject {
+func NewRequestParams(requestURL binding.String) *RequestParamsView {
 	var syncing bool
-
-	// ── Path Variables ────────────────────────────────────────────────
-	// Таблица только читает имена из URL и хранит значения локально.
-	// Запись в URL не производится — значения используются при отправке.
 
 	var pathParamNames []string
 
-	pathTable := ui.NewKVTableReadOnly(nil, nil) // onChange=nil, URL не трогаем
-
-	// ── Query Params ──────────────────────────────────────────────────
-	// Двусторонняя синхронизация. Локальный слайс — источник правды для порядка.
+	pathTable := ui.NewKVTableReadOnly(nil, nil)
 
 	var queryRows []ui.KVRow
 
@@ -45,10 +45,6 @@ func NewRequestParams(requestURL binding.String) fyne.CanvasObject {
 		requestURL.Set(applyQueryParams(raw, rows))
 	})
 
-	// ── Listener на URL ───────────────────────────────────────────────
-	// Срабатывает при внешнем изменении URL (пользователь печатает).
-	// При записи из queryTable — syncing=true, пропускаем.
-
 	if requestURL != nil {
 		requestURL.AddListener(binding.NewDataListener(func() {
 			if syncing {
@@ -56,7 +52,6 @@ func NewRequestParams(requestURL binding.String) fyne.CanvasObject {
 			}
 			raw, _ := requestURL.Get()
 
-			// --- path params: обновляем список имён ---
 			newNames := extractPathParamNames(raw)
 			if !equalStringSlices(newNames, pathParamNames) {
 				pathParamNames = newNames
@@ -69,7 +64,7 @@ func NewRequestParams(requestURL binding.String) fyne.CanvasObject {
 					newRows[i] = ui.KVRow{
 						Enabled: true,
 						Key:     name,
-						Value:   existingVals[name], // сохраняем введённое значение
+						Value:   existingVals[name],
 					}
 				}
 				syncing = true
@@ -77,7 +72,6 @@ func NewRequestParams(requestURL binding.String) fyne.CanvasObject {
 				syncing = false
 			}
 
-			// --- query params: мержим с сохранением порядка и значений ---
 			newQueryRows := parseQueryOrdered(raw)
 			merged := mergeQueryRows(queryRows, newQueryRows)
 			if !equalKVRows(merged, queryRows) {
@@ -88,20 +82,6 @@ func NewRequestParams(requestURL binding.String) fyne.CanvasObject {
 			}
 		}))
 	}
-
-	// ── GetPathParams — вызывается сервисом при отправке запроса ─────
-	// (публичный хелпер, чтобы RestContainer мог получить значения)
-	_ = func() map[string]string {
-		vals := map[string]string{}
-		for _, r := range pathTable.GetRows() {
-			if r.Enabled && r.Key != "" && r.Value != "" {
-				vals[r.Key] = r.Value
-			}
-		}
-		return vals
-	}
-
-	// ── Layout ───────────────────────────────────────────────────────
 
 	pathSection := container.NewBorder(
 		sectionLabel("Path Variables"),
@@ -115,12 +95,38 @@ func NewRequestParams(requestURL binding.String) fyne.CanvasObject {
 		queryTable,
 	)
 
-	return container.NewVBox(pathSection, querySection)
+	return &RequestParamsView{
+		Object: container.NewVBox(pathSection, querySection),
+		GetPathParams: func() map[string]string {
+			vals := map[string]string{}
+			for _, r := range pathTable.GetRows() {
+				if r.Enabled && r.Key != "" && r.Value != "" {
+					vals[r.Key] = r.Value
+				}
+			}
+			return vals
+		},
+		SetPathParams: func(vals map[string]string) {
+			if vals == nil {
+				return
+			}
+			rows := pathTable.GetRows()
+			changed := false
+			for i, r := range rows {
+				if v, ok := vals[r.Key]; ok && r.Value != v {
+					rows[i].Value = v
+					changed = true
+				}
+			}
+			if changed {
+				pathTable.SetRows(rows)
+			}
+		},
+	}
 }
 
 // ── URL helpers ───────────────────────────────────────────────────────────────
 
-// skipAuthority возвращает индекс начала пути (после scheme://host:port).
 func skipAuthority(s string) int {
 	idx := strings.Index(s, "://")
 	if idx == -1 {
@@ -133,8 +139,6 @@ func skipAuthority(s string) int {
 	return i
 }
 
-// extractPathParamNames возвращает имена :param в порядке появления,
-// пропуская authority (scheme://host:port) и {{variables}}.
 func extractPathParamNames(rawURL string) []string {
 	path, _, _ := strings.Cut(rawURL, "?")
 	start := skipAuthority(path)
@@ -171,8 +175,6 @@ func extractPathParamNames(rawURL string) []string {
 	return names
 }
 
-// applyQueryParams пересобирает query-часть URL из строк таблицы.
-// Порядок строк сохраняется. Disabled и строки без key — пропускаются.
 func applyQueryParams(rawURL string, rows []ui.KVRow) string {
 	base, _, _ := strings.Cut(rawURL, "?")
 
@@ -189,7 +191,6 @@ func applyQueryParams(rawURL string, rows []ui.KVRow) string {
 	return base + "?" + strings.Join(parts, "&")
 }
 
-// parseQueryOrdered парсит query вручную, сохраняя порядок ключей.
 func parseQueryOrdered(rawURL string) []ui.KVRow {
 	_, query, found := strings.Cut(rawURL, "?")
 	if !found || query == "" {
@@ -207,12 +208,6 @@ func parseQueryOrdered(rawURL string) []ui.KVRow {
 	return rows
 }
 
-// mergeQueryRows объединяет старые строки (источник порядка) с новыми (из URL).
-//   - Порядок определяется old
-//   - Value берётся из new (URL — источник правды для значений)
-//   - Enabled сохраняется из old
-//   - Строки из new, которых нет в old, добавляются в конец
-//   - Строки из old, которых нет в new, удаляются
 func mergeQueryRows(old, new []ui.KVRow) []ui.KVRow {
 	newCount := map[string]int{}
 	for _, r := range new {
@@ -223,13 +218,11 @@ func mergeQueryRows(old, new []ui.KVRow) []ui.KVRow {
 		oldCount[r.Key]++
 	}
 
-	// Строим map: key → очередь значений из new
 	newVals := map[string][]string{}
 	for _, r := range new {
 		newVals[r.Key] = append(newVals[r.Key], r.Value)
 	}
 
-	// Если наборы ключей совпадают — обновляем только Value, порядок и Enabled из old
 	if equalCountMaps(newCount, oldCount) {
 		usedIdx := map[string]int{}
 		result := make([]ui.KVRow, len(old))
@@ -245,7 +238,6 @@ func mergeQueryRows(old, new []ui.KVRow) []ui.KVRow {
 		return result
 	}
 
-	// Наборы ключей различаются — перестраиваем
 	used := map[string]int{}
 	var result []ui.KVRow
 
@@ -261,7 +253,6 @@ func mergeQueryRows(old, new []ui.KVRow) []ui.KVRow {
 		}
 	}
 
-	// Добавляем ключи которых не было в old
 	addedFromNew := map[string]bool{}
 	for _, r := range new {
 		if oldCount[r.Key] == 0 && !addedFromNew[r.Key] {
@@ -273,13 +264,9 @@ func mergeQueryRows(old, new []ui.KVRow) []ui.KVRow {
 	return result
 }
 
-// ── UI helpers ────────────────────────────────────────────────────────────────
-
 func sectionLabel(text string) fyne.CanvasObject {
 	return widget.NewLabelWithStyle(text, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 }
-
-// ── generic helpers ───────────────────────────────────────────────────────────
 
 func isParamChar(c byte) bool {
 	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||

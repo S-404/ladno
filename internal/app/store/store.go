@@ -5,15 +5,13 @@ import (
 )
 
 type Store struct {
-	Foo       IFooStore
-	Bar       IBarStore
+	Rest      IRestStore
 	Workspace IWorkspaceStore
 }
 
 func NewStore(service *service.Service) *Store {
 	return &Store{
-		Foo:       NewFooStore(service.Foo),
-		Bar:       NewBarStore(service.Bar),
+		Rest:      NewRestStore(service.Rest),
 		Workspace: NewWorkspaceStore(service.Workspace),
 	}
 }

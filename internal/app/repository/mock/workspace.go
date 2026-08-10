@@ -10,93 +10,74 @@ func WorkspaceData() []*entity.Workspace {
 	return []*entity.Workspace{
 		{
 			Id:               "ws-001",
-			Name:             "Основное рабочее пространство",
-			ConnectionConfig: "postgresql://localhost:5432/main",
+			Name:             "Demo",
+			ConnectionConfig: "",
 			Collections: []entity.Collection{
 				{
 					Id:   "c-001",
-					Name: "Коллекция1",
+					Name: "JSONPlaceholder",
 					Items: []entity.CollectionItem{
 						{
 							Id:   "i-001",
-							Name: "Пользователи",
+							Name: "Get post",
 							Request: &entity.ItemRequest{
-								Method: constants.PUT,
+								Method: constants.GET,
 								Url: entity.RequestUrl{
-									Raw: "{{host}}/api/user/:id",
+									Raw: "https://jsonplaceholder.typicode.com/posts/:id",
 									Variable: []entity.Variable{
 										{Key: "id", Value: "1", Type: "string"},
 									},
 								},
 							},
 						},
-					},
-				},
-			},
-		},
-		{
-			Id:               "ws-002",
-			Name:             "Заказы",
-			ConnectionConfig: "postgresql://localhost:5432/main",
-			Collections: []entity.Collection{
-				{
-					Id:   "c-002",
-					Name: "Коллекция1",
-					Items: []entity.CollectionItem{
 						{
 							Id:   "i-002",
-							Name: "Order",
-							Item: []entity.CollectionItem{
-								{
-									Id:   "i-003",
-									Name: "create",
-									Request: &entity.ItemRequest{
-										Method: constants.POST,
-										Url: entity.RequestUrl{
-											Raw: "{{host}}/api/order/",
-										},
-									},
+							Name: "List posts",
+							Request: &entity.ItemRequest{
+								Method: constants.GET,
+								Url: entity.RequestUrl{
+									Raw: "https://jsonplaceholder.typicode.com/posts?_limit=5",
 								},
-								{
-									Id:   "i-004",
-									Name: "upd",
-									Request: &entity.ItemRequest{
-										Method: constants.PUT,
-										Url: entity.RequestUrl{
-											Raw: "{{host}}/api/order/:id",
-											Variable: []entity.Variable{
-												{Key: "id", Value: "22", Type: "string"},
-											},
-										},
+							},
+						},
+						{
+							Id:   "i-003",
+							Name: "Create post",
+							Request: &entity.ItemRequest{
+								Method: constants.POST,
+								Header: []entity.Variable{
+									{Key: "Content-Type", Value: "application/json"},
+								},
+								Url: entity.RequestUrl{
+									Raw: "https://jsonplaceholder.typicode.com/posts",
+								},
+							},
+						},
+						{
+							Id:   "i-004",
+							Name: "Update post",
+							Request: &entity.ItemRequest{
+								Method: constants.PUT,
+								Header: []entity.Variable{
+									{Key: "Content-Type", Value: "application/json"},
+								},
+								Url: entity.RequestUrl{
+									Raw: "https://jsonplaceholder.typicode.com/posts/:id",
+									Variable: []entity.Variable{
+										{Key: "id", Value: "1", Type: "string"},
 									},
 								},
 							},
 						},
 						{
 							Id:   "i-005",
-							Name: "another Order",
-							Item: []entity.CollectionItem{
-								{
-									Id:   "i-006",
-									Name: "get",
-									Request: &entity.ItemRequest{
-										Method: constants.GET,
-										Url: entity.RequestUrl{
-											Raw: "{{host}}/api/another/order/",
-										},
-									},
-								},
-								{
-									Id:   "i-007",
-									Name: "upd",
-									Request: &entity.ItemRequest{
-										Method: constants.PUT,
-										Url: entity.RequestUrl{
-											Raw: "{{host}}/api/another/order/:id",
-											Variable: []entity.Variable{
-												{Key: "id", Value: "33", Type: "string"},
-											},
-										},
+							Name: "Delete post",
+							Request: &entity.ItemRequest{
+								Method: constants.DELETE,
+								Url: entity.RequestUrl{
+									Raw: "https://jsonplaceholder.typicode.com/posts/:id",
+									Variable: []entity.Variable{
+										{Key: "id", Value: "1", Type: "string"},
 									},
 								},
 							},
