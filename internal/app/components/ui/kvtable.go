@@ -222,20 +222,18 @@ func extractKVRowWidget(obj fyne.CanvasObject) *kvRowWidget {
 }
 
 func (t *KVTable) CreateRenderer() fyne.WidgetRenderer {
-	addBtn := widget.NewButtonWithIcon("Add row", theme.ContentAddIcon(), func() {
-		t.addRow()
-	})
-	addBtn.Alignment = widget.ButtonAlignLeading
-	if !t.showAddRow {
-		addBtn.Hide()
+	var addAction fyne.CanvasObject = widget.NewLabel("")
+	if t.showAddRow {
+		addBtn := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
+			t.addRow()
+		})
+		addBtn.Importance = widget.LowImportance
+		addAction = addBtn
 	}
 
-	header := kvHeader()
-
 	content := container.NewBorder(
-		header,
-		addBtn,
-		nil, nil,
+		kvHeader(addAction),
+		nil, nil, nil,
 		t.list,
 	)
 	return widget.NewSimpleRenderer(content)
@@ -245,15 +243,15 @@ func (t *KVTable) MinSize() fyne.Size {
 	return fyne.NewSize(400, 200)
 }
 
-// kvHeader — шапка таблицы
-func kvHeader() fyne.CanvasObject {
+// kvHeader — шапка таблицы с кнопкой + справа
+func kvHeader(addBtn fyne.CanvasObject) fyne.CanvasObject {
 	enabledLbl := widget.NewLabelWithStyle("✓", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
 	keyLbl := widget.NewLabelWithStyle("Key", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	valueLbl := widget.NewLabelWithStyle("Value", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 
 	return container.NewBorder(nil, nil,
 		enabledLbl,
-		widget.NewLabel(""),
+		addBtn,
 		container.NewGridWithColumns(2, keyLbl, valueLbl),
 	)
 }
