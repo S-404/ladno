@@ -21,6 +21,7 @@ type IWorkspaceStore interface {
 	GetWorkspaceDataItem(item binding.DataItem) *entity.Workspace
 	GetSelectedWorkspace() *entity.Workspace
 	PublishWorkspace(ws *entity.Workspace)
+	UpdateSelectedWorkspace(name, connectionConfig string) bool
 
 	GetIsFetching() *binding.Bool
 }
@@ -132,6 +133,17 @@ func (s *WorkspaceStore) PublishWorkspace(ws *entity.Workspace) {
 		return
 	}
 	_ = s.SelectedItem.Set(ws)
+}
+
+func (s *WorkspaceStore) UpdateSelectedWorkspace(name, connectionConfig string) bool {
+	ws := s.GetSelectedWorkspace()
+	if ws == nil {
+		return false
+	}
+	ws.Name = name
+	ws.ConnectionConfig = connectionConfig
+	s.PublishWorkspace(ws)
+	return true
 }
 
 func (s *WorkspaceStore) GetWorkspaceListItemDataItem(item binding.DataItem) *entity.WorkspaceLightWeight {

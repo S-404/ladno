@@ -17,6 +17,8 @@ func Init(window fyne.Window) {
 	newRepository := repository.NewRepository()
 	newService := service.NewService(newRepository)
 	newStore := store.NewStore(newService)
+	newStore.Settings.ApplyTheme()
+
 	app := shared.App{
 		Store:  *newStore,
 		Window: window,

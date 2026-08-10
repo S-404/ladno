@@ -29,6 +29,7 @@ type INatsStore interface {
 	MessagesText(collectionID, subjectPattern string, all bool) string
 	ClearMessages(collectionID, subjectPattern string)
 	AddMessageListener(fn func())
+	TrimMessagesToLimit()
 }
 
 type natsSubKey struct {
@@ -59,9 +60,16 @@ type NatsStore struct {
 	envStore         IEnvStore
 	logStore         ILogStore
 	workspace        IWorkspaceStore
+	settings         ISettingsStore
 }
 
-func NewNatsStore(natsService service.INatsService, envStore IEnvStore, logStore ILogStore, workspace IWorkspaceStore) *NatsStore {
+func NewNatsStore(
+	natsService service.INatsService,
+	envStore IEnvStore,
+	logStore ILogStore,
+	workspace IWorkspaceStore,
+	settings ISettingsStore,
+) *NatsStore {
 	return &NatsStore{
 		conns:       map[string]*nats.Conn{},
 		subs:        map[natsSubKey]*natsActiveSub{},
@@ -71,7 +79,15 @@ func NewNatsStore(natsService service.INatsService, envStore IEnvStore, logStore
 		envStore:    envStore,
 		logStore:    logStore,
 		workspace:   workspace,
+		settings:    settings,
 	}
+}
+
+func (s *NatsStore) messageLimit() int {
+	if s.settings == nil {
+		return 1000
+	}
+	return s.settings.GetMessageLimit()
 }
 
 func (s *NatsStore) Connect(collectionID, collectionName string, conn entity.NatsConnection, onDone func(ok bool, status string)) {
@@ -218,12 +234,11 @@ func (s *NatsStore) notifyMessageChange() {
 	}
 }
 
-const maxNatsMessagesPerCollection = 1000
-
 func (s *NatsStore) AppendMessage(collectionID, subject, data string) {
 	if collectionID == "" {
 		return
 	}
+	limit := s.messageLimit()
 	s.mu.Lock()
 	list := s.messages[collectionID]
 	list = append(list, NatsMessage{
@@ -231,8 +246,8 @@ func (s *NatsStore) AppendMessage(collectionID, subject, data string) {
 		Data:    data,
 		Time:    time.Now(),
 	})
-	if len(list) > maxNatsMessagesPerCollection {
-		list = list[len(list)-maxNatsMessagesPerCollection:]
+	if len(list) > limit {
+		list = list[len(list)-limit:]
 	}
 	s.messages[collectionID] = list
 	s.mu.Unlock()
@@ -251,6 +266,10 @@ func (s *NatsStore) MessagesText(collectionID, subjectPattern string, all bool) 
 	}
 	if len(matched) == 0 {
 		return ""
+	}
+	limit := s.messageLimit()
+	if len(matched) > limit {
+		matched = matched[len(matched)-limit:]
 	}
 	format := func(m NatsMessage) string {
 		ts := m.Time.Format("15:04:05.000")
@@ -282,6 +301,18 @@ func (s *NatsStore) ClearMessages(collectionID, subjectPattern string) {
 			}
 		}
 		s.messages[collectionID] = kept
+	}
+	s.mu.Unlock()
+	s.notifyMessageChange()
+}
+
+func (s *NatsStore) TrimMessagesToLimit() {
+	limit := s.messageLimit()
+	s.mu.Lock()
+	for id, list := range s.messages {
+		if len(list) > limit {
+			s.messages[id] = list[len(list)-limit:]
+		}
 	}
 	s.mu.Unlock()
 	s.notifyMessageChange()

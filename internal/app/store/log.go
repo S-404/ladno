@@ -9,24 +9,32 @@ import (
 	"github.com/s-404/ladno/internal/app/entity"
 )
 
-const maxLogEntries = 500
-
 type ILogStore interface {
 	GetItems() *binding.UntypedList
 	Append(entry *entity.LogEntry)
 	Clear()
 	GetItemByIndex(index int) *entity.LogEntry
 	GetLogDataItem(item binding.DataItem) *entity.LogEntry
+	TrimToLimit()
 }
 
 type LogStore struct {
-	Items binding.UntypedList
+	Items    binding.UntypedList
+	settings ISettingsStore
 }
 
-func NewLogStore() *LogStore {
+func NewLogStore(settings ISettingsStore) *LogStore {
 	return &LogStore{
-		Items: binding.NewUntypedList(),
+		Items:    binding.NewUntypedList(),
+		settings: settings,
 	}
+}
+
+func (s *LogStore) messageLimit() int {
+	if s.settings == nil {
+		return 1000
+	}
+	return s.settings.GetMessageLimit()
 }
 
 func (s *LogStore) GetItems() *binding.UntypedList {
@@ -45,10 +53,19 @@ func (s *LogStore) Append(entry *entity.LogEntry) {
 	}
 	items, _ := s.Items.Get()
 	items = append(items, entry)
-	if len(items) > maxLogEntries {
-		items = items[len(items)-maxLogEntries:]
+	limit := s.messageLimit()
+	if len(items) > limit {
+		items = items[len(items)-limit:]
 	}
 	_ = s.Items.Set(items)
+}
+
+func (s *LogStore) TrimToLimit() {
+	items, _ := s.Items.Get()
+	limit := s.messageLimit()
+	if len(items) > limit {
+		_ = s.Items.Set(items[len(items)-limit:])
+	}
 }
 
 func (s *LogStore) Clear() {
