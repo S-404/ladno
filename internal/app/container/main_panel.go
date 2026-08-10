@@ -71,10 +71,17 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		}
 		selStore.UpdateRequestAuth(sel.CollectionID, sel.ItemID, auth)
 	}
+	saveRequestName := func(name string) {
+		sel := currentSelection(selStore.GetSelection())
+		if sel == nil || sel.Kind != entity.SelectionRequest {
+			return
+		}
+		selStore.UpdateRequestName(sel.CollectionID, sel.ItemID, name)
+	}
 
 	restPanel := RestContainer(app)
-	grpcPanel := grpcui.NewRequestView(saveRequestAuth)
-	wsPanel := wsui.NewRequestView(saveRequestAuth)
+	grpcPanel := grpcui.NewRequestView(saveRequestAuth, saveRequestName)
+	wsPanel := wsui.NewRequestView(saveRequestAuth, saveRequestName)
 
 	var natsPanel *natsui.RequestView
 	var natsCollectionID string
@@ -126,6 +133,7 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			natsStore.Unsubscribe(sel.CollectionID, sel.ItemID)
 			natsPanel.SetSubActive(false)
 		},
+		saveRequestName,
 		messagesView,
 	)
 	panels := []fyne.CanvasObject{

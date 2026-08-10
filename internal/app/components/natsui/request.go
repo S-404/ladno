@@ -22,11 +22,12 @@ type RequestView struct {
 func NewRequestView(
 	onRun func(method constants.NatsMethod, req entity.NatsRequest),
 	onUnsub func(),
+	onNameSave func(name string),
 	messages *MessagesView,
 ) *RequestView {
 	title := widget.NewLabel("NATS request")
 	title.TextStyle = fyne.TextStyle{Bold: true}
-	nameLabel := widget.NewLabel("")
+	nameField := ui.NewRequestNameField(onNameSave)
 	statusLabel := widget.NewLabel("")
 	statusLabel.TextStyle = fyne.TextStyle{Italic: true}
 
@@ -102,7 +103,7 @@ func NewRequestView(
 	requestPanel := container.NewBorder(
 		container.NewVBox(
 			title,
-			nameLabel,
+			nameField.Object,
 			widget.NewForm(
 				widget.NewFormItem("Subject", subject),
 			),
@@ -152,7 +153,7 @@ func NewRequestView(
 		statusLabel.SetText("")
 	}
 	v.Set = func(req *entity.NatsRequest, name string, subscribed bool) {
-		nameLabel.SetText(name)
+		nameField.Set(name)
 		statusLabel.SetText("")
 		if req == nil {
 			subject.SetText("")

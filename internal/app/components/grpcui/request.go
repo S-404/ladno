@@ -14,10 +14,10 @@ type RequestView struct {
 	GetAuth func() entity.Auth
 }
 
-func NewRequestView(onAuthSave func(auth entity.Auth)) *RequestView {
+func NewRequestView(onAuthSave func(auth entity.Auth), onNameSave func(name string)) *RequestView {
 	title := widget.NewLabel("gRPC request")
 	title.TextStyle = fyne.TextStyle{Bold: true}
-	nameLabel := widget.NewLabel("")
+	nameField := ui.NewRequestNameField(onNameSave)
 
 	target := widget.NewEntry()
 	target.SetPlaceHolder("host:port")
@@ -41,7 +41,7 @@ func NewRequestView(onAuthSave func(auth entity.Auth)) *RequestView {
 	requestTab := container.NewBorder(
 		container.NewVBox(
 			title,
-			nameLabel,
+			nameField.Object,
 			widget.NewForm(
 				widget.NewFormItem("Target", target),
 				widget.NewFormItem("Method", method),
@@ -62,7 +62,7 @@ func NewRequestView(onAuthSave func(auth entity.Auth)) *RequestView {
 
 	v := &RequestView{CanvasObject: tabs}
 	v.Set = func(req *entity.GrpcRequest, name string, auth entity.Auth) {
-		nameLabel.SetText(name)
+		nameField.Set(name)
 		authPanel.Set(auth)
 		if req == nil {
 			target.SetText("")

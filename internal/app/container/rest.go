@@ -7,6 +7,7 @@ import (
 	"github.com/s-404/ladno/internal/app/components/rest"
 	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity"
+	"github.com/s-404/ladno/internal/app/entity/constants"
 	"github.com/s-404/ladno/internal/app/entity/shared"
 )
 
@@ -70,6 +71,14 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		},
 	})
 
+	nameField := ui.NewRequestNameField(func(name string) {
+		sel := currentSelection(selStore.GetSelection())
+		if sel == nil || sel.Kind != entity.SelectionRequest {
+			return
+		}
+		selStore.UpdateRequestName(sel.CollectionID, sel.ItemID, name)
+	})
+
 	requestTabs := container.NewAppTabs(
 		container.NewTabItem("Params", paramsView.Object),
 		container.NewTabItem("Headers", headersTable),
@@ -84,7 +93,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 	}
 
 	request := container.NewBorder(
-		requestInput.Object,
+		container.NewVBox(nameField.Object, requestInput.Object),
 		nil, nil, nil,
 		container.NewStack(requestTabs),
 	)
@@ -151,6 +160,17 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		if requestTabs.Selected() != nil && requestTabs.Selected().Text == "Preview" {
 			previewView.Refresh()
 		}
+	}))
+
+	selStore.GetSelection().AddListener(binding.NewDataListener(func() {
+		sel := currentSelection(selStore.GetSelection())
+		if sel == nil || sel.Kind != entity.SelectionRequest {
+			return
+		}
+		if constants.NormalizeCollectionType(sel.CollectionType) != constants.CollectionTypeREST {
+			return
+		}
+		nameField.Set(sel.Name)
 	}))
 
 	envStore.GetActiveID().AddListener(binding.NewDataListener(func() {

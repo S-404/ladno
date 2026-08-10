@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"log"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/data/binding"
@@ -128,11 +129,19 @@ func (s *WorkspaceStore) GetSelectedWorkspace() *entity.Workspace {
 }
 
 // PublishWorkspace re-publishes the selected workspace so UI bindings refresh.
+// Untyped binding compares with ==, so same pointer would skip listeners —
+// always publish a new struct pointer after in-place mutations.
 func (s *WorkspaceStore) PublishWorkspace(ws *entity.Workspace) {
 	if ws == nil {
 		return
 	}
-	_ = s.SelectedItem.Set(ws)
+	cp := *ws
+	if ws.Collections != nil {
+		cp.Collections = append([]entity.Collection(nil), ws.Collections...)
+	}
+	log.Printf("[collections] PublishWorkspace id=%s collections=%d ptr=%p→%p",
+		cp.Id, len(cp.Collections), ws, &cp)
+	_ = s.SelectedItem.Set(&cp)
 }
 
 func (s *WorkspaceStore) UpdateSelectedWorkspace(name, connectionConfig string) bool {
