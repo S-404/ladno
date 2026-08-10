@@ -42,7 +42,17 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			colSettings.SetConnectStatus("Connecting…")
 			natsStore.Connect(sel.CollectionID, save.Name, *save.Nats, func(ok bool, status string) {
 				colSettings.SetConnectStatus(status)
+				colSettings.SetConnected(ok)
 			})
+		},
+		OnDisconnect: func() {
+			sel := currentSelection(selStore.GetSelection())
+			if sel == nil || sel.Kind != entity.SelectionCollection {
+				return
+			}
+			natsStore.Disconnect(sel.CollectionID)
+			colSettings.SetConnected(false)
+			colSettings.SetConnectStatus("Disconnected")
 		},
 	})
 
@@ -65,8 +75,56 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 	restPanel := RestContainer(app)
 	grpcPanel := grpcui.NewRequestView(saveRequestAuth)
 	wsPanel := wsui.NewRequestView(saveRequestAuth)
-	natsPanel := natsui.NewRequestView(saveRequestAuth)
 
+	var natsPanel *natsui.RequestView
+	var natsCollectionID string
+	refreshNatsMessages := func() {
+		if natsPanel == nil {
+			return
+		}
+		text := natsStore.MessagesText(natsCollectionID, natsPanel.Subject(), natsPanel.Messages.ShowAll())
+		natsPanel.Messages.SetText(text)
+	}
+	messagesView := natsui.NewMessagesView(
+		func(all bool) { refreshNatsMessages() },
+		func() {
+			fyne.CurrentApp().Clipboard().SetContent(natsPanel.Messages.Text())
+		},
+		func() {
+			natsStore.ClearMessages(natsCollectionID, natsPanel.Subject())
+			refreshNatsMessages()
+		},
+	)
+	natsStore.AddMessageListener(func() {
+		fyne.Do(refreshNatsMessages)
+	})
+
+	natsPanel = natsui.NewRequestView(
+		func(method constants.NatsMethod, req entity.NatsRequest) {
+			sel := currentSelection(selStore.GetSelection())
+			if sel == nil || sel.Kind != entity.SelectionRequest {
+				return
+			}
+			natsCollectionID = sel.CollectionID
+			natsPanel.SetRunning(true)
+			natsStore.Run(sel.CollectionID, sel.ItemID, method, req, func(err error) {
+				natsPanel.SetRunning(false)
+				if method == constants.NatsMethodSubscribe && err == nil {
+					natsPanel.SetSubActive(true)
+				}
+				refreshNatsMessages()
+			})
+		},
+		func() {
+			sel := currentSelection(selStore.GetSelection())
+			if sel == nil || sel.Kind != entity.SelectionRequest {
+				return
+			}
+			natsStore.Unsubscribe(sel.CollectionID, sel.ItemID)
+			natsPanel.SetSubActive(false)
+		},
+		messagesView,
+	)
 	panels := []fyne.CanvasObject{
 		empty,
 		colSettings.CanvasObject,
@@ -98,10 +156,8 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		}
 		switch sel.Kind {
 		case entity.SelectionCollection:
-			colSettings.Set(sel.Name, sel.Auth, sel.Nats, sel.CollectionType)
-			if sel.CollectionType == constants.CollectionTypeNATS && natsStore.IsConnected(sel.CollectionID) {
-				colSettings.SetConnectStatus("Connected")
-			}
+			connected := sel.CollectionType == constants.CollectionTypeNATS && natsStore.IsConnected(sel.CollectionID)
+			colSettings.Set(sel.Name, sel.Auth, sel.Nats, sel.CollectionType, connected)
 			show(1)
 		case entity.SelectionFolder:
 			folderSettings.Set(sel.Name, sel.Auth)
@@ -127,7 +183,9 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 				if sel.Request != nil {
 					req = sel.Request.Nats
 				}
-				natsPanel.Set(req, sel.Name, sel.Auth)
+				natsCollectionID = sel.CollectionID
+				natsPanel.Set(req, sel.Name, natsStore.IsSubscribed(sel.CollectionID, sel.ItemID))
+				refreshNatsMessages()
 				show(6)
 			default:
 				show(3)

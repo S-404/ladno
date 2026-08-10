@@ -1,8 +1,6 @@
 package logs
 
 import (
-	"fmt"
-
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
@@ -16,8 +14,8 @@ func NewDetailView(entry *entity.LogEntry) fyne.CanvasObject {
 	original := entry.Detail
 
 	statusBadge := canvas.NewText(
-		FormatStatusLabel(entry.StatusCode, entry.IsError),
-		StatusColor(entry.StatusCode, entry.IsError),
+		FormatStatusLabel(entry.StatusCode, entry.IsError, entry.Highlight),
+		BadgeColor(entry),
 	)
 	statusBadge.TextStyle = fyne.TextStyle{Bold: true, Monospace: true}
 	statusBadge.TextSize = theme.TextSize()
@@ -44,14 +42,4 @@ func NewDetailView(entry *entity.LogEntry) fyne.CanvasObject {
 	text.Selectable = true
 
 	return container.NewBorder(toolbar, nil, nil, nil, text)
-}
-
-func FormatStatusLabel(statusCode int, isError bool) string {
-	if isError && statusCode == 0 {
-		return "ERR"
-	}
-	if statusCode == 0 {
-		return "—"
-	}
-	return fmt.Sprintf("%d", statusCode)
 }

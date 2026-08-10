@@ -1,6 +1,11 @@
 package logs
 
-import "image/color"
+import (
+	"fmt"
+	"image/color"
+
+	"github.com/s-404/ladno/internal/app/entity"
+)
 
 var (
 	colorBright = color.NRGBA{R: 0xEE, G: 0xF0, B: 0xF4, A: 0xFF}
@@ -12,6 +17,7 @@ var (
 	colorStatus4xx = color.NRGBA{R: 0xEA, G: 0x43, B: 0x35, A: 0xFF} // красный
 	colorStatus5xx = color.NRGBA{R: 0xC2, G: 0x18, B: 0x5B, A: 0xFF} // бордовый
 	colorStatusErr = color.NRGBA{R: 0xEA, G: 0x43, B: 0x35, A: 0xFF}
+	colorNatsIn    = color.NRGBA{R: 0x4F, G: 0xC3, B: 0xF7, A: 0xFF} // голубой — входящие NATS
 )
 
 func StatusColor(statusCode int, isError bool) color.Color {
@@ -35,4 +41,40 @@ func StatusColor(statusCode int, isError bool) color.Color {
 		}
 		return colorBright
 	}
+}
+
+func MessageColor(entry *entity.LogEntry) color.Color {
+	if entry == nil {
+		return colorBright
+	}
+	if entry.IsError {
+		return colorStatusErr
+	}
+	if entry.Highlight {
+		return colorNatsIn
+	}
+	return colorBright
+}
+
+func FormatStatusLabel(statusCode int, isError bool, highlight bool) string {
+	if highlight {
+		return "IN"
+	}
+	if isError && statusCode == 0 {
+		return "ERR"
+	}
+	if statusCode == 0 {
+		return "—"
+	}
+	return fmt.Sprintf("%d", statusCode)
+}
+
+func BadgeColor(entry *entity.LogEntry) color.Color {
+	if entry == nil {
+		return colorBright
+	}
+	if entry.Highlight {
+		return colorNatsIn
+	}
+	return StatusColor(entry.StatusCode, entry.IsError)
 }

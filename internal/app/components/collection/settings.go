@@ -16,16 +16,18 @@ type SettingsSave struct {
 }
 
 type SettingsCallbacks struct {
-	OnSave    func(SettingsSave)
-	OnConnect func(SettingsSave)
+	OnSave       func(SettingsSave)
+	OnConnect    func(SettingsSave)
+	OnDisconnect func()
 }
 
 type SettingsView struct {
 	fyne.CanvasObject
-	Set              func(name string, auth entity.Auth, nats *entity.NatsConnection, colType constants.CollectionType)
+	Set              func(name string, auth entity.Auth, nats *entity.NatsConnection, colType constants.CollectionType, connected bool)
 	Get              func() SettingsSave
 	Save             func()
 	SetConnectStatus func(text string)
+	SetConnected     func(connected bool)
 }
 
 func NewSettingsView(cb SettingsCallbacks) *SettingsView {
@@ -48,6 +50,7 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 	connStatus.TextStyle = fyne.TextStyle{Italic: true}
 
 	var currentType constants.CollectionType
+	var connected bool
 	content := container.NewStack()
 
 	getSave := func() SettingsSave {
@@ -74,11 +77,28 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 	saveBtn := widget.NewButton("Save", doSave)
 	saveBtn.Importance = widget.HighImportance
 
-	connectBtn := widget.NewButton("Connect", func() {
+	connBtn := widget.NewButton("Connect", nil)
+	applyConnBtn := func() {
+		if connected {
+			connBtn.SetText("Disconnect")
+			connBtn.Importance = widget.DangerImportance
+			return
+		}
+		connBtn.SetText("Connect")
+		connBtn.Importance = widget.MediumImportance
+	}
+	connBtn.OnTapped = func() {
+		if connected {
+			if cb.OnDisconnect != nil {
+				cb.OnDisconnect()
+			}
+			return
+		}
 		if cb.OnConnect != nil {
 			cb.OnConnect(getSave())
 		}
-	})
+	}
+	applyConnBtn()
 
 	render := func() {
 		content.Objects = nil
@@ -93,7 +113,7 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 						widget.NewFormItem("Port", portEntry),
 						widget.NewFormItem("Token", tokenEntry),
 					),
-					container.NewHBox(saveBtn, connectBtn),
+					container.NewHBox(saveBtn, connBtn),
 					connStatus,
 				)),
 			}
@@ -116,12 +136,22 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 		content.Refresh()
 	}
 
+	setConnected := func(ok bool) {
+		connected = ok
+		applyConnBtn()
+		connBtn.Refresh()
+	}
+
 	v := &SettingsView{CanvasObject: content}
-	v.Set = func(name string, auth entity.Auth, nats *entity.NatsConnection, colType constants.CollectionType) {
+	v.Set = func(name string, auth entity.Auth, nats *entity.NatsConnection, colType constants.CollectionType, isConnected bool) {
 		currentType = constants.NormalizeCollectionType(colType)
 		nameEntry.SetText(name)
 		typeLabel.SetText(string(currentType))
 		connStatus.SetText("")
+		setConnected(isConnected)
+		if isConnected {
+			connStatus.SetText("Connected")
+		}
 
 		if currentType == constants.CollectionTypeNATS {
 			if nats == nil {
@@ -139,6 +169,14 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 	v.Save = doSave
 	v.SetConnectStatus = func(text string) {
 		connStatus.SetText(text)
+	}
+	v.SetConnected = func(ok bool) {
+		setConnected(ok)
+		if ok {
+			connStatus.SetText("Connected")
+		} else if connStatus.Text == "Connected" || connStatus.Text == "Connecting…" {
+			connStatus.SetText("")
+		}
 	}
 	return v
 }

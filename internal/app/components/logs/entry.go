@@ -65,8 +65,8 @@ func (e *ExpandableEntry) rebuild() {
 	})
 	toggle.Importance = widget.LowImportance
 
-	badgeText := FormatStatusLabel(e.entry.StatusCode, e.entry.IsError)
-	badge := canvas.NewText(badgeText, StatusColor(e.entry.StatusCode, e.entry.IsError))
+	badgeText := FormatStatusLabel(e.entry.StatusCode, e.entry.IsError, e.entry.Highlight)
+	badge := canvas.NewText(badgeText, BadgeColor(e.entry))
 	badge.TextStyle = fyne.TextStyle{Bold: true, Monospace: true}
 	badge.TextSize = theme.TextSize()
 
@@ -78,10 +78,12 @@ func (e *ExpandableEntry) rebuild() {
 	kindTxt.TextStyle = fyne.TextStyle{Monospace: true}
 	kindTxt.TextSize = theme.TextSize()
 
-	msg := widget.NewLabel(e.entry.Message)
+	msg := canvas.NewText(e.entry.Message, MessageColor(e.entry))
 	msg.TextStyle = fyne.TextStyle{Monospace: true}
-	msg.Truncation = fyne.TextTruncateEllipsis
-
+	msg.TextSize = theme.TextSize()
+	if e.entry.Highlight {
+		msg.TextStyle.Bold = true
+	}
 	header := container.NewBorder(
 		nil, nil,
 		container.NewHBox(toggle, timeTxt, badge, kindTxt),

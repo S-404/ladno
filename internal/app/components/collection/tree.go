@@ -2,12 +2,15 @@ package collection
 
 import (
 	"fmt"
+	"image/color"
 	"sync"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity"
 	"github.com/s-404/ladno/internal/app/entity/constants"
 )
@@ -38,21 +41,24 @@ type treeNode struct {
 type Tree struct {
 	widget.BaseWidget
 
-	mu       sync.RWMutex
-	childIDs map[string][]string
-	nodes    map[string]treeNode
-	cols     map[string]entity.Collection
-
-	handler SelectHandler
-	tree    *widget.Tree
+	mu        sync.RWMutex
+	childIDs  map[string][]string
+	nodes     map[string]treeNode
+	cols      map[string]entity.Collection
+	connected map[string]bool
+	handler   SelectHandler
+	tree      *widget.Tree
 }
+
+var colorConnected = color.NRGBA{R: 0x34, G: 0xA8, B: 0x53, A: 0xFF}
 
 func NewTree(handler SelectHandler) *Tree {
 	ct := &Tree{
-		childIDs: map[string][]string{"": {}},
-		nodes:    map[string]treeNode{},
-		cols:     map[string]entity.Collection{},
-		handler:  handler,
+		childIDs:  map[string][]string{"": {}},
+		nodes:     map[string]treeNode{},
+		cols:      map[string]entity.Collection{},
+		connected: map[string]bool{},
+		handler:   handler,
 	}
 	ct.ExtendBaseWidget(ct)
 
@@ -72,34 +78,48 @@ func NewTree(handler SelectHandler) *Tree {
 			if !ok {
 				return false
 			}
-			switch n.kind {
-			case nodeCollection:
-				return len(n.item.Item) > 0
-			case nodeFolder:
-				return len(n.item.Item) > 0
-			default:
-				return len(n.item.Item) > 0
-			}
+			return len(n.item.Item) > 0
 		},
 		func(branch bool) fyne.CanvasObject {
 			icon := widget.NewIcon(theme.DocumentIcon())
 			icon.Resize(fyne.NewSize(theme.IconInlineSize(), theme.IconInlineSize()))
+			status := canvas.NewCircle(color.Transparent)
+			status.Hide()
+			dot := ui.NewMinSizeBox(fyne.NewSize(8, 8), status)
 			label := widget.NewLabel("")
 			label.Truncation = fyne.TextTruncateEllipsis
-			return container.NewBorder(nil, nil, icon, nil, label)
+			left := container.NewHBox(icon, container.NewCenter(dot))
+			return container.NewBorder(nil, nil, left, nil, label)
 		},
 		func(uid widget.TreeNodeID, branch bool, obj fyne.CanvasObject) {
 			ct.mu.RLock()
 			n := ct.nodes[uid]
+			connected := ct.connected[n.collectionID]
 			ct.mu.RUnlock()
 
 			c := obj.(*fyne.Container)
-			icon := theme.DocumentIcon()
+			left := c.Objects[1].(*fyne.Container)
+			icon := left.Objects[0].(*widget.Icon)
+			dotWrap := left.Objects[1].(*fyne.Container)
+			dotBox := dotWrap.Objects[0].(*ui.MinSizeBox)
+			status := dotBox.Content.(*canvas.Circle)
+			label := c.Objects[0].(*widget.Label)
+
+			res := theme.DocumentIcon()
 			if n.kind == nodeCollection || n.kind == nodeFolder {
-				icon = theme.FolderIcon()
+				res = theme.FolderIcon()
 			}
-			c.Objects[1].(*widget.Icon).SetResource(icon)
-			c.Objects[0].(*widget.Label).SetText(n.label)
+			icon.SetResource(res)
+			label.SetText(n.label)
+
+			if n.kind == nodeCollection && connected {
+				status.FillColor = colorConnected
+				status.StrokeColor = colorConnected
+				status.Show()
+			} else {
+				status.Hide()
+			}
+			status.Refresh()
 		},
 	)
 
@@ -129,6 +149,17 @@ func NewTree(handler SelectHandler) *Tree {
 	}
 
 	return ct
+}
+
+func (ct *Tree) SetConnected(ids map[string]bool) {
+	ct.mu.Lock()
+	if ids == nil {
+		ct.connected = map[string]bool{}
+	} else {
+		ct.connected = ids
+	}
+	ct.mu.Unlock()
+	ct.tree.Refresh()
 }
 
 func (ct *Tree) SetCollections(collections []entity.Collection) {

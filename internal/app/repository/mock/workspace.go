@@ -156,7 +156,7 @@ func WorkspaceData() []*entity.Workspace {
 					Items: []entity.CollectionItem{
 						{
 							Id:   "n-001",
-							Name: "Publish events",
+							Name: "demo.events",
 							Request: &entity.ItemRequest{
 								Nats: &entity.NatsRequest{
 									Subject: "demo.events",

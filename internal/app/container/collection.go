@@ -15,6 +15,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 	wsStore := app.Store.Workspace
 	selStore := app.Store.Selection
 	restStore := app.Store.Rest
+	natsStore := app.Store.Nats
 	wsItem := wsStore.GetItem()
 
 	tree := collection.NewTree(collection.SelectHandler{
@@ -68,6 +69,13 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 		},
 	})
 
+	refreshConnected := func() {
+		tree.SetConnected(natsStore.ConnectedIDs())
+	}
+	natsStore.AddConnectionListener(func() {
+		fyne.Do(refreshConnected)
+	})
+
 	wsItem.AddListener(binding.NewDataListener(func() {
 		workspace := wsStore.GetWorkspaceDataItem(wsItem)
 		if workspace == nil {
@@ -76,6 +84,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 			return
 		}
 		tree.SetCollections(workspace.Collections)
+		refreshConnected()
 	}))
 
 	return container.NewBorder(

@@ -20,7 +20,7 @@ func NewStore(service *service.Service) *Store {
 	return &Store{
 		Env:       envStore,
 		Log:       logStore,
-		Nats:      NewNatsStore(service.Nats, envStore, logStore),
+		Nats:      NewNatsStore(service.Nats, envStore, logStore, wsStore),
 		Rest:      NewRestStore(service.Rest, envStore, logStore),
 		Selection: NewSelectionStore(wsStore),
 		Workspace: wsStore,

@@ -16,8 +16,17 @@ type NatsConnectResult struct {
 	ServerID string
 }
 
+type NatsMessage struct {
+	Subject string
+	Data    string
+	Header  nats.Header
+}
+
 type INatsService interface {
 	Connect(conn entity.NatsConnection, cb func(*nats.Conn, NatsConnectResult))
+	Publish(nc *nats.Conn, subject string, headers nats.Header, payload []byte) error
+	Request(nc *nats.Conn, subject string, headers nats.Header, payload []byte, timeout time.Duration) (*nats.Msg, error)
+	Subscribe(nc *nats.Conn, subject string, handler nats.MsgHandler) (*nats.Subscription, error)
 }
 
 type NatsService struct{}
@@ -56,6 +65,32 @@ func (s *NatsService) Connect(conn entity.NatsConnection, cb func(*nats.Conn, Na
 	}()
 }
 
+func (s *NatsService) Publish(nc *nats.Conn, subject string, headers nats.Header, payload []byte) error {
+	if nc == nil || !nc.IsConnected() {
+		return fmt.Errorf("not connected")
+	}
+	msg := &nats.Msg{Subject: subject, Data: payload, Header: headers}
+	return nc.PublishMsg(msg)
+}
+
+func (s *NatsService) Request(nc *nats.Conn, subject string, headers nats.Header, payload []byte, timeout time.Duration) (*nats.Msg, error) {
+	if nc == nil || !nc.IsConnected() {
+		return nil, fmt.Errorf("not connected")
+	}
+	if timeout <= 0 {
+		timeout = 2 * time.Second
+	}
+	msg := &nats.Msg{Subject: subject, Data: payload, Header: headers}
+	return nc.RequestMsg(msg, timeout)
+}
+
+func (s *NatsService) Subscribe(nc *nats.Conn, subject string, handler nats.MsgHandler) (*nats.Subscription, error) {
+	if nc == nil || !nc.IsConnected() {
+		return nil, fmt.Errorf("not connected")
+	}
+	return nc.Subscribe(subject, handler)
+}
+
 func natsURL(conn entity.NatsConnection) string {
 	host := strings.TrimSpace(conn.Host)
 	if host == "" {
@@ -65,7 +100,6 @@ func natsURL(conn entity.NatsConnection) string {
 	if port == "" {
 		port = "4222"
 	}
-	// Allow full URL in host for flexibility.
 	if strings.Contains(host, "://") {
 		return host
 	}
