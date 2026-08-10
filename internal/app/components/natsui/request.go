@@ -92,7 +92,12 @@ func NewRequestView(
 	})
 	applySubBtn()
 
-	buttons := []fyne.CanvasObject{publishBtn, requestBtn, subBtn}
+	actions := container.NewBorder(
+		nil, nil,
+		container.NewHBox(publishBtn, requestBtn, subBtn),
+		statusLabel,
+		nil,
+	)
 
 	requestPanel := container.NewBorder(
 		container.NewVBox(
@@ -106,7 +111,7 @@ func NewRequestView(
 			widget.NewLabel("Payload"),
 			envHint,
 		),
-		container.NewVBox(container.NewHBox(buttons...), statusLabel),
+		actions,
 		nil, nil,
 		payload,
 	)

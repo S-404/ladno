@@ -8,6 +8,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
+	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity"
 )
 
@@ -40,7 +41,8 @@ func NewResponseView() *ResponseView {
 	)
 
 	header := container.NewHBox(v.statusLabel, v.metaLabel)
-	v.root = container.NewBorder(header, nil, nil, nil, tabs)
+	panel := container.NewBorder(header, nil, nil, nil, tabs)
+	v.root = ui.NewPanelBackground(panel)
 	return v
 }
 

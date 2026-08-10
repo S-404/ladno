@@ -242,11 +242,43 @@ func (e *EnvInput) CreateRenderer() fyne.WidgetRenderer {
 		displayLayer = container.NewStack(e.bg, e.border, container.NewPadded(e.display))
 	}
 	stack := container.NewStack(displayLayer, e.entry)
-	return widget.NewSimpleRenderer(stack)
+	return &envInputRenderer{input: e, stack: stack, objects: []fyne.CanvasObject{stack}}
 }
 
 func (e *EnvInput) MinSize() fyne.Size {
-	return e.entry.MinSize()
+	// Long lines must not expand layout — parent clips/scrolls.
+	s := e.entry.MinSize()
+	if s.Width < 80 {
+		s.Width = 80
+	} else if s.Width > 160 {
+		s.Width = 160
+	}
+	return s
+}
+
+type envInputRenderer struct {
+	input   *EnvInput
+	stack   *fyne.Container
+	objects []fyne.CanvasObject
+}
+
+func (r *envInputRenderer) Destroy() {}
+
+func (r *envInputRenderer) Layout(size fyne.Size) {
+	r.stack.Resize(size)
+	r.stack.Move(fyne.NewPos(0, 0))
+}
+
+func (r *envInputRenderer) MinSize() fyne.Size {
+	return r.input.MinSize()
+}
+
+func (r *envInputRenderer) Objects() []fyne.CanvasObject {
+	return r.objects
+}
+
+func (r *envInputRenderer) Refresh() {
+	r.stack.Refresh()
 }
 
 func (e *EnvInput) Refresh() {

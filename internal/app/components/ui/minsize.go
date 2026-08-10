@@ -24,6 +24,7 @@ func (b *MinSizeBox) CreateRenderer() fyne.WidgetRenderer {
 }
 
 func (b *MinSizeBox) MinSize() fyne.Size {
+	// Fixed floor for Split panes: ignore content growth (e.g. long Entry lines).
 	return b.Min
 }
 

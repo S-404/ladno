@@ -5,6 +5,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/s-404/ladno/internal/app/components/ui"
 )
 
 // MessagesView — блок сообщений по выбранному subject (Latest / All).
@@ -28,6 +29,7 @@ func NewMessagesView(onToggle func(all bool), onCopy, onClear func()) *MessagesV
 	}
 	v.body.TextStyle = fyne.TextStyle{Monospace: true}
 	v.body.Wrapping = fyne.TextWrapOff
+	v.body.SetMinRowsVisible(4)
 	v.body.SetPlaceHolder("Messages for selected subject")
 	v.modeLabel.TextStyle = fyne.TextStyle{Italic: true}
 
@@ -67,7 +69,9 @@ func NewMessagesView(onToggle func(all bool), onCopy, onClear func()) *MessagesV
 		container.NewHBox(toggleBtn, copyBtn, clearBtn),
 		nil,
 	)
-	v.root = container.NewBorder(header, nil, nil, nil, container.NewScroll(v.body))
+	panel := container.NewBorder(header, nil, nil, nil, container.NewScroll(v.body))
+	v.root = ui.NewPanelBackground(panel)
+	v.body.Disable()
 	return v
 }
 
