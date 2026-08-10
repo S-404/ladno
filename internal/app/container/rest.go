@@ -12,6 +12,7 @@ import (
 
 func RestContainer(app *shared.App) fyne.CanvasObject {
 	restStore := app.Store.Rest
+	envStore := app.Store.Env
 	requestURL := binding.NewString()
 	_ = requestURL.Set("{{baseUrl}}/posts/1")
 
@@ -23,9 +24,10 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 	var paramsView *rest.RequestParamsView
 	var bodyView *rest.RequestBodyView
 	var headersTable *ui.KVTable
+	var previewView *rest.PreviewView
 	responseView := rest.NewResponseView()
 
-	send := func() {
+	buildReq := func() entity.RestRequest {
 		urlVal, _ := requestURL.Get()
 		body := bodyView.Get()
 		req := entity.RestRequest{
@@ -40,7 +42,11 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		if req.BodyMode == "" {
 			req.BodyMode = entity.RestBodyRaw
 		}
-		restStore.Send(req)
+		return req
+	}
+
+	send := func() {
+		restStore.Send(buildReq())
 	}
 
 	requestInput = rest.NewRequestInput(methods, requestURL, send)
@@ -49,12 +55,21 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		headers = rows
 	})
 	bodyView = rest.NewRequestBody(rest.BodyState{Mode: rest.BodyModeRaw}, nil)
+	previewView = rest.NewPreviewView(func() string {
+		return restStore.Preview(buildReq())
+	})
 
 	requestTabs := container.NewAppTabs(
 		container.NewTabItem("Params", paramsView.Object),
 		container.NewTabItem("Headers", headersTable),
 		container.NewTabItem("Body", bodyView.Object),
+		container.NewTabItem("Preview", previewView.Object),
 	)
+	requestTabs.OnSelected = func(tab *container.TabItem) {
+		if tab != nil && tab.Text == "Preview" {
+			previewView.Refresh()
+		}
+	}
 
 	request := container.NewBorder(
 		requestInput.Object,
@@ -118,6 +133,16 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		})
 
 		paramsView.SetPathParams(draft.PathParams)
+
+		if requestTabs.Selected() != nil && requestTabs.Selected().Text == "Preview" {
+			previewView.Refresh()
+		}
+	}))
+
+	envStore.GetActiveID().AddListener(binding.NewDataListener(func() {
+		if requestTabs.Selected() != nil && requestTabs.Selected().Text == "Preview" {
+			previewView.Refresh()
+		}
 	}))
 
 	return split

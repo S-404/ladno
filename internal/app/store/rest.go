@@ -16,6 +16,7 @@ type IRestStore interface {
 	GetIsSending() *binding.Bool
 	GetResponse() binding.Untyped
 	Send(req entity.RestRequest)
+	Preview(req entity.RestRequest) string
 	ClearResponse()
 }
 
@@ -59,6 +60,14 @@ func (s *RestStore) GetResponse() binding.Untyped {
 
 func (s *RestStore) ClearResponse() {
 	s.Response.Set(nil)
+}
+
+func (s *RestStore) Preview(req entity.RestRequest) string {
+	if s.envStore != nil {
+		req = applyEnvVars(req, s.envStore.ActiveVariables())
+	}
+	snap, err := s.restService.BuildSnapshot(req)
+	return FormatRestRequestPreview(snap, err)
 }
 
 func (s *RestStore) Send(req entity.RestRequest) {

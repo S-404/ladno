@@ -97,6 +97,13 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) *RequestB
 	return &RequestBodyView{
 		Object: container.NewBorder(toolbar, nil, nil, nil, stack),
 		Get: func() BodyState {
+			// Entry.Bind может отставать до потери фокуса — читаем актуальный текст
+			state.RawText = rawEntry.Text
+			v, _ := rawBinding.Get()
+			if state.RawText == "" && v != "" {
+				state.RawText = v
+			}
+			state.FormRows = formTable.GetRows()
 			return state
 		},
 		Set: func(next BodyState) {
@@ -105,6 +112,7 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) *RequestB
 			}
 			state = next
 			_ = rawBinding.Set(state.RawText)
+			rawEntry.SetText(state.RawText)
 			formTable.SetRows(state.FormRows)
 			modeSelect.SetSelected(string(state.Mode))
 			applyMode(state.Mode)

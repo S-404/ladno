@@ -78,30 +78,14 @@ func (s *LogStore) GetLogDataItem(item binding.DataItem) *entity.LogEntry {
 func FormatRestLogDetail(resp *entity.RestResponse) string {
 	var b strings.Builder
 
-	b.WriteString("── REQUEST ──\n")
-	if resp != nil && resp.Request != nil {
-		req := resp.Request
-		b.WriteString(req.Method)
-		b.WriteByte(' ')
-		b.WriteString(req.URL)
-		b.WriteByte('\n')
-		if len(req.Headers) > 0 {
-			b.WriteString("\nHeaders:\n")
-			writeHeaders(&b, req.Headers)
+	var snap *entity.RestRequestSnapshot
+	if resp != nil {
+		snap = resp.Request
+		if snap == nil && (resp.Method != "" || resp.URL != "") {
+			snap = &entity.RestRequestSnapshot{Method: resp.Method, URL: resp.URL}
 		}
-		if req.Body != "" {
-			b.WriteString("\nBody:\n")
-			b.WriteString(truncateLogBody(req.Body))
-			b.WriteByte('\n')
-		}
-	} else if resp != nil {
-		b.WriteString(resp.Method)
-		b.WriteByte(' ')
-		b.WriteString(resp.URL)
-		b.WriteByte('\n')
-	} else {
-		b.WriteString("(empty)\n")
 	}
+	b.WriteString(FormatRestRequestPreview(snap, nil))
 
 	b.WriteString("\n── RESPONSE ──\n")
 	if resp == nil {
@@ -128,6 +112,41 @@ func FormatRestLogDetail(resp *entity.RestResponse) string {
 	if resp.Body != "" {
 		b.WriteString("\nBody:\n")
 		b.WriteString(truncateLogBody(resp.Body))
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+// FormatRestRequestPreview — текст превью/лога только по REQUEST (как в логах).
+func FormatRestRequestPreview(req *entity.RestRequestSnapshot, buildErr error) string {
+	var b strings.Builder
+	b.WriteString("── REQUEST ──\n")
+	if req == nil {
+		b.WriteString("(empty)\n")
+		if buildErr != nil {
+			b.WriteString("\nError: ")
+			b.WriteString(buildErr.Error())
+			b.WriteByte('\n')
+		}
+		return b.String()
+	}
+
+	b.WriteString(req.Method)
+	b.WriteByte(' ')
+	b.WriteString(req.URL)
+	b.WriteByte('\n')
+	if len(req.Headers) > 0 {
+		b.WriteString("\nHeaders:\n")
+		writeHeaders(&b, req.Headers)
+	}
+	if req.Body != "" {
+		b.WriteString("\nBody:\n")
+		b.WriteString(truncateLogBody(req.Body))
+		b.WriteByte('\n')
+	}
+	if buildErr != nil {
+		b.WriteString("\nError: ")
+		b.WriteString(buildErr.Error())
 		b.WriteByte('\n')
 	}
 	return b.String()

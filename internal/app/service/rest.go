@@ -15,6 +15,7 @@ import (
 
 type IRestService interface {
 	Send(req entity.RestRequest, cb func(*entity.RestResponse))
+	BuildSnapshot(req entity.RestRequest) (*entity.RestRequestSnapshot, error)
 }
 
 type RestService struct {
@@ -35,66 +36,100 @@ func (s *RestService) Send(req entity.RestRequest, cb func(*entity.RestResponse)
 	}()
 }
 
-func (s *RestService) sendSync(req entity.RestRequest) *entity.RestResponse {
-	start := time.Now()
+// BuildSnapshot собирает итоговый вид запроса (URL/headers/body) без отправки.
+func (s *RestService) BuildSnapshot(req entity.RestRequest) (*entity.RestRequestSnapshot, error) {
 	method := strings.ToUpper(req.Method)
-
-	fail := func(resolvedURL, errMsg string) *entity.RestResponse {
-		return &entity.RestResponse{
-			Method:   method,
-			URL:      resolvedURL,
-			Error:    errMsg,
-			Duration: time.Since(start),
-			Request: &entity.RestRequestSnapshot{
-				Method: method,
-				URL:    resolvedURL,
-				Body:   previewBody(req),
-			},
-		}
+	if method == "" {
+		method = http.MethodGet
 	}
 
 	resolvedURL, err := resolveURL(req.URL, req.PathParams)
 	if err != nil {
-		return fail(req.URL, err.Error())
+		return &entity.RestRequestSnapshot{
+			Method: method,
+			URL:    strings.TrimSpace(req.URL),
+			Body:   previewBody(req),
+		}, err
 	}
 
-	bodyReader, bodyText, contentType, err := buildBody(req)
+	_, bodyText, contentType, err := buildBodyContent(req)
 	if err != nil {
-		return fail(resolvedURL, err.Error())
+		return &entity.RestRequestSnapshot{
+			Method: method,
+			URL:    resolvedURL,
+			Body:   previewBody(req),
+		}, err
 	}
 
-	httpReq, err := http.NewRequest(method, resolvedURL, bodyReader)
-	if err != nil {
-		return fail(resolvedURL, err.Error())
-	}
-
+	headers := make(map[string][]string)
 	hasContentType := false
 	for _, h := range req.Headers {
 		if h.Key == "" {
 			continue
 		}
-		httpReq.Header.Add(h.Key, h.Value)
+		headers[h.Key] = append(headers[h.Key], h.Value)
 		if strings.EqualFold(h.Key, "Content-Type") {
 			hasContentType = true
 		}
 	}
 	if contentType != "" && !hasContentType {
-		httpReq.Header.Set("Content-Type", contentType)
+		headers["Content-Type"] = []string{contentType}
 	}
 
-	snapshot := &entity.RestRequestSnapshot{
+	return &entity.RestRequestSnapshot{
 		Method:  method,
 		URL:     resolvedURL,
-		Headers: cloneHeader(httpReq.Header),
+		Headers: headers,
 		Body:    bodyText,
+	}, nil
+}
+
+func (s *RestService) sendSync(req entity.RestRequest) *entity.RestResponse {
+	start := time.Now()
+	method := strings.ToUpper(req.Method)
+
+	snapshot, snapErr := s.BuildSnapshot(req)
+	if snapErr != nil {
+		url := req.URL
+		if snapshot != nil && snapshot.URL != "" {
+			url = snapshot.URL
+		}
+		return &entity.RestResponse{
+			Method:   method,
+			URL:      url,
+			Error:    snapErr.Error(),
+			Duration: time.Since(start),
+			Request:  snapshot,
+		}
+	}
+
+	var bodyReader io.Reader
+	if snapshot.Body != "" && method != http.MethodGet && method != http.MethodHead {
+		bodyReader = strings.NewReader(snapshot.Body)
+	}
+
+	httpReq, err := http.NewRequest(snapshot.Method, snapshot.URL, bodyReader)
+	if err != nil {
+		return &entity.RestResponse{
+			Method:   snapshot.Method,
+			URL:      snapshot.URL,
+			Error:    err.Error(),
+			Duration: time.Since(start),
+			Request:  snapshot,
+		}
+	}
+	for k, vals := range snapshot.Headers {
+		for _, v := range vals {
+			httpReq.Header.Add(k, v)
+		}
 	}
 
 	resp, err := s.client.Do(httpReq)
 	duration := time.Since(start)
 	if err != nil {
 		return &entity.RestResponse{
-			Method:   method,
-			URL:      resolvedURL,
+			Method:   snapshot.Method,
+			URL:      snapshot.URL,
 			Error:    err.Error(),
 			Duration: duration,
 			Request:  snapshot,
@@ -105,8 +140,8 @@ func (s *RestService) sendSync(req entity.RestRequest) *entity.RestResponse {
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10 MB
 	if err != nil {
 		return &entity.RestResponse{
-			Method:     method,
-			URL:        resolvedURL,
+			Method:     snapshot.Method,
+			URL:        snapshot.URL,
 			StatusCode: resp.StatusCode,
 			Status:     resp.Status,
 			Headers:    resp.Header,
@@ -117,8 +152,8 @@ func (s *RestService) sendSync(req entity.RestRequest) *entity.RestResponse {
 	}
 
 	return &entity.RestResponse{
-		Method:     method,
-		URL:        resolvedURL,
+		Method:     snapshot.Method,
+		URL:        snapshot.URL,
 		StatusCode: resp.StatusCode,
 		Status:     resp.Status,
 		Headers:    resp.Header,
@@ -126,16 +161,6 @@ func (s *RestService) sendSync(req entity.RestRequest) *entity.RestResponse {
 		Duration:   duration,
 		Request:    snapshot,
 	}
-}
-
-func cloneHeader(h http.Header) map[string][]string {
-	out := make(map[string][]string, len(h))
-	for k, vals := range h {
-		cp := make([]string, len(vals))
-		copy(cp, vals)
-		out[k] = cp
-	}
-	return out
 }
 
 func previewBody(req entity.RestRequest) string {
@@ -240,7 +265,11 @@ func buildBody(req entity.RestRequest) (io.Reader, string, string, error) {
 	if method == http.MethodGet || method == http.MethodHead {
 		return nil, "", "", nil
 	}
+	return buildBodyContent(req)
+}
 
+// buildBodyContent собирает тело независимо от method (для preview/snapshot).
+func buildBodyContent(req entity.RestRequest) (io.Reader, string, string, error) {
 	switch req.BodyMode {
 	case entity.RestBodyFormData:
 		var buf bytes.Buffer
