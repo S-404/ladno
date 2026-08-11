@@ -1,31 +1,88 @@
 package repository
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/s-404/ladno/internal/app/entity"
-	"github.com/s-404/ladno/internal/app/repository/mock"
+	"log"
 	"strings"
 	"sync"
+
+	"github.com/s-404/ladno/internal/app/entity"
+	"github.com/s-404/ladno/internal/app/repository/mock"
+	"github.com/s-404/ladno/internal/app/storage"
+	"github.com/s-404/ladno/internal/app/utils"
 )
+
+const workspacesFileName = "workspaces.json"
 
 type IWorkspaceRepository interface {
 	FindById(id string) *entity.Workspace
 	List(titleSearch string) []*entity.Workspace
 	FindAllLightweight() []entity.WorkspaceLightWeight
 	FindAll() []*entity.Workspace
+	Create(name string) (*entity.Workspace, error)
 	Save(workspace *entity.Workspace) error
 	Delete(id string) error
+}
+
+type workspacesFile struct {
+	Version    int                 `json:"version"`
+	Workspaces []*entity.Workspace `json:"workspaces"`
 }
 
 type WorkspaceRepository struct {
 	mu         sync.RWMutex
 	workspaces []*entity.Workspace
+	store      *storage.Store
 }
 
-func NewWorkspaceRepository() *WorkspaceRepository {
-	return &WorkspaceRepository{
-		workspaces: mock.WorkspaceData(),
+func NewWorkspaceRepository(store *storage.Store) *WorkspaceRepository {
+	r := &WorkspaceRepository{
+		store:      store,
+		workspaces: []*entity.Workspace{},
 	}
+	if err := r.load(); err != nil {
+		log.Printf("[storage] workspace load: %v", err)
+	}
+	return r
+}
+
+func (r *WorkspaceRepository) load() error {
+	if r.store == nil {
+		r.workspaces = cloneWorkspaceList(mock.WorkspaceData())
+		return nil
+	}
+
+	var file workspacesFile
+	err := r.store.LoadJSON(workspacesFileName, &file)
+	if errors.Is(err, storage.ErrNotExist) {
+		r.workspaces = cloneWorkspaceList(mock.WorkspaceData())
+		return r.persistLocked()
+	}
+	if err != nil {
+		return err
+	}
+
+	r.workspaces = make([]*entity.Workspace, 0, len(file.Workspaces))
+	for _, ws := range file.Workspaces {
+		if ws == nil {
+			continue
+		}
+		r.workspaces = append(r.workspaces, cloneWorkspace(ws))
+	}
+	return nil
+}
+
+func (r *WorkspaceRepository) persistLocked() error {
+	if r.store == nil {
+		return nil
+	}
+	file := workspacesFile{
+		Version:    1,
+		Workspaces: cloneWorkspaceList(r.workspaces),
+	}
+	return r.store.SaveJSON(workspacesFileName, file)
 }
 
 func (r *WorkspaceRepository) FindById(id string) *entity.Workspace {
@@ -34,7 +91,7 @@ func (r *WorkspaceRepository) FindById(id string) *entity.Workspace {
 
 	for _, workspace := range r.workspaces {
 		if workspace.Id == id {
-			return workspace
+			return cloneWorkspace(workspace)
 		}
 	}
 	return nil
@@ -44,10 +101,11 @@ func (r *WorkspaceRepository) List(titleSearch string) []*entity.Workspace {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
+	q := strings.ToLower(titleSearch)
 	var result []*entity.Workspace
 	for _, workspace := range r.workspaces {
-		if strings.Contains(strings.ToLower(workspace.Name), strings.ToLower(titleSearch)) {
-			result = append(result, workspace)
+		if q == "" || strings.Contains(strings.ToLower(workspace.Name), q) {
+			result = append(result, cloneWorkspace(workspace))
 		}
 	}
 	return result
@@ -56,11 +114,7 @@ func (r *WorkspaceRepository) List(titleSearch string) []*entity.Workspace {
 func (r *WorkspaceRepository) FindAll() []*entity.Workspace {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-
-	// Возвращаем копию чтобы избежать изменений извне
-	result := make([]*entity.Workspace, len(r.workspaces))
-	copy(result, r.workspaces)
-	return result
+	return cloneWorkspaceList(r.workspaces)
 }
 
 func (r *WorkspaceRepository) FindAllLightweight() []entity.WorkspaceLightWeight {
@@ -77,20 +131,54 @@ func (r *WorkspaceRepository) FindAllLightweight() []entity.WorkspaceLightWeight
 	return items
 }
 
-func (r *WorkspaceRepository) Save(workspace *entity.Workspace) error {
+func (r *WorkspaceRepository) Create(name string) (*entity.Workspace, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, fmt.Errorf("name is required")
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	// Проверяем существует ли уже workspace с таким ID
+	created := &entity.Workspace{
+		Id:          utils.NewID("ws"),
+		Name:        name,
+		Collections: []entity.Collection{},
+	}
+	r.workspaces = append(r.workspaces, created)
+	if err := r.persistLocked(); err != nil {
+		r.workspaces = r.workspaces[:len(r.workspaces)-1]
+		return nil, err
+	}
+	return cloneWorkspace(created), nil
+}
+
+func (r *WorkspaceRepository) Save(workspace *entity.Workspace) error {
+	if workspace == nil || workspace.Id == "" {
+		return fmt.Errorf("workspace id is required")
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	cp := cloneWorkspace(workspace)
 	for i, existing := range r.workspaces {
-		if existing.Id == workspace.Id {
-			r.workspaces[i] = workspace
+		if existing.Id == cp.Id {
+			prev := r.workspaces[i]
+			r.workspaces[i] = cp
+			if err := r.persistLocked(); err != nil {
+				r.workspaces[i] = prev
+				return err
+			}
 			return nil
 		}
 	}
 
-	// Если не существует, добавляем новый
-	r.workspaces = append(r.workspaces, workspace)
+	r.workspaces = append(r.workspaces, cp)
+	if err := r.persistLocked(); err != nil {
+		r.workspaces = r.workspaces[:len(r.workspaces)-1]
+		return err
+	}
 	return nil
 }
 
@@ -99,11 +187,44 @@ func (r *WorkspaceRepository) Delete(id string) error {
 	defer r.mu.Unlock()
 
 	for i, workspace := range r.workspaces {
-		if workspace.Id == id {
-			r.workspaces = append(r.workspaces[:i], r.workspaces[i+1:]...)
-			return nil
+		if workspace.Id != id {
+			continue
 		}
+		prev := append([]*entity.Workspace(nil), r.workspaces...)
+		r.workspaces = append(r.workspaces[:i], r.workspaces[i+1:]...)
+		if err := r.persistLocked(); err != nil {
+			r.workspaces = prev
+			return err
+		}
+		return nil
 	}
-
 	return fmt.Errorf("workspace with id %s not found", id)
+}
+
+func cloneWorkspaceList(in []*entity.Workspace) []*entity.Workspace {
+	out := make([]*entity.Workspace, 0, len(in))
+	for _, ws := range in {
+		if ws == nil {
+			continue
+		}
+		out = append(out, cloneWorkspace(ws))
+	}
+	return out
+}
+
+func cloneWorkspace(ws *entity.Workspace) *entity.Workspace {
+	if ws == nil {
+		return nil
+	}
+	data, err := json.Marshal(ws)
+	if err != nil {
+		cp := *ws
+		return &cp
+	}
+	var out entity.Workspace
+	if err := json.Unmarshal(data, &out); err != nil {
+		cp := *ws
+		return &cp
+	}
+	return &out
 }

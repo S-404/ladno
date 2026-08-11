@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/data/binding"
 	"github.com/nats-io/nats.go"
 	"github.com/s-404/ladno/internal/app/entity"
 	"github.com/s-404/ladno/internal/app/entity/constants"
@@ -18,6 +19,7 @@ type INatsStore interface {
 	Connect(collectionID, collectionName string, conn entity.NatsConnection, onDone func(ok bool, status string))
 	IsConnected(collectionID string) bool
 	Disconnect(collectionID string)
+	DisconnectAll()
 	ConnectedIDs() map[string]bool
 	AddConnectionListener(fn func())
 
@@ -61,6 +63,7 @@ type NatsStore struct {
 	logStore         ILogStore
 	workspace        IWorkspaceStore
 	settings         ISettingsStore
+	activeWorkspace  string
 }
 
 func NewNatsStore(
@@ -70,7 +73,7 @@ func NewNatsStore(
 	workspace IWorkspaceStore,
 	settings ISettingsStore,
 ) *NatsStore {
-	return &NatsStore{
+	s := &NatsStore{
 		conns:       map[string]*nats.Conn{},
 		subs:        map[natsSubKey]*natsActiveSub{},
 		monitors:    map[string]*nats.Subscription{},
@@ -81,6 +84,21 @@ func NewNatsStore(
 		workspace:   workspace,
 		settings:    settings,
 	}
+	workspace.GetItem().AddListener(binding.NewDataListener(s.onWorkspaceChanged))
+	return s
+}
+
+func (s *NatsStore) onWorkspaceChanged() {
+	ws := s.workspace.GetSelectedWorkspace()
+	id := ""
+	if ws != nil {
+		id = ws.Id
+	}
+	if id == s.activeWorkspace {
+		return
+	}
+	s.activeWorkspace = id
+	s.DisconnectAll()
 }
 
 func (s *NatsStore) messageLimit() int {
@@ -323,6 +341,25 @@ func (s *NatsStore) TrimMessagesToLimit() {
 func (s *NatsStore) Disconnect(collectionID string) {
 	s.mu.Lock()
 	s.clearCollectionLocked(collectionID)
+	s.mu.Unlock()
+	s.notifyConnectionChange()
+}
+
+func (s *NatsStore) DisconnectAll() {
+	s.mu.Lock()
+	ids := map[string]struct{}{}
+	for id := range s.conns {
+		ids[id] = struct{}{}
+	}
+	for id := range s.monitors {
+		ids[id] = struct{}{}
+	}
+	for key := range s.subs {
+		ids[key.collectionID] = struct{}{}
+	}
+	for id := range ids {
+		s.clearCollectionLocked(id)
+	}
 	s.mu.Unlock()
 	s.notifyConnectionChange()
 }

@@ -15,16 +15,16 @@ type Repository struct {
 func NewRepository() *Repository {
 	store, err := storage.OpenApp()
 	if err != nil {
-		log.Printf("[storage] open app root failed: %v (envs stay in-memory seed)", err)
+		log.Printf("[storage] open app root failed: %v (data stay in-memory seed)", err)
 		return &Repository{
 			Env:       NewEnvRepository(nil),
-			Workspace: NewWorkspaceRepository(),
+			Workspace: NewWorkspaceRepository(nil),
 		}
 	}
 	log.Printf("[storage] root=%s", store.Root())
 	return &Repository{
 		Env:       NewEnvRepository(store),
-		Workspace: NewWorkspaceRepository(),
+		Workspace: NewWorkspaceRepository(store),
 		Storage:   store,
 	}
 }
@@ -33,7 +33,7 @@ func NewRepository() *Repository {
 func NewRepositoryWithStorage(store *storage.Store) *Repository {
 	return &Repository{
 		Env:       NewEnvRepository(store),
-		Workspace: NewWorkspaceRepository(),
+		Workspace: NewWorkspaceRepository(store),
 		Storage:   store,
 	}
 }

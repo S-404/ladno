@@ -9,6 +9,9 @@ type IWorkspaceService interface {
 	List(cb func([]entity.WorkspaceLightWeight, error))
 	FindAll(cb func([]*entity.Workspace, error))
 	Find(id string, cb func(*entity.Workspace, error))
+	Create(name string, cb func(*entity.Workspace, error))
+	Save(workspace *entity.Workspace, cb func(error))
+	Delete(id string, cb func(error))
 }
 
 type WorkspaceService struct {
@@ -41,9 +44,34 @@ func (s *WorkspaceService) FindAll(cb func([]*entity.Workspace, error)) {
 
 func (s *WorkspaceService) Find(id string, cb func(*entity.Workspace, error)) {
 	go func() {
-		// Искусственная задержка
-		//time.Sleep(1 * time.Second)
 		data := s.workspaceRepository.FindById(id)
 		cb(data, nil)
+	}()
+}
+
+func (s *WorkspaceService) Create(name string, cb func(*entity.Workspace, error)) {
+	go func() {
+		ws, err := s.workspaceRepository.Create(name)
+		if cb != nil {
+			cb(ws, err)
+		}
+	}()
+}
+
+func (s *WorkspaceService) Save(workspace *entity.Workspace, cb func(error)) {
+	go func() {
+		err := s.workspaceRepository.Save(workspace)
+		if cb != nil {
+			cb(err)
+		}
+	}()
+}
+
+func (s *WorkspaceService) Delete(id string, cb func(error)) {
+	go func() {
+		err := s.workspaceRepository.Delete(id)
+		if cb != nil {
+			cb(err)
+		}
 	}()
 }

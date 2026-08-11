@@ -23,6 +23,8 @@ type IWorkspaceStore interface {
 	GetSelectedWorkspace() *entity.Workspace
 	PublishWorkspace(ws *entity.Workspace)
 	UpdateSelectedWorkspace(name, connectionConfig string) bool
+	Create(name string, cb func(*entity.Workspace, error))
+	Delete(id string, cb func(error))
 
 	GetIsFetching() *binding.Bool
 }
@@ -128,7 +130,7 @@ func (s *WorkspaceStore) GetSelectedWorkspace() *entity.Workspace {
 	return s.GetWorkspaceDataItem(s.SelectedItem)
 }
 
-// PublishWorkspace re-publishes the selected workspace so UI bindings refresh.
+// PublishWorkspace persists workspace to storage and re-publishes UI bindings.
 // Untyped binding compares with ==, so same pointer would skip listeners —
 // always publish a new struct pointer after in-place mutations.
 func (s *WorkspaceStore) PublishWorkspace(ws *entity.Workspace) {
@@ -141,7 +143,44 @@ func (s *WorkspaceStore) PublishWorkspace(ws *entity.Workspace) {
 	}
 	log.Printf("[collections] PublishWorkspace id=%s collections=%d ptr=%p→%p",
 		cp.Id, len(cp.Collections), ws, &cp)
+
+	saved := cp
+	s.workspaceService.Save(&saved, func(err error) {
+		if err != nil {
+			log.Printf("[storage] workspace save error: %v", err)
+			return
+		}
+		fyne.Do(func() {
+			// Refresh lightweight list name if needed.
+			s.refreshListItemName(saved.Id, saved.Name)
+		})
+	})
 	_ = s.SelectedItem.Set(&cp)
+}
+
+func (s *WorkspaceStore) refreshListItemName(id, name string) {
+	items, err := s.Items.Get()
+	if err != nil || len(items) == 0 {
+		return
+	}
+	changed := false
+	for i, item := range items {
+		switch v := item.(type) {
+		case entity.WorkspaceLightWeight:
+			if v.Id == id && v.Name != name {
+				items[i] = entity.WorkspaceLightWeight{Id: id, Name: name}
+				changed = true
+			}
+		case *entity.WorkspaceLightWeight:
+			if v != nil && v.Id == id && v.Name != name {
+				items[i] = entity.WorkspaceLightWeight{Id: id, Name: name}
+				changed = true
+			}
+		}
+	}
+	if changed {
+		_ = s.Items.Set(items)
+	}
 }
 
 func (s *WorkspaceStore) UpdateSelectedWorkspace(name, connectionConfig string) bool {
@@ -153,6 +192,69 @@ func (s *WorkspaceStore) UpdateSelectedWorkspace(name, connectionConfig string) 
 	ws.ConnectionConfig = connectionConfig
 	s.PublishWorkspace(ws)
 	return true
+}
+
+func (s *WorkspaceStore) Create(name string, cb func(*entity.Workspace, error)) {
+	s.workspaceService.Create(name, func(ws *entity.Workspace, err error) {
+		fyne.Do(func() {
+			if err != nil {
+				log.Printf("[storage] workspace create error: %v", err)
+				if cb != nil {
+					cb(nil, err)
+				}
+				return
+			}
+			items, _ := s.Items.Get()
+			items = append(items, entity.WorkspaceLightWeight{Id: ws.Id, Name: ws.Name})
+			_ = s.Items.Set(items)
+			if cb != nil {
+				cb(ws, nil)
+			}
+		})
+	})
+}
+
+func (s *WorkspaceStore) Delete(id string, cb func(error)) {
+	s.workspaceService.Delete(id, func(err error) {
+		fyne.Do(func() {
+			if err != nil {
+				log.Printf("[storage] workspace delete error: %v", err)
+				if cb != nil {
+					cb(err)
+				}
+				return
+			}
+			s.removeListItem(id)
+			if sel := s.GetSelectedWorkspace(); sel != nil && sel.Id == id {
+				_ = s.SelectedItem.Set(nil)
+			}
+			if cb != nil {
+				cb(nil)
+			}
+		})
+	})
+}
+
+func (s *WorkspaceStore) removeListItem(id string) {
+	items, err := s.Items.Get()
+	if err != nil || len(items) == 0 {
+		return
+	}
+	out := make([]any, 0, len(items))
+	for _, item := range items {
+		switch v := item.(type) {
+		case entity.WorkspaceLightWeight:
+			if v.Id == id {
+				continue
+			}
+		case *entity.WorkspaceLightWeight:
+			if v != nil && v.Id == id {
+				continue
+			}
+		}
+		out = append(out, item)
+	}
+	_ = s.Items.Set(out)
 }
 
 func (s *WorkspaceStore) GetWorkspaceListItemDataItem(item binding.DataItem) *entity.WorkspaceLightWeight {

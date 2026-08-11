@@ -7,6 +7,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 	"github.com/s-404/ladno/internal/app/entity/shared"
 	"github.com/s-404/ladno/internal/app/store"
@@ -22,6 +23,7 @@ func SettingsContainer(app *shared.App) fyne.CanvasObject {
 
 func workspaceSettingsTab(app *shared.App) fyne.CanvasObject {
 	wsStore := app.Store.Workspace
+	settings := app.Store.Settings
 
 	empty := container.NewCenter(widget.NewLabel("Select a workspace in the header"))
 
@@ -46,6 +48,31 @@ func workspaceSettingsTab(app *shared.App) fyne.CanvasObject {
 	})
 	saveBtn.Importance = widget.HighImportance
 
+	deleteBtn := widget.NewButton("Delete", func() {
+		ws := wsStore.GetSelectedWorkspace()
+		if ws == nil {
+			status.SetText("No workspace selected")
+			return
+		}
+		dialog.ShowConfirm("Delete workspace", fmt.Sprintf("Delete %q?", ws.Name), func(ok bool) {
+			if !ok {
+				return
+			}
+			id := ws.Id
+			wsStore.Delete(id, func(err error) {
+				if err != nil {
+					status.SetText(fmt.Sprintf("Delete failed: %v", err))
+					return
+				}
+				if settings.GetLastWorkspaceID() == id {
+					settings.SetLastWorkspaceID("")
+				}
+				status.SetText("Workspace deleted")
+			})
+		}, app.Window)
+	})
+	deleteBtn.Importance = widget.DangerImportance
+
 	form := container.NewPadded(container.NewVBox(
 		widget.NewLabelWithStyle("Selected workspace", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		widget.NewForm(
@@ -53,7 +80,7 @@ func workspaceSettingsTab(app *shared.App) fyne.CanvasObject {
 			widget.NewFormItem("Name", nameEntry),
 			widget.NewFormItem("Connection config", connEntry),
 		),
-		saveBtn,
+		container.NewHBox(saveBtn, deleteBtn),
 		status,
 	))
 
