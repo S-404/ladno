@@ -14,6 +14,8 @@ func EnvData() []*entity.Env {
 				{Key: "natsPort", Value: "4222", Enabled: true},
 				{Key: "natsToken", Value: "", Enabled: true},
 				{Key: "natsSubject", Value: "demo.events", Enabled: true},
+				{Key: "kafkaBrokers", Value: "localhost:9092", Enabled: true},
+				{Key: "kafkaTopic", Value: "demo.events", Enabled: true},
 			},
 		},
 		{
@@ -26,6 +28,8 @@ func EnvData() []*entity.Env {
 				{Key: "natsPort", Value: "4222", Enabled: true},
 				{Key: "natsToken", Value: "", Enabled: true},
 				{Key: "natsSubject", Value: "demo.events", Enabled: true},
+				{Key: "kafkaBrokers", Value: "localhost:9092", Enabled: true},
+				{Key: "kafkaTopic", Value: "demo.events", Enabled: true},
 			},
 		},
 	}

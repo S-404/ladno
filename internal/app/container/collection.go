@@ -20,6 +20,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 	selStore := app.Store.Selection
 	restStore := app.Store.Rest
 	natsStore := app.Store.Nats
+	kafkaStore := app.Store.Kafka
 	wsItem := wsStore.GetItem()
 	win := app.Window
 
@@ -36,6 +37,11 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 			cp := *col.Nats
 			nats = &cp
 		}
+		var kafka *entity.KafkaConnection
+		if col.Kafka != nil {
+			cp := *col.Kafka
+			kafka = &cp
+		}
 		selStore.SetSelection(entity.Selection{
 			Kind:           entity.SelectionCollection,
 			CollectionID:   col.Id,
@@ -43,6 +49,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 			Name:           col.Name,
 			Auth:           col.Auth,
 			Nats:           nats,
+			Kafka:          kafka,
 		})
 	}
 	selectFolder := func(col entity.Collection, item entity.CollectionItem, path []string) {
@@ -182,6 +189,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 								return
 							}
 							natsStore.Disconnect(col.Id)
+							kafkaStore.Disconnect(col.Id)
 							selStore.DeleteCollection(col.Id)
 						}, win)
 					}),
@@ -251,9 +259,18 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 	)
 
 	refreshConnected := func() {
-		tree.SetConnected(natsStore.ConnectedIDs())
+		ids := natsStore.ConnectedIDs()
+		for id, ok := range kafkaStore.ConnectedIDs() {
+			if ok {
+				ids[id] = true
+			}
+		}
+		tree.SetConnected(ids)
 	}
 	natsStore.AddConnectionListener(func() {
+		fyne.Do(refreshConnected)
+	})
+	kafkaStore.AddConnectionListener(func() {
 		fyne.Do(refreshConnected)
 	})
 
@@ -261,6 +278,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 		fyne.NewMenuItem("REST collection", func() { createCollection(constants.CollectionTypeREST) }),
 		fyne.NewMenuItem("gRPC collection", func() { createCollection(constants.CollectionTypeGRPC) }),
 		fyne.NewMenuItem("NATS collection", func() { createCollection(constants.CollectionTypeNATS) }),
+		fyne.NewMenuItem("Kafka collection", func() { createCollection(constants.CollectionTypeKafka) }),
 		fyne.NewMenuItem("WS collection", func() { createCollection(constants.CollectionTypeWS) }),
 	)
 	var addBtn *widget.Button

@@ -25,6 +25,7 @@ type Collection struct {
 	Name      string                   `json:"name"`
 	Auth      Auth                     `json:"auth"`
 	Nats      *NatsConnection          `json:"nats,omitempty"`
+	Kafka     *KafkaConnection         `json:"kafka,omitempty"`
 	Event     Event                    `json:"event"`
 	Items     []CollectionItem         `json:"items"`
 	CreatedAt time.Time                `json:"createdAt"`
@@ -49,6 +50,7 @@ type ItemRequest struct {
 	Grpc   *GrpcRequest            `json:"grpc,omitempty"`
 	Ws     *WsRequest              `json:"ws,omitempty"`
 	Nats   *NatsRequest            `json:"nats,omitempty"`
+	Kafka  *KafkaRequest           `json:"kafka,omitempty"`
 }
 
 type GrpcRequest struct {
@@ -75,6 +77,18 @@ type NatsConnection struct {
 	Host  string `json:"host"`
 	Port  string `json:"port"`
 	Token string `json:"token"`
+}
+
+type KafkaRequest struct {
+	Topic   string     `json:"topic"`
+	Key     string     `json:"key"`
+	Headers []Variable `json:"headers"`
+	Payload string     `json:"payload"`
+}
+
+// KafkaConnection — подключение на уровне Kafka-коллекции (brokers).
+type KafkaConnection struct {
+	Brokers string `json:"brokers"` // "localhost:9092" or comma-separated
 }
 
 type RequestUrl struct {

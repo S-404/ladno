@@ -169,6 +169,30 @@ func WorkspaceData() []*entity.Workspace {
 						},
 					},
 				},
+				{
+					Id:   "c-005",
+					Name: "Demo Kafka",
+					Type: constants.CollectionTypeKafka,
+					Kafka: &entity.KafkaConnection{
+						Brokers: "{{kafkaBrokers}}",
+					},
+					Items: []entity.CollectionItem{
+						{
+							Id:   "k-001",
+							Name: "demo.events",
+							Request: &entity.ItemRequest{
+								Kafka: &entity.KafkaRequest{
+									Topic: "{{kafkaTopic}}",
+									Key:   "",
+									Headers: []entity.Variable{
+										{Key: "X-Token", Value: "{{token}}"},
+									},
+									Payload: `{"ok": true, "token": "{{token}}"}`,
+								},
+							},
+						},
+					},
+				},
 			},
 		},
 	}

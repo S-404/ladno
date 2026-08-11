@@ -6,6 +6,7 @@ import (
 
 type Store struct {
 	Env       IEnvStore
+	Kafka     IKafkaStore
 	Log       ILogStore
 	Nats      INatsStore
 	Rest      IRestStore
@@ -21,6 +22,7 @@ func NewStore(service *service.Service) *Store {
 	wsStore := NewWorkspaceStore(service.Workspace)
 	return &Store{
 		Env:       envStore,
+		Kafka:     NewKafkaStore(service.Kafka, envStore, logStore, wsStore, settingsStore),
 		Log:       logStore,
 		Nats:      NewNatsStore(service.Nats, envStore, logStore, wsStore, settingsStore),
 		Rest:      NewRestStore(service.Rest, envStore, logStore),

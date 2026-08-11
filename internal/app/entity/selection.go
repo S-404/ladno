@@ -21,5 +21,6 @@ type Selection struct {
 	Name           string
 	Auth           Auth
 	Nats           *NatsConnection
+	Kafka          *KafkaConnection
 	Request        *ItemRequest
 }

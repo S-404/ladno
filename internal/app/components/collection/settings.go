@@ -10,9 +10,10 @@ import (
 )
 
 type SettingsSave struct {
-	Name string
-	Auth entity.Auth
-	Nats *entity.NatsConnection
+	Name  string
+	Auth  entity.Auth
+	Nats  *entity.NatsConnection
+	Kafka *entity.KafkaConnection
 }
 
 type SettingsCallbacks struct {
@@ -23,7 +24,7 @@ type SettingsCallbacks struct {
 
 type SettingsView struct {
 	fyne.CanvasObject
-	Set              func(name string, auth entity.Auth, nats *entity.NatsConnection, colType constants.CollectionType, connected bool)
+	Set              func(name string, auth entity.Auth, nats *entity.NatsConnection, kafka *entity.KafkaConnection, colType constants.CollectionType, connected bool)
 	Get              func() SettingsSave
 	Save             func()
 	SetConnectStatus func(text string)
@@ -46,6 +47,9 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 	tokenEntry := ui.NewEnvInput()
 	tokenEntry.SetPlaceHolder("{{natsToken}}")
 
+	brokersEntry := ui.NewEnvInput()
+	brokersEntry.SetPlaceHolder("{{kafkaBrokers}} or localhost:9092")
+
 	envHint := widget.NewLabel("Supports {{var}} from the active environment.")
 	envHint.TextStyle = fyne.TextStyle{Italic: true}
 	connStatus := widget.NewLabel("")
@@ -57,14 +61,20 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 
 	getSave := func() SettingsSave {
 		out := SettingsSave{Name: nameEntry.Text}
-		if currentType == constants.CollectionTypeNATS {
+		switch currentType {
+		case constants.CollectionTypeNATS:
 			out.Nats = &entity.NatsConnection{
 				Host:  hostEntry.Text(),
 				Port:  portEntry.Text(),
 				Token: tokenEntry.Text(),
 			}
 			out.Auth = entity.Auth{Type: constants.AuthTypeNoAuth}
-		} else {
+		case constants.CollectionTypeKafka:
+			out.Kafka = &entity.KafkaConnection{
+				Brokers: brokersEntry.Text(),
+			}
+			out.Auth = entity.Auth{Type: constants.AuthTypeNoAuth}
+		default:
 			out.Auth = authPanel.Get()
 		}
 		return out
@@ -102,9 +112,14 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 	}
 	applyConnBtn()
 
+	isConnectable := func() bool {
+		return currentType == constants.CollectionTypeNATS || currentType == constants.CollectionTypeKafka
+	}
+
 	render := func() {
 		content.Objects = nil
-		if currentType == constants.CollectionTypeNATS {
+		switch currentType {
+		case constants.CollectionTypeNATS:
 			content.Objects = []fyne.CanvasObject{
 				container.NewPadded(container.NewVBox(
 					widget.NewLabel("Collection"),
@@ -120,7 +135,21 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 					connStatus,
 				)),
 			}
-		} else {
+		case constants.CollectionTypeKafka:
+			content.Objects = []fyne.CanvasObject{
+				container.NewPadded(container.NewVBox(
+					widget.NewLabel("Collection"),
+					widget.NewForm(
+						widget.NewFormItem("Name", nameEntry),
+						widget.NewFormItem("Type", typeLabel),
+						widget.NewFormItem("Brokers", brokersEntry),
+					),
+					envHint,
+					container.NewHBox(saveBtn, connBtn),
+					connStatus,
+				)),
+			}
+		default:
 			general := container.NewPadded(container.NewVBox(
 				widget.NewLabel("Collection"),
 				widget.NewForm(
@@ -146,24 +175,30 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 	}
 
 	v := &SettingsView{CanvasObject: content}
-	v.Set = func(name string, auth entity.Auth, nats *entity.NatsConnection, colType constants.CollectionType, isConnected bool) {
+	v.Set = func(name string, auth entity.Auth, nats *entity.NatsConnection, kafka *entity.KafkaConnection, colType constants.CollectionType, isConnected bool) {
 		currentType = constants.NormalizeCollectionType(colType)
 		nameEntry.SetText(name)
 		typeLabel.SetText(string(currentType))
 		connStatus.SetText("")
 		setConnected(isConnected)
-		if isConnected {
+		if isConnected && isConnectable() {
 			connStatus.SetText("Connected")
 		}
 
-		if currentType == constants.CollectionTypeNATS {
+		switch currentType {
+		case constants.CollectionTypeNATS:
 			if nats == nil {
 				nats = &entity.NatsConnection{}
 			}
 			hostEntry.SetText(nats.Host)
 			portEntry.SetText(nats.Port)
 			tokenEntry.SetText(nats.Token)
-		} else {
+		case constants.CollectionTypeKafka:
+			if kafka == nil {
+				kafka = &entity.KafkaConnection{}
+			}
+			brokersEntry.SetText(kafka.Brokers)
+		default:
 			authPanel.Set(auth)
 		}
 		render()

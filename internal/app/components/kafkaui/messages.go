@@ -1,4 +1,4 @@
-package natsui
+package kafkaui
 
 import (
 	"fyne.io/fyne/v2"
@@ -8,30 +8,40 @@ import (
 	"github.com/s-404/ladno/internal/app/components/ui"
 )
 
-// MessagesView — блок сообщений по выбранному subject (Latest / All).
+// MessagesView — сообщения по топику с текстовым фильтром (Latest / All).
 type MessagesView struct {
 	root      fyne.CanvasObject
 	body      *widget.Entry
+	filter    *widget.Entry
 	modeLabel *widget.Label
 	showAll   bool
 	onToggle  func(all bool)
+	onFilter  func(q string)
 	onCopy    func()
 	onClear   func()
 }
 
-func NewMessagesView(onToggle func(all bool), onCopy, onClear func()) *MessagesView {
+func NewMessagesView(onToggle func(all bool), onFilter func(q string), onCopy, onClear func()) *MessagesView {
 	v := &MessagesView{
 		body:      widget.NewMultiLineEntry(),
+		filter:    widget.NewEntry(),
 		modeLabel: widget.NewLabel("Latest"),
 		onToggle:  onToggle,
+		onFilter:  onFilter,
 		onCopy:    onCopy,
 		onClear:   onClear,
 	}
 	v.body.TextStyle = fyne.TextStyle{Monospace: true}
 	v.body.Wrapping = fyne.TextWrapOff
 	v.body.SetMinRowsVisible(4)
-	v.body.SetPlaceHolder("Messages for selected subject")
+	v.body.SetPlaceHolder("Messages for selected topic")
 	v.modeLabel.TextStyle = fyne.TextStyle{Italic: true}
+	v.filter.SetPlaceHolder("Filter messages…")
+	v.filter.OnChanged = func(q string) {
+		if v.onFilter != nil {
+			v.onFilter(q)
+		}
+	}
 
 	var toggleBtn *widget.Button
 	toggleBtn = widget.NewButtonWithIcon("", theme.ListIcon(), func() {
@@ -69,7 +79,11 @@ func NewMessagesView(onToggle func(all bool), onCopy, onClear func()) *MessagesV
 		container.NewHBox(toggleBtn, copyBtn, clearBtn),
 		nil,
 	)
-	panel := container.NewBorder(header, nil, nil, nil, container.NewScroll(v.body))
+	panel := container.NewBorder(
+		container.NewVBox(header, v.filter),
+		nil, nil, nil,
+		container.NewScroll(v.body),
+	)
 	v.root = ui.NewPanelBackground(panel)
 	return v
 }
@@ -80,6 +94,10 @@ func (v *MessagesView) Object() fyne.CanvasObject {
 
 func (v *MessagesView) ShowAll() bool {
 	return v.showAll
+}
+
+func (v *MessagesView) Filter() string {
+	return v.filter.Text
 }
 
 func (v *MessagesView) SetText(text string) {

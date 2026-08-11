@@ -3,15 +3,16 @@ package constants
 type CollectionType string
 
 const (
-	CollectionTypeREST CollectionType = "rest"
-	CollectionTypeGRPC CollectionType = "grpc"
-	CollectionTypeWS   CollectionType = "ws"
-	CollectionTypeNATS CollectionType = "nats"
+	CollectionTypeREST  CollectionType = "rest"
+	CollectionTypeGRPC  CollectionType = "grpc"
+	CollectionTypeWS    CollectionType = "ws"
+	CollectionTypeNATS  CollectionType = "nats"
+	CollectionTypeKafka CollectionType = "kafka"
 )
 
 func NormalizeCollectionType(t CollectionType) CollectionType {
 	switch t {
-	case CollectionTypeGRPC, CollectionTypeWS, CollectionTypeNATS:
+	case CollectionTypeGRPC, CollectionTypeWS, CollectionTypeNATS, CollectionTypeKafka:
 		return t
 	default:
 		return CollectionTypeREST

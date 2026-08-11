@@ -15,7 +15,7 @@ type ISelectionStore interface {
 	SetSelection(sel entity.Selection)
 	ClearSelection()
 
-	UpdateCollection(id string, name string, auth entity.Auth, nats *entity.NatsConnection)
+	UpdateCollection(id string, name string, auth entity.Auth, nats *entity.NatsConnection, kafka *entity.KafkaConnection)
 	UpdateFolder(collectionID, itemID, name string, auth entity.Auth)
 	UpdateRequestAuth(collectionID, itemID string, auth entity.Auth)
 	UpdateRequestName(collectionID, itemID, name string)
@@ -70,7 +70,7 @@ func (s *SelectionStore) current() *entity.Selection {
 	return sel
 }
 
-func (s *SelectionStore) UpdateCollection(id string, name string, auth entity.Auth, nats *entity.NatsConnection) {
+func (s *SelectionStore) UpdateCollection(id string, name string, auth entity.Auth, nats *entity.NatsConnection, kafka *entity.KafkaConnection) {
 	ws := s.workspace.GetSelectedWorkspace()
 	if ws == nil {
 		return
@@ -87,6 +87,12 @@ func (s *SelectionStore) UpdateCollection(id string, name string, auth entity.Au
 		} else {
 			ws.Collections[i].Nats = nil
 		}
+		if kafka != nil {
+			cp := *kafka
+			ws.Collections[i].Kafka = &cp
+		} else {
+			ws.Collections[i].Kafka = nil
+		}
 		s.workspace.PublishWorkspace(ws)
 
 		cur := s.current()
@@ -96,6 +102,11 @@ func (s *SelectionStore) UpdateCollection(id string, name string, auth entity.Au
 				cp := *ws.Collections[i].Nats
 				natsSel = &cp
 			}
+			var kafkaSel *entity.KafkaConnection
+			if ws.Collections[i].Kafka != nil {
+				cp := *ws.Collections[i].Kafka
+				kafkaSel = &cp
+			}
 			s.SetSelection(entity.Selection{
 				Kind:           entity.SelectionCollection,
 				CollectionID:   id,
@@ -103,6 +114,7 @@ func (s *SelectionStore) UpdateCollection(id string, name string, auth entity.Au
 				Name:           name,
 				Auth:           auth,
 				Nats:           natsSel,
+				Kafka:          kafkaSel,
 			})
 		}
 		return
@@ -217,6 +229,9 @@ func (s *SelectionStore) CreateCollection(colType constants.CollectionType) (str
 	}
 	if colType == constants.CollectionTypeNATS {
 		col.Nats = &entity.NatsConnection{Host: "{{natsHost}}", Port: "{{natsPort}}"}
+	}
+	if colType == constants.CollectionTypeKafka {
+		col.Kafka = &entity.KafkaConnection{Brokers: "{{kafkaBrokers}}"}
 	}
 	ws.Collections = append(ws.Collections, col)
 	log.Printf("[collections] CreateCollection type=%s id=%s name=%q total=%d",
@@ -393,6 +408,8 @@ func newRequestItem(colType constants.CollectionType) entity.CollectionItem {
 		req.Ws = &entity.WsRequest{}
 	case constants.CollectionTypeNATS:
 		req.Nats = &entity.NatsRequest{Subject: "{{natsSubject}}"}
+	case constants.CollectionTypeKafka:
+		req.Kafka = &entity.KafkaRequest{Topic: "{{kafkaTopic}}"}
 	default:
 		req.Method = constants.GET
 		req.Url = entity.RequestUrl{Raw: "{{baseUrl}}"}
@@ -432,6 +449,11 @@ func cloneRequestItem(src entity.CollectionItem) entity.CollectionItem {
 		n := *src.Request.Nats
 		n.Headers = cloneVariables(src.Request.Nats.Headers)
 		r.Nats = &n
+	}
+	if src.Request.Kafka != nil {
+		k := *src.Request.Kafka
+		k.Headers = cloneVariables(src.Request.Kafka.Headers)
+		r.Kafka = &k
 	}
 	out.Request = &r
 	return out

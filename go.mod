@@ -2,7 +2,10 @@ module github.com/s-404/ladno
 
 go 1.26.0
 
-require fyne.io/fyne/v2 v2.8.0
+require (
+	fyne.io/fyne/v2 v2.8.0
+	github.com/nats-io/nats.go v1.52.0
+)
 
 require (
 	fyne.io/systray v1.12.2 // indirect
@@ -28,13 +31,14 @@ require (
 	github.com/jsummers/gobmp v0.0.0-20230614200233-a9de23ed2e25 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/mattn/go-runewidth v0.0.27 // indirect
-	github.com/nats-io/nats.go v1.52.0 // indirect
 	github.com/nats-io/nkeys v0.4.15 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646 // indirect
 	github.com/nicksnyder/go-i18n/v2 v2.6.1 // indirect
+	github.com/pierrec/lz4/v4 v4.1.15 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/rymdport/portal v0.4.2 // indirect
+	github.com/segmentio/kafka-go v0.4.48 // indirect
 	github.com/srwiley/oksvg v0.0.0-20221011165216-be6e8873101c // indirect
 	github.com/srwiley/rasterx v0.0.0-20220730225603-2ab79fcdd4ef // indirect
 	github.com/stretchr/testify v1.11.1 // indirect

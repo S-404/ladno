@@ -7,6 +7,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/s-404/ladno/internal/app/components/collection"
 	"github.com/s-404/ladno/internal/app/components/grpcui"
+	"github.com/s-404/ladno/internal/app/components/kafkaui"
 	"github.com/s-404/ladno/internal/app/components/natsui"
 	"github.com/s-404/ladno/internal/app/components/wsui"
 	"github.com/s-404/ladno/internal/app/entity"
@@ -17,6 +18,7 @@ import (
 func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 	selStore := app.Store.Selection
 	natsStore := app.Store.Nats
+	kafkaStore := app.Store.Kafka
 
 	empty := container.NewCenter(widget.NewLabel("Select a collection or request"))
 
@@ -27,30 +29,48 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			if sel == nil || sel.Kind != entity.SelectionCollection {
 				return
 			}
-			selStore.UpdateCollection(sel.CollectionID, save.Name, save.Auth, save.Nats)
+			selStore.UpdateCollection(sel.CollectionID, save.Name, save.Auth, save.Nats, save.Kafka)
 		},
 		OnConnect: func(save collection.SettingsSave) {
 			sel := currentSelection(selStore.GetSelection())
 			if sel == nil || sel.Kind != entity.SelectionCollection {
 				return
 			}
-			selStore.UpdateCollection(sel.CollectionID, save.Name, save.Auth, save.Nats)
-			if save.Nats == nil {
-				colSettings.SetConnectStatus("Host/port required")
-				return
+			selStore.UpdateCollection(sel.CollectionID, save.Name, save.Auth, save.Nats, save.Kafka)
+			switch constants.NormalizeCollectionType(sel.CollectionType) {
+			case constants.CollectionTypeNATS:
+				if save.Nats == nil {
+					colSettings.SetConnectStatus("Host/port required")
+					return
+				}
+				colSettings.SetConnectStatus("Connecting…")
+				natsStore.Connect(sel.CollectionID, save.Name, *save.Nats, func(ok bool, status string) {
+					colSettings.SetConnectStatus(status)
+					colSettings.SetConnected(ok)
+				})
+			case constants.CollectionTypeKafka:
+				if save.Kafka == nil || save.Kafka.Brokers == "" {
+					colSettings.SetConnectStatus("Brokers required")
+					return
+				}
+				colSettings.SetConnectStatus("Connecting…")
+				kafkaStore.Connect(sel.CollectionID, save.Name, *save.Kafka, func(ok bool, status string) {
+					colSettings.SetConnectStatus(status)
+					colSettings.SetConnected(ok)
+				})
 			}
-			colSettings.SetConnectStatus("Connecting…")
-			natsStore.Connect(sel.CollectionID, save.Name, *save.Nats, func(ok bool, status string) {
-				colSettings.SetConnectStatus(status)
-				colSettings.SetConnected(ok)
-			})
 		},
 		OnDisconnect: func() {
 			sel := currentSelection(selStore.GetSelection())
 			if sel == nil || sel.Kind != entity.SelectionCollection {
 				return
 			}
-			natsStore.Disconnect(sel.CollectionID)
+			switch constants.NormalizeCollectionType(sel.CollectionType) {
+			case constants.CollectionTypeNATS:
+				natsStore.Disconnect(sel.CollectionID)
+			case constants.CollectionTypeKafka:
+				kafkaStore.Disconnect(sel.CollectionID)
+			}
 			colSettings.SetConnected(false)
 			colSettings.SetConnectStatus("Disconnected")
 		},
@@ -92,7 +112,7 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		text := natsStore.MessagesText(natsCollectionID, natsPanel.Subject(), natsPanel.Messages.ShowAll())
 		natsPanel.Messages.SetText(text)
 	}
-	messagesView := natsui.NewMessagesView(
+	natsMessagesView := natsui.NewMessagesView(
 		func(all bool) { refreshNatsMessages() },
 		func() {
 			fyne.CurrentApp().Clipboard().SetContent(natsPanel.Messages.Text())
@@ -105,9 +125,6 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 	natsStore.AddMessageListener(func() {
 		fyne.Do(refreshNatsMessages)
 	})
-	app.Store.Env.GetActiveID().AddListener(binding.NewDataListener(func() {
-		refreshNatsMessages()
-	}))
 
 	natsPanel = natsui.NewRequestView(
 		func(method constants.NatsMethod, req entity.NatsRequest) {
@@ -134,8 +151,71 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			natsPanel.SetSubActive(false)
 		},
 		saveRequestName,
-		messagesView,
+		natsMessagesView,
 	)
+
+	var kafkaPanel *kafkaui.RequestView
+	var kafkaCollectionID string
+	refreshKafkaMessages := func() {
+		if kafkaPanel == nil {
+			return
+		}
+		text := kafkaStore.MessagesText(
+			kafkaCollectionID,
+			kafkaPanel.Topic(),
+			kafkaPanel.Messages.Filter(),
+			kafkaPanel.Messages.ShowAll(),
+		)
+		kafkaPanel.Messages.SetText(text)
+	}
+	kafkaMessagesView := kafkaui.NewMessagesView(
+		func(all bool) { refreshKafkaMessages() },
+		func(q string) { refreshKafkaMessages() },
+		func() {
+			fyne.CurrentApp().Clipboard().SetContent(kafkaPanel.Messages.Text())
+		},
+		func() {
+			kafkaStore.ClearMessages(kafkaCollectionID, kafkaPanel.Topic())
+			refreshKafkaMessages()
+		},
+	)
+	kafkaStore.AddMessageListener(func() {
+		fyne.Do(refreshKafkaMessages)
+	})
+
+	kafkaPanel = kafkaui.NewRequestView(
+		func(method constants.KafkaMethod, req entity.KafkaRequest) {
+			sel := currentSelection(selStore.GetSelection())
+			if sel == nil || sel.Kind != entity.SelectionRequest {
+				return
+			}
+			kafkaCollectionID = sel.CollectionID
+			kafkaPanel.SetRunning(true)
+			kafkaStore.Run(sel.CollectionID, sel.ItemID, method, req, func(err error) {
+				kafkaPanel.SetRunning(false)
+				if method == constants.KafkaMethodConsume && err == nil {
+					kafkaPanel.SetConsumeActive(true)
+				}
+				refreshKafkaMessages()
+			})
+		},
+		func() {
+			sel := currentSelection(selStore.GetSelection())
+			if sel == nil || sel.Kind != entity.SelectionRequest {
+				return
+			}
+			kafkaStore.StopConsume(sel.CollectionID, sel.ItemID)
+			kafkaPanel.SetConsumeActive(false)
+		},
+		saveRequestName,
+		kafkaMessagesView,
+	)
+
+	app.Store.Env.GetActiveID().AddListener(binding.NewDataListener(func() {
+		refreshNatsMessages()
+		refreshKafkaMessages()
+	}))
+
 	panels := []fyne.CanvasObject{
 		empty,
 		colSettings.CanvasObject,
@@ -144,6 +224,7 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		grpcPanel.CanvasObject,
 		wsPanel.CanvasObject,
 		natsPanel.CanvasObject,
+		kafkaPanel.CanvasObject,
 	}
 	stack := container.NewStack(panels...)
 
@@ -167,8 +248,15 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		}
 		switch sel.Kind {
 		case entity.SelectionCollection:
-			connected := sel.CollectionType == constants.CollectionTypeNATS && natsStore.IsConnected(sel.CollectionID)
-			colSettings.Set(sel.Name, sel.Auth, sel.Nats, sel.CollectionType, connected)
+			colType := constants.NormalizeCollectionType(sel.CollectionType)
+			connected := false
+			switch colType {
+			case constants.CollectionTypeNATS:
+				connected = natsStore.IsConnected(sel.CollectionID)
+			case constants.CollectionTypeKafka:
+				connected = kafkaStore.IsConnected(sel.CollectionID)
+			}
+			colSettings.Set(sel.Name, sel.Auth, sel.Nats, sel.Kafka, sel.CollectionType, connected)
 			show(1)
 		case entity.SelectionFolder:
 			folderSettings.Set(sel.Name, sel.Auth)
@@ -198,6 +286,15 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 				natsPanel.Set(req, sel.Name, natsStore.IsSubscribed(sel.CollectionID, sel.ItemID))
 				refreshNatsMessages()
 				show(6)
+			case constants.CollectionTypeKafka:
+				var req *entity.KafkaRequest
+				if sel.Request != nil {
+					req = sel.Request.Kafka
+				}
+				kafkaCollectionID = sel.CollectionID
+				kafkaPanel.Set(req, sel.Name, kafkaStore.IsConsuming(sel.CollectionID, sel.ItemID))
+				refreshKafkaMessages()
+				show(7)
 			default:
 				show(3)
 			}
