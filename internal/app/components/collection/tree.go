@@ -106,9 +106,13 @@ func NewTree(handler SelectHandler, context ContextHandler) *Tree {
 			row.SetUID(uid)
 
 			res := theme.DocumentIcon()
-			if n.kind == nodeCollection || n.kind == nodeFolder {
+			if n.kind == nodeCollection {
+				res = theme.ListIcon()
+			}
+			if n.kind == nodeFolder {
 				res = theme.FolderIcon()
 			}
+
 			row.icon.SetResource(res)
 			row.label.SetText(n.label)
 
