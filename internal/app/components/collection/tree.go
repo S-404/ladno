@@ -6,13 +6,10 @@ import (
 	"log"
 	"strings"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/s-404/ladno/internal/app/components/ui"
@@ -91,8 +88,6 @@ var colorConnected = color.NRGBA{R: 0x34, G: 0xA8, B: 0x53, A: 0xFF}
 var colorInsert = color.NRGBA{R: 0x1E, G: 0x88, B: 0xE5, A: 0xFF}
 
 const dragThreshold = float32(6)
-const dragHoldDelay = 100 * time.Millisecond
-const dragHoldCancelMove = float32(8)
 
 func NewTree(handler SelectHandler, context ContextHandler, reorder ReorderHandler) *Tree {
 	ct := &Tree{
@@ -1072,7 +1067,6 @@ func fillItems(
 
 // treeRow — строка дерева; Tapped обязателен, иначе SecondaryTappable перехватывает ЛКМ.
 // Draggable на всей строке: превью + underline места вставки.
-// Захват начинается только после удержания (dragHoldDelay), чтобы не двигать случайно.
 type treeRow struct {
 	widget.BaseWidget
 	ct             *Tree
@@ -1081,11 +1075,6 @@ type treeRow struct {
 	dragging       bool
 	dragArmed      bool
 	dragAccum      float32
-
-	pressed   atomic.Bool
-	holdReady atomic.Bool
-	pressGen  atomic.Uint64
-	pressMove float32
 
 	icon       *widget.Icon
 	status     *canvas.Circle
@@ -1205,43 +1194,8 @@ func (r *treeRow) TappedSecondary(e *fyne.PointEvent) {
 	}
 }
 
-func (r *treeRow) MouseDown(e *desktop.MouseEvent) {
-	if e.Button != desktop.MouseButtonPrimary || !r.reorderEnabled || r.uid == "" {
-		return
-	}
-	r.pressed.Store(true)
-	r.holdReady.Store(false)
-	r.pressMove = 0
-	r.dragAccum = 0
-	gen := r.pressGen.Add(1)
-	go func(g uint64) {
-		time.Sleep(dragHoldDelay)
-		if !r.pressed.Load() || r.pressGen.Load() != g {
-			return
-		}
-		r.holdReady.Store(true)
-	}(gen)
-}
-
-func (r *treeRow) MouseUp(*desktop.MouseEvent) {
-	r.pressed.Store(false)
-	r.holdReady.Store(false)
-	r.pressGen.Add(1) // invalidate pending hold timer
-}
-
 func (r *treeRow) Dragged(e *fyne.DragEvent) {
 	if !r.reorderEnabled || r.uid == "" || r.ct == nil {
-		return
-	}
-
-	// Until hold completes, ignore drag — but cancel hold on early movement
-	// so quick flicks / scroll attempts don't become a drag later.
-	if !r.holdReady.Load() {
-		r.pressMove += abs32(e.Dragged.DX) + abs32(e.Dragged.DY)
-		if r.pressMove >= dragHoldCancelMove {
-			r.pressGen.Add(1)
-			r.holdReady.Store(false)
-		}
 		return
 	}
 
@@ -1262,10 +1216,6 @@ func (r *treeRow) DragEnd() {
 	r.dragging = false
 	r.dragArmed = false
 	r.dragAccum = 0
-	r.pressMove = 0
-	r.pressed.Store(false)
-	r.holdReady.Store(false)
-	r.pressGen.Add(1)
 	if was && r.ct != nil {
 		r.ct.endDrag()
 	}

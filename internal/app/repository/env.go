@@ -22,6 +22,7 @@ type IEnvRepository interface {
 	Update(env *entity.Env) (*entity.Env, error)
 	Delete(id string) error
 	Clone(id string) (*entity.Env, error)
+	Move(id string, toIndex int) error
 }
 
 type envsFile struct {
@@ -212,6 +213,54 @@ func (r *EnvRepository) Clone(id string) (*entity.Env, error) {
 		return cloneEnv(cloned), nil
 	}
 	return nil, fmt.Errorf("env %s not found", id)
+}
+
+// Move ставит env с id на позицию toIndex (индекс после удаления из старого места).
+func (r *EnvRepository) Move(id string, toIndex int) error {
+	if id == "" {
+		return fmt.Errorf("env id is required")
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	from := -1
+	for i, e := range r.envs {
+		if e != nil && e.Id == id {
+			from = i
+			break
+		}
+	}
+	if from < 0 {
+		return fmt.Errorf("env %s not found", id)
+	}
+	if toIndex < 0 {
+		toIndex = 0
+	}
+	if toIndex >= len(r.envs) {
+		toIndex = len(r.envs) - 1
+	}
+	if from == toIndex {
+		return nil
+	}
+
+	prev := append([]*entity.Env(nil), r.envs...)
+	r.envs = moveEnvSlice(r.envs, from, toIndex)
+	if err := r.persistLocked(); err != nil {
+		r.envs = prev
+		return err
+	}
+	return nil
+}
+
+func moveEnvSlice(items []*entity.Env, from, to int) []*entity.Env {
+	if from == to || from < 0 || to < 0 || from >= len(items) || to >= len(items) {
+		return items
+	}
+	item := items[from]
+	items = append(items[:from], items[from+1:]...)
+	items = append(items[:to], append([]*entity.Env{item}, items[to:]...)...)
+	return items
 }
 
 func newEnvID() string {

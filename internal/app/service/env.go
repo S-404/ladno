@@ -12,6 +12,7 @@ type IEnvService interface {
 	Update(env *entity.Env, cb func(*entity.Env, error))
 	Delete(id string, cb func(error))
 	Clone(id string, cb func(*entity.Env, error))
+	Move(id string, toIndex int, cb func(error))
 }
 
 type EnvService struct {
@@ -55,5 +56,11 @@ func (s *EnvService) Delete(id string, cb func(error)) {
 func (s *EnvService) Clone(id string, cb func(*entity.Env, error)) {
 	go func() {
 		cb(s.repo.Clone(id))
+	}()
+}
+
+func (s *EnvService) Move(id string, toIndex int, cb func(error)) {
+	go func() {
+		cb(s.repo.Move(id, toIndex))
 	}()
 }

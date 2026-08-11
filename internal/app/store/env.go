@@ -22,6 +22,7 @@ type IEnvStore interface {
 	SaveSelected(name string, vars []entity.EnvVariable)
 	DeleteSelected()
 	CloneSelected()
+	MoveEnv(id string, toIndex int) bool
 	ActiveVariables() map[string]string
 	GetItemByIndex(index int) *entity.Env
 	GetEnvDataItem(item binding.DataItem) *entity.Env
@@ -226,6 +227,54 @@ func (s *EnvStore) CloneSelected() {
 			_ = s.Selected.Set(cloned)
 		})
 	})
+}
+
+// MoveEnv перемещает env на toIndex (индекс после удаления из старого места) и сохраняет порядок.
+func (s *EnvStore) MoveEnv(id string, toIndex int) bool {
+	if id == "" {
+		return false
+	}
+	items, err := s.Items.Get()
+	if err != nil {
+		return false
+	}
+	from := -1
+	for i, item := range items {
+		env, ok := item.(*entity.Env)
+		if ok && env != nil && env.Id == id {
+			from = i
+			break
+		}
+	}
+	if from < 0 {
+		return false
+	}
+	if toIndex < 0 {
+		toIndex = 0
+	}
+	if toIndex >= len(items) {
+		toIndex = len(items) - 1
+	}
+	if from == toIndex {
+		return false
+	}
+
+	item := items[from]
+	items = append(items[:from], items[from+1:]...)
+	items = append(items[:toIndex], append([]any{item}, items[toIndex:]...)...)
+	// Note: fyne UntypedList does not fire list-level listeners on same-length reorder.
+	// EnvList applies the order locally; we still update Items for Get()/persist path.
+	_ = s.Items.Set(items)
+
+	s.envService.Move(id, toIndex, func(err error) {
+		if err != nil {
+			fyne.Do(func() {
+				fmt.Printf("env move error: %v\n", err)
+				s.FetchList()
+			})
+		}
+	})
+	return true
 }
 
 func (s *EnvStore) ActiveVariables() map[string]string {

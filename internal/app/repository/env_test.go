@@ -119,3 +119,65 @@ func TestEnvRepositorySeedOnlyWhenMissing(t *testing.T) {
 		t.Fatalf("want %d envs after reload, got %d", n+1, len(second.FindAll()))
 	}
 }
+
+func TestEnvRepositoryMove(t *testing.T) {
+	store, err := storage.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := NewEnvRepository(store)
+	for _, e := range repo.FindAll() {
+		if err := repo.Delete(e.Id); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	a, err := repo.Create(&entity.Env{Name: "A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := repo.Create(&entity.Env{Name: "B"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := repo.Create(&entity.Env{Name: "C"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A B C → move A to index 2 (after removal) → B C A
+	if err := repo.Move(a.Id, 2); err != nil {
+		t.Fatal(err)
+	}
+	ids := envIDs(repo.FindAll())
+	want := []string{b.Id, c.Id, a.Id}
+	if len(ids) != 3 || ids[0] != want[0] || ids[1] != want[1] || ids[2] != want[2] {
+		t.Fatalf("after move A→2: got %v want %v", ids, want)
+	}
+
+	// B C A → move C to index 0 → C B A
+	if err := repo.Move(c.Id, 0); err != nil {
+		t.Fatal(err)
+	}
+	ids = envIDs(repo.FindAll())
+	want = []string{c.Id, b.Id, a.Id}
+	if len(ids) != 3 || ids[0] != want[0] || ids[1] != want[1] || ids[2] != want[2] {
+		t.Fatalf("after move C→0: got %v want %v", ids, want)
+	}
+
+	reloaded := NewEnvRepository(store)
+	ids = envIDs(reloaded.FindAll())
+	if len(ids) != 3 || ids[0] != want[0] || ids[1] != want[1] || ids[2] != want[2] {
+		t.Fatalf("order not persisted: got %v want %v", ids, want)
+	}
+}
+
+func envIDs(envs []*entity.Env) []string {
+	out := make([]string, 0, len(envs))
+	for _, e := range envs {
+		if e != nil {
+			out = append(out, e.Id)
+		}
+	}
+	return out
+}

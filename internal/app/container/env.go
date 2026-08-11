@@ -43,31 +43,41 @@ func EnvContainer(app *shared.App) fyne.CanvasObject {
 		envStore.SaveSelected(nameEntry.Text, kvRowsToEnvVariables(varsTable.GetRows()))
 	}
 
-	list := widget.NewListWithData(*items,
-		func() fyne.CanvasObject {
-			return widget.NewLabel("env")
+	var syncList func()
+	envList := ui.NewEnvList(
+		func(id string) {
+			envStore.Select(id)
 		},
-		func(item binding.DataItem, obj fyne.CanvasObject) {
-			env := envStore.GetEnvDataItem(item)
-			if env == nil {
-				return
-			}
-			label := obj.(*widget.Label)
-			activeID, _ := envStore.GetActiveID().Get()
-			if env.Id == activeID {
-				label.SetText("● " + env.Name)
-			} else {
-				label.SetText(env.Name)
-			}
+		func(id string, toIndex int) {
+			envStore.MoveEnv(id, toIndex)
+			// UntypedList list-listeners skip same-length reorder; refresh explicitly.
+			syncList()
 		},
 	)
 
-	list.OnSelected = func(id widget.ListItemID) {
-		env := envStore.GetItemByIndex(id)
-		if env == nil {
+	syncList = func() {
+		raw, err := (*items).Get()
+		if err != nil {
 			return
 		}
-		envStore.Select(env.Id)
+		listItems := make([]ui.EnvListItem, 0, len(raw))
+		for _, item := range raw {
+			env, ok := item.(*entity.Env)
+			if !ok || env == nil {
+				continue
+			}
+			listItems = append(listItems, ui.EnvListItem{ID: env.Id, Name: env.Name})
+		}
+		selID := ""
+		if sel := envStore.GetSelected(); sel != nil {
+			if v, err := sel.Get(); err == nil {
+				if env, ok := v.(*entity.Env); ok && env != nil {
+					selID = env.Id
+				}
+			}
+		}
+		activeID, _ := envStore.GetActiveID().Get()
+		envList.SetItems(listItems, selID, activeID)
 	}
 
 	applySelected := func() {
@@ -78,6 +88,7 @@ func EnvContainer(app *shared.App) fyne.CanvasObject {
 			varsTable.SetRows(nil)
 			nameEntry.Disable()
 			applying = false
+			syncList()
 			return
 		}
 		env, ok := val.(*entity.Env)
@@ -89,15 +100,12 @@ func EnvContainer(app *shared.App) fyne.CanvasObject {
 		nameEntry.SetText(env.Name)
 		varsTable.SetRows(envVariablesToKVRows(env.Variables))
 		applying = false
+		syncList()
 	}
 
 	envStore.GetSelected().AddListener(binding.NewDataListener(applySelected))
-	envStore.GetActiveID().AddListener(binding.NewDataListener(func() {
-		list.Refresh()
-	}))
-	(*items).AddListener(binding.NewDataListener(func() {
-		list.Refresh()
-	}))
+	envStore.GetActiveID().AddListener(binding.NewDataListener(syncList))
+	(*items).AddListener(binding.NewDataListener(syncList))
 
 	newBtn := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
 		entry := widget.NewEntry()
@@ -139,7 +147,7 @@ func EnvContainer(app *shared.App) fyne.CanvasObject {
 	left := container.NewBorder(
 		toolbar,
 		nil, nil, nil,
-		container.NewStack(container.NewVBox(loader), list),
+		container.NewStack(container.NewVBox(loader), envList),
 	)
 
 	editor := container.NewBorder(
