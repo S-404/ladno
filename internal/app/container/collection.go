@@ -256,6 +256,20 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 				), pos)
 			},
 		},
+		collection.ReorderHandler{
+			OnCollection: func(collectionID string, steps int) {
+				selStore.MoveCollection(collectionID, steps)
+			},
+			OnItem: func(collectionID, itemID string, steps int) {
+				selStore.MoveItem(collectionID, itemID, steps)
+			},
+			OnRelocate: func(fromCollectionID, itemID, toCollectionID, toParentItemID string, toIndex int) {
+				if !selStore.RelocateItem(fromCollectionID, itemID, toCollectionID, toParentItemID, toIndex) {
+					return
+				}
+				tree.RevealItem(toCollectionID, toParentItemID, itemID)
+			},
+		},
 	)
 
 	refreshConnected := func() {

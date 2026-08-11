@@ -22,10 +22,13 @@ type ISelectionStore interface {
 
 	CreateCollection(colType constants.CollectionType) (collectionID string, ok bool)
 	DeleteCollection(id string) bool
+	MoveCollection(id string, steps int) bool
 	AddFolder(collectionID, parentItemID string) (itemID string, path []string, ok bool)
 	AddRequest(collectionID, parentItemID string) (itemID string, path []string, ok bool)
 	DuplicateRequest(collectionID, itemID string) (newID string, path []string, ok bool)
 	DeleteItem(collectionID, itemID string) bool
+	MoveItem(collectionID, itemID string, steps int) bool
+	RelocateItem(fromCollectionID, itemID, toCollectionID, toParentItemID string, toIndex int) bool
 }
 
 type SelectionStore struct {
@@ -269,6 +272,34 @@ func (s *SelectionStore) DeleteCollection(id string) bool {
 	return true
 }
 
+func (s *SelectionStore) MoveCollection(id string, steps int) bool {
+	if id == "" || steps == 0 {
+		return false
+	}
+	ws := s.workspace.GetSelectedWorkspace()
+	if ws == nil {
+		return false
+	}
+	idx := -1
+	for i := range ws.Collections {
+		if ws.Collections[i].Id == id {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return false
+	}
+	newIdx := clampIndex(idx+steps, len(ws.Collections))
+	if newIdx == idx {
+		return false
+	}
+	ws.Collections = moveSliceItem(ws.Collections, idx, newIdx)
+	log.Printf("[collections] MoveCollection id=%s %d→%d", id, idx, newIdx)
+	s.workspace.PublishWorkspace(ws)
+	return true
+}
+
 func (s *SelectionStore) AddFolder(collectionID, parentItemID string) (string, []string, bool) {
 	return s.addItem(collectionID, parentItemID, newFolderItem())
 }
@@ -384,6 +415,158 @@ func (s *SelectionStore) DeleteItem(collectionID, itemID string) bool {
 	cur := s.current()
 	if cur.CollectionID == collectionID && itemInPath(cur.Path, itemID) {
 		s.ClearSelection()
+	}
+	return true
+}
+
+func (s *SelectionStore) MoveItem(collectionID, itemID string, steps int) bool {
+	if collectionID == "" || itemID == "" || steps == 0 {
+		return false
+	}
+	ws := s.workspace.GetSelectedWorkspace()
+	if ws == nil {
+		return false
+	}
+	col, ok := findCollection(ws, collectionID)
+	if !ok {
+		return false
+	}
+	list, idx := findSiblingList(&col.Items, itemID)
+	if list == nil || idx < 0 {
+		return false
+	}
+	newIdx := clampIndex(idx+steps, len(*list))
+	if newIdx == idx {
+		return false
+	}
+	*list = moveSliceItem(*list, idx, newIdx)
+	log.Printf("[collections] MoveItem col=%s item=%s %d→%d", collectionID, itemID, idx, newIdx)
+	s.workspace.PublishWorkspace(ws)
+	return true
+}
+
+func (s *SelectionStore) RelocateItem(fromCollectionID, itemID, toCollectionID, toParentItemID string, toIndex int) bool {
+	if fromCollectionID == "" || itemID == "" || toCollectionID == "" {
+		return false
+	}
+	ws := s.workspace.GetSelectedWorkspace()
+	if ws == nil {
+		return false
+	}
+	fromCol, ok := findCollection(ws, fromCollectionID)
+	if !ok {
+		return false
+	}
+	toCol, ok := findCollection(ws, toCollectionID)
+	if !ok {
+		return false
+	}
+	if constants.NormalizeCollectionType(fromCol.Type) != constants.NormalizeCollectionType(toCol.Type) {
+		log.Printf("[collections] RelocateItem: type mismatch %s → %s", fromCol.Type, toCol.Type)
+		return false
+	}
+
+	src := findItemByID(&fromCol.Items, itemID)
+	if src == nil {
+		return false
+	}
+
+	// Prevent moving a folder into itself or its descendants.
+	if src.Request == nil && toParentItemID != "" {
+		if toParentItemID == itemID {
+			return false
+		}
+		if fromCollectionID == toCollectionID {
+			parentPath := findItemPath(fromCol.Items, toParentItemID)
+			if itemInPath(parentPath, itemID) {
+				log.Printf("[collections] RelocateItem: refuse cycle item=%s under=%s", itemID, toParentItemID)
+				return false
+			}
+		}
+	}
+
+	// Resolve destination before detach only to compute index / no-op.
+	var destBefore *[]entity.CollectionItem
+	if toParentItemID == "" {
+		destBefore = &toCol.Items
+	} else {
+		parent := findItemByID(&toCol.Items, toParentItemID)
+		if parent == nil || parent.Request != nil {
+			log.Printf("[collections] RelocateItem: bad parent %s", toParentItemID)
+			return false
+		}
+		destBefore = &parent.Item
+	}
+
+	fromList, fromIdx := findSiblingList(&fromCol.Items, itemID)
+	sameList := fromList == destBefore
+	if toIndex < 0 {
+		toIndex = 0
+	}
+	if sameList && fromIdx == toIndex {
+		return false
+	}
+	if !sameList && toIndex > len(*destBefore) {
+		toIndex = len(*destBefore)
+	}
+	if sameList && toIndex > len(*destBefore)-1 {
+		toIndex = len(*destBefore) - 1
+	}
+
+	item, ok := detachItemByID(&fromCol.Items, itemID)
+	if !ok {
+		return false
+	}
+
+	// Re-resolve destination AFTER detach: removing from a sibling slice can
+	// reallocate and invalidate pointers into that backing array.
+	var dest *[]entity.CollectionItem
+	if toParentItemID == "" {
+		dest = &toCol.Items
+	} else {
+		parent := findItemByID(&toCol.Items, toParentItemID)
+		if parent == nil || parent.Request != nil {
+			log.Printf("[collections] RelocateItem: parent lost after detach %s", toParentItemID)
+			// Best-effort: put item back at collection root.
+			toCol.Items = append(toCol.Items, item)
+			s.workspace.PublishWorkspace(ws)
+			return false
+		}
+		dest = &parent.Item
+	}
+	if toIndex > len(*dest) {
+		toIndex = len(*dest)
+	}
+	if toIndex < 0 {
+		toIndex = 0
+	}
+	*dest = append((*dest)[:toIndex], append([]entity.CollectionItem{item}, (*dest)[toIndex:]...)...)
+
+	log.Printf("[collections] RelocateItem item=%s %s → %s/%s idx=%d",
+		itemID, fromCollectionID, toCollectionID, toParentItemID, toIndex)
+	s.workspace.PublishWorkspace(ws)
+
+	cur := s.current()
+	if cur.ItemID == itemID {
+		path := findItemPath(toCol.Items, itemID)
+		kind := entity.SelectionFolder
+		auth := item.Auth
+		var req *entity.ItemRequest
+		if item.Request != nil {
+			kind = entity.SelectionRequest
+			auth = item.Request.Auth
+			req = item.Request
+		}
+		s.SetSelection(entity.Selection{
+			Kind:           kind,
+			CollectionID:   toCollectionID,
+			CollectionType: toCol.Type,
+			ItemID:         itemID,
+			Path:           path,
+			Name:           item.Name,
+			Auth:           auth,
+			Request:        req,
+		})
 	}
 	return true
 }
@@ -521,16 +704,22 @@ func findSiblingList(items *[]entity.CollectionItem, id string) (*[]entity.Colle
 }
 
 func deleteItemByID(items *[]entity.CollectionItem, id string) bool {
+	_, ok := detachItemByID(items, id)
+	return ok
+}
+
+func detachItemByID(items *[]entity.CollectionItem, id string) (entity.CollectionItem, bool) {
 	for i := range *items {
 		if (*items)[i].Id == id {
+			item := (*items)[i]
 			*items = append((*items)[:i], (*items)[i+1:]...)
-			return true
+			return item, true
 		}
-		if deleteItemByID(&(*items)[i].Item, id) {
-			return true
+		if item, ok := detachItemByID(&(*items)[i].Item, id); ok {
+			return item, true
 		}
 	}
-	return false
+	return entity.CollectionItem{}, false
 }
 
 func itemInPath(path []string, id string) bool {
@@ -540,4 +729,27 @@ func itemInPath(path []string, id string) bool {
 		}
 	}
 	return false
+}
+
+func clampIndex(idx, length int) int {
+	if length <= 0 {
+		return 0
+	}
+	if idx < 0 {
+		return 0
+	}
+	if idx >= length {
+		return length - 1
+	}
+	return idx
+}
+
+func moveSliceItem[T any](items []T, from, to int) []T {
+	if from == to || from < 0 || to < 0 || from >= len(items) || to >= len(items) {
+		return items
+	}
+	item := items[from]
+	items = append(items[:from], items[from+1:]...)
+	items = append(items[:to], append([]T{item}, items[to:]...)...)
+	return items
 }
