@@ -269,13 +269,26 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 	})
 	addBtn.Importance = widget.LowImportance
 	addBtn.Hide()
-	toolbar := container.NewBorder(nil, nil, nil, addBtn, nil)
 
-	syncAddBtn := func() {
+	search := widget.NewEntry()
+	search.SetPlaceHolder("Search…")
+	search.OnChanged = func(q string) {
+		tree.SetFilter(q)
+	}
+	search.Hide()
+
+	toolbarRight := addBtn
+	toolbar := container.NewBorder(nil, nil, nil, toolbarRight, search)
+
+	syncToolbar := func() {
 		if wsStore.GetSelectedWorkspace() == nil {
 			addBtn.Hide()
+			search.Hide()
+			search.SetText("")
+			tree.SetFilter("")
 		} else {
 			addBtn.Show()
+			search.Show()
 		}
 		toolbar.Refresh()
 	}
@@ -285,13 +298,13 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 			log.Printf("[collections] workspace listener: nil")
 			tree.SetCollections(nil)
 			selStore.ClearSelection()
-			syncAddBtn()
+			syncToolbar()
 			return
 		}
 		log.Printf("[collections] workspace listener: refresh tree cols=%d", len(workspace.Collections))
 		tree.SetCollections(workspace.Collections)
 		refreshConnected()
-		syncAddBtn()
+		syncToolbar()
 	}))
 
 	return container.NewBorder(

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"image/color"
 	"log"
+	"strings"
 	"sync"
 
 	"fyne.io/fyne/v2"
@@ -54,6 +55,8 @@ type Tree struct {
 	nodes     map[string]treeNode
 	cols      map[string]entity.Collection
 	connected map[string]bool
+	source    []entity.Collection
+	filter    string
 	handler   SelectHandler
 	context   ContextHandler
 	tree      *widget.Tree
@@ -223,12 +226,37 @@ func (ct *Tree) SetConnected(ids map[string]bool) {
 	ct.tree.Refresh()
 }
 
+func (ct *Tree) SetFilter(query string) {
+	ct.mu.Lock()
+	ct.filter = strings.TrimSpace(query)
+	ct.mu.Unlock()
+	ct.rebuild()
+}
+
 func (ct *Tree) SetCollections(collections []entity.Collection) {
+	ct.mu.Lock()
+	if collections == nil {
+		ct.source = nil
+	} else {
+		ct.source = append([]entity.Collection(nil), collections...)
+	}
+	ct.mu.Unlock()
+	ct.rebuild()
+}
+
+func (ct *Tree) rebuild() {
+	ct.mu.RLock()
+	source := append([]entity.Collection(nil), ct.source...)
+	filter := ct.filter
+	ct.mu.RUnlock()
+
+	visible := filterCollections(source, filter)
+
 	childIDs := map[string][]string{"": {}}
 	nodes := map[string]treeNode{}
 	cols := map[string]entity.Collection{}
 
-	for _, col := range collections {
+	for _, col := range visible {
 		col = normalizeCol(col)
 		cols[col.Id] = col
 		colUID := "col:" + col.Id
@@ -255,8 +283,8 @@ func (ct *Tree) SetCollections(collections []entity.Collection) {
 	ct.cols = cols
 	ct.mu.Unlock()
 
-	log.Printf("[collections] Tree.SetCollections collections=%d nodes=%d roots=%v",
-		len(collections), len(nodes), childIDs[""])
+	log.Printf("[collections] Tree.rebuild filter=%q collections=%d nodes=%d roots=%v",
+		filter, len(visible), len(nodes), childIDs[""])
 
 	ct.tree.Refresh()
 
@@ -264,7 +292,21 @@ func (ct *Tree) SetCollections(collections []entity.Collection) {
 	roots := append([]string{}, ct.childIDs[""]...)
 	ct.mu.RUnlock()
 	for _, uid := range roots {
+		if filter != "" {
+			ct.openAllUnder(uid)
+			continue
+		}
 		ct.tree.OpenBranch(uid)
+	}
+}
+
+func (ct *Tree) openAllUnder(uid string) {
+	ct.tree.OpenBranch(uid)
+	ct.mu.RLock()
+	children := append([]string{}, ct.childIDs[uid]...)
+	ct.mu.RUnlock()
+	for _, child := range children {
+		ct.openAllUnder(child)
 	}
 }
 
@@ -275,6 +317,63 @@ func (ct *Tree) CreateRenderer() fyne.WidgetRenderer {
 func normalizeCol(col entity.Collection) entity.Collection {
 	col.Type = constants.NormalizeCollectionType(col.Type)
 	return col
+}
+
+func filterCollections(collections []entity.Collection, query string) []entity.Collection {
+	q := strings.ToLower(strings.TrimSpace(query))
+	if q == "" {
+		return collections
+	}
+	out := make([]entity.Collection, 0, len(collections))
+	for _, col := range collections {
+		col = normalizeCol(col)
+		colMatch := strings.Contains(strings.ToLower(col.Name), q) ||
+			strings.Contains(strings.ToLower(string(col.Type)), q)
+		items, ok := filterItems(col.Items, q, colMatch)
+		if !colMatch && !ok {
+			continue
+		}
+		col.Items = items
+		out = append(out, col)
+	}
+	return out
+}
+
+func filterItems(items []entity.CollectionItem, q string, keepAll bool) ([]entity.CollectionItem, bool) {
+	if keepAll {
+		return items, true
+	}
+	out := make([]entity.CollectionItem, 0, len(items))
+	any := false
+	for _, item := range items {
+		nameMatch := strings.Contains(strings.ToLower(item.Name), q)
+		if item.Request != nil {
+			if nameMatch || strings.Contains(strings.ToLower(string(item.Request.Method)), q) {
+				out = append(out, item)
+				any = true
+				continue
+			}
+			if item.Request.Nats != nil && strings.Contains(strings.ToLower(item.Request.Nats.Subject), q) {
+				out = append(out, item)
+				any = true
+				continue
+			}
+			continue
+		}
+		// folder
+		children, childOK := filterItems(item.Item, q, false)
+		if nameMatch {
+			out = append(out, item)
+			any = true
+			continue
+		}
+		if childOK {
+			item.Item = children
+			out = append(out, item)
+			any = true
+		}
+	}
+	return out, any
 }
 
 func fillItems(
