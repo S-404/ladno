@@ -33,16 +33,24 @@ type EnvStore struct {
 	ActiveID   binding.String
 	IsFetching binding.Bool
 	envService service.IEnvService
+	settings   ISettingsStore
 }
 
-func NewEnvStore(envService service.IEnvService) *EnvStore {
-	return &EnvStore{
+func NewEnvStore(envService service.IEnvService, settings ISettingsStore) *EnvStore {
+	s := &EnvStore{
 		Items:      binding.NewUntypedList(),
 		Selected:   binding.NewUntyped(),
 		ActiveID:   binding.NewString(),
 		IsFetching: binding.NewBool(),
 		envService: envService,
+		settings:   settings,
 	}
+	if settings != nil {
+		if id := settings.GetActiveEnvID(); id != "" {
+			_ = s.ActiveID.Set(id)
+		}
+	}
+	return s
 }
 
 func (s *EnvStore) GetItems() *binding.UntypedList {
@@ -76,10 +84,24 @@ func (s *EnvStore) FetchList() {
 			_ = s.Items.Set(utils.UnpackArray(data))
 
 			activeID, _ := s.ActiveID.Get()
+			if activeID != "" && !envListContains(data, activeID) {
+				activeID = ""
+				_ = s.ActiveID.Set("")
+				s.persistActiveID("")
+			}
 			if activeID == "" && len(data) > 0 {
 				_ = s.ActiveID.Set(data[0].Id)
+				s.persistActiveID(data[0].Id)
+				activeID = data[0].Id
 			}
 			if sel := s.selectedEnv(); sel == nil && len(data) > 0 {
+				// Prefer active env as selected when opening list.
+				for _, env := range data {
+					if env != nil && env.Id == activeID {
+						_ = s.Selected.Set(env)
+						return
+					}
+				}
 				_ = s.Selected.Set(data[0])
 			}
 		})
@@ -102,6 +124,7 @@ func (s *EnvStore) Select(id string) {
 
 func (s *EnvStore) SetActive(id string) {
 	_ = s.ActiveID.Set(id)
+	s.persistActiveID(id)
 }
 
 func (s *EnvStore) Create(name string) {
@@ -115,6 +138,7 @@ func (s *EnvStore) Create(name string) {
 			_ = s.Selected.Set(created)
 			if active, _ := s.ActiveID.Get(); active == "" {
 				_ = s.ActiveID.Set(created.Id)
+				s.persistActiveID(created.Id)
 			}
 		})
 	})
@@ -165,11 +189,13 @@ func (s *EnvStore) DeleteSelected() {
 				if len(items) > 0 {
 					if env, ok := items[0].(*entity.Env); ok && env != nil {
 						_ = s.ActiveID.Set(env.Id)
+						s.persistActiveID(env.Id)
 						_ = s.Selected.Set(env)
 						return
 					}
 				}
 				_ = s.ActiveID.Set("")
+				s.persistActiveID("")
 				_ = s.Selected.Set(nil)
 			} else {
 				items, _ := s.Items.Get()
@@ -288,4 +314,19 @@ func (s *EnvStore) removeItem(id string) {
 		next = append(next, item)
 	}
 	_ = s.Items.Set(next)
+}
+
+func (s *EnvStore) persistActiveID(id string) {
+	if s.settings != nil {
+		s.settings.SetActiveEnvID(id)
+	}
+}
+
+func envListContains(data []*entity.Env, id string) bool {
+	for _, env := range data {
+		if env != nil && env.Id == id {
+			return true
+		}
+	}
+	return false
 }

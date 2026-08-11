@@ -16,7 +16,7 @@ type Store struct {
 
 func NewStore(service *service.Service) *Store {
 	settingsStore := NewSettingsStore()
-	envStore := NewEnvStore(service.Env)
+	envStore := NewEnvStore(service.Env, settingsStore)
 	logStore := NewLogStore(settingsStore)
 	wsStore := NewWorkspaceStore(service.Workspace)
 	return &Store{

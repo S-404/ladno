@@ -1,14 +1,19 @@
 package repository
 
 import (
+	"errors"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/s-404/ladno/internal/app/entity"
 	"github.com/s-404/ladno/internal/app/repository/mock"
+	"github.com/s-404/ladno/internal/app/storage"
 )
+
+const envsFileName = "envs.json"
 
 type IEnvRepository interface {
 	FindAll() []*entity.Env
@@ -19,15 +24,72 @@ type IEnvRepository interface {
 	Clone(id string) (*entity.Env, error)
 }
 
-type EnvRepository struct {
-	mu   sync.RWMutex
-	envs []*entity.Env
+type envsFile struct {
+	Version int           `json:"version"`
+	Envs    []*entity.Env `json:"envs"`
 }
 
-func NewEnvRepository() *EnvRepository {
-	return &EnvRepository{
-		envs: mock.EnvData(),
+type EnvRepository struct {
+	mu    sync.RWMutex
+	envs  []*entity.Env
+	store *storage.Store
+}
+
+func NewEnvRepository(store *storage.Store) *EnvRepository {
+	r := &EnvRepository{
+		store: store,
+		envs:  []*entity.Env{},
 	}
+	if err := r.load(); err != nil {
+		log.Printf("[storage] env load: %v", err)
+	}
+	return r
+}
+
+func (r *EnvRepository) load() error {
+	if r.store == nil {
+		r.envs = cloneEnvList(mock.EnvData())
+		return nil
+	}
+
+	var file envsFile
+	err := r.store.LoadJSON(envsFileName, &file)
+	if errors.Is(err, storage.ErrNotExist) {
+		r.envs = cloneEnvList(mock.EnvData())
+		return r.persistLocked()
+	}
+	if err != nil {
+		return err
+	}
+
+	r.envs = make([]*entity.Env, 0, len(file.Envs))
+	for _, e := range file.Envs {
+		if e == nil {
+			continue
+		}
+		r.envs = append(r.envs, cloneEnv(e))
+	}
+	return nil
+}
+
+func (r *EnvRepository) persist() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.persistLocked()
+}
+
+func (r *EnvRepository) persistLocked() error {
+	if r.store == nil {
+		return nil
+	}
+	file := envsFile{
+		Version: 1,
+		Envs:    cloneEnvList(r.envs),
+	}
+	if err := r.store.SaveJSON(envsFileName, file); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r *EnvRepository) FindAll() []*entity.Env {
@@ -71,6 +133,10 @@ func (r *EnvRepository) Create(env *entity.Env) (*entity.Env, error) {
 		Variables: cloneVariables(env.Variables),
 	}
 	r.envs = append(r.envs, created)
+	if err := r.persistLocked(); err != nil {
+		r.envs = r.envs[:len(r.envs)-1]
+		return nil, err
+	}
 	return cloneEnv(created), nil
 }
 
@@ -87,15 +153,21 @@ func (r *EnvRepository) Update(env *entity.Env) (*entity.Env, error) {
 	defer r.mu.Unlock()
 
 	for i, existing := range r.envs {
-		if existing.Id == env.Id {
-			updated := &entity.Env{
-				Id:        existing.Id,
-				Name:      name,
-				Variables: cloneVariables(env.Variables),
-			}
-			r.envs[i] = updated
-			return cloneEnv(updated), nil
+		if existing.Id != env.Id {
+			continue
 		}
+		prev := r.envs[i]
+		updated := &entity.Env{
+			Id:        existing.Id,
+			Name:      name,
+			Variables: cloneVariables(env.Variables),
+		}
+		r.envs[i] = updated
+		if err := r.persistLocked(); err != nil {
+			r.envs[i] = prev
+			return nil, err
+		}
+		return cloneEnv(updated), nil
 	}
 	return nil, fmt.Errorf("env %s not found", env.Id)
 }
@@ -105,10 +177,16 @@ func (r *EnvRepository) Delete(id string) error {
 	defer r.mu.Unlock()
 
 	for i, e := range r.envs {
-		if e.Id == id {
-			r.envs = append(r.envs[:i], r.envs[i+1:]...)
-			return nil
+		if e.Id != id {
+			continue
 		}
+		prev := append([]*entity.Env(nil), r.envs...)
+		r.envs = append(r.envs[:i], r.envs[i+1:]...)
+		if err := r.persistLocked(); err != nil {
+			r.envs = prev
+			return err
+		}
+		return nil
 	}
 	return fmt.Errorf("env %s not found", id)
 }
@@ -118,21 +196,37 @@ func (r *EnvRepository) Clone(id string) (*entity.Env, error) {
 	defer r.mu.Unlock()
 
 	for _, e := range r.envs {
-		if e.Id == id {
-			cloned := &entity.Env{
-				Id:        newEnvID(),
-				Name:      e.Name + " (copy)",
-				Variables: cloneVariables(e.Variables),
-			}
-			r.envs = append(r.envs, cloned)
-			return cloneEnv(cloned), nil
+		if e.Id != id {
+			continue
 		}
+		cloned := &entity.Env{
+			Id:        newEnvID(),
+			Name:      e.Name + " (copy)",
+			Variables: cloneVariables(e.Variables),
+		}
+		r.envs = append(r.envs, cloned)
+		if err := r.persistLocked(); err != nil {
+			r.envs = r.envs[:len(r.envs)-1]
+			return nil, err
+		}
+		return cloneEnv(cloned), nil
 	}
 	return nil, fmt.Errorf("env %s not found", id)
 }
 
 func newEnvID() string {
 	return fmt.Sprintf("env-%d", time.Now().UnixNano())
+}
+
+func cloneEnvList(in []*entity.Env) []*entity.Env {
+	out := make([]*entity.Env, 0, len(in))
+	for _, e := range in {
+		if e == nil {
+			continue
+		}
+		out = append(out, cloneEnv(e))
+	}
+	return out
 }
 
 func cloneEnv(e *entity.Env) *entity.Env {

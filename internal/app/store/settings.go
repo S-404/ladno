@@ -9,6 +9,7 @@ const (
 	prefMessageLimitKey    = "messageHistoryLimit"
 	prefThemeKey           = "uiTheme"
 	prefLastWorkspaceKey   = "lastWorkspaceId"
+	prefActiveEnvKey       = "activeEnvId"
 	defaultMessageLimit    = 1000
 	minMessageLimit        = 10
 	maxMessageLimitAllowed = 100000
@@ -27,6 +28,9 @@ type ISettingsStore interface {
 
 	GetLastWorkspaceID() string
 	SetLastWorkspaceID(id string)
+
+	GetActiveEnvID() string
+	SetActiveEnvID(id string)
 }
 
 type SettingsStore struct{}
@@ -77,6 +81,14 @@ func (s *SettingsStore) GetLastWorkspaceID() string {
 
 func (s *SettingsStore) SetLastWorkspaceID(id string) {
 	s.prefs().SetString(prefLastWorkspaceKey, id)
+}
+
+func (s *SettingsStore) GetActiveEnvID() string {
+	return s.prefs().String(prefActiveEnvKey)
+}
+
+func (s *SettingsStore) SetActiveEnvID(id string) {
+	s.prefs().SetString(prefActiveEnvKey, id)
 }
 
 func clampMessageLimit(n int) int {
