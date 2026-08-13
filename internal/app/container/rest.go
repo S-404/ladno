@@ -16,7 +16,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 	selStore := app.Store.Selection
 	envStore := app.Store.Env
 	requestURL := binding.NewString()
-	_ = requestURL.Set("{{baseUrl}}/posts/1")
+	requestURL.Set("")
 
 	methods := []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
 

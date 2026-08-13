@@ -231,10 +231,10 @@ func (s *SelectionStore) CreateCollection(colType constants.CollectionType) (str
 		UpdatedAt: now,
 	}
 	if colType == constants.CollectionTypeNATS {
-		col.Nats = &entity.NatsConnection{Host: "{{natsHost}}", Port: "{{natsPort}}"}
+		col.Nats = &entity.NatsConnection{}
 	}
 	if colType == constants.CollectionTypeKafka {
-		col.Kafka = &entity.KafkaConnection{Brokers: "{{kafkaBrokers}}"}
+		col.Kafka = &entity.KafkaConnection{}
 	}
 	ws.Collections = append(ws.Collections, col)
 	log.Printf("[collections] CreateCollection type=%s id=%s name=%q total=%d",
@@ -590,12 +590,11 @@ func newRequestItem(colType constants.CollectionType) entity.CollectionItem {
 	case constants.CollectionTypeWS:
 		req.Ws = &entity.WsRequest{}
 	case constants.CollectionTypeNATS:
-		req.Nats = &entity.NatsRequest{Subject: "{{natsSubject}}"}
+		req.Nats = &entity.NatsRequest{}
 	case constants.CollectionTypeKafka:
-		req.Kafka = &entity.KafkaRequest{Topic: "{{kafkaTopic}}"}
+		req.Kafka = &entity.KafkaRequest{}
 	default:
 		req.Method = constants.GET
-		req.Url = entity.RequestUrl{Raw: "{{baseUrl}}"}
 	}
 	return entity.CollectionItem{
 		Id:      utils.NewID("r"),
