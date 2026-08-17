@@ -17,6 +17,7 @@ import (
 
 func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 	selStore := app.Store.Selection
+	drafts := app.Store.Draft
 	natsStore := app.Store.Nats
 	kafkaStore := app.Store.Kafka
 
@@ -24,19 +25,36 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 
 	var colSettings *collection.SettingsView
 	colSettings = collection.NewSettingsView(collection.SettingsCallbacks{
+		OnChange: func(save collection.SettingsSave) {
+			sel := currentSelection(selStore.GetSelection())
+			if sel == nil || sel.Kind != entity.SelectionCollection {
+				return
+			}
+			drafts.PutCollectionDraft(sel.CollectionID, entity.CollectionDraft{
+				Name: save.Name, Auth: save.Auth, Nats: save.Nats, Kafka: save.Kafka,
+			}, true)
+			colSettings.SetDirty(true)
+		},
 		OnSave: func(save collection.SettingsSave) {
 			sel := currentSelection(selStore.GetSelection())
 			if sel == nil || sel.Kind != entity.SelectionCollection {
 				return
 			}
-			selStore.UpdateCollection(sel.CollectionID, save.Name, save.Auth, save.Nats, save.Kafka)
+			drafts.PutCollectionDraft(sel.CollectionID, entity.CollectionDraft{
+				Name: save.Name, Auth: save.Auth, Nats: save.Nats, Kafka: save.Kafka,
+			}, true)
+			drafts.SaveCollection(sel.CollectionID)
+			colSettings.SetDirty(false)
 		},
 		OnConnect: func(save collection.SettingsSave) {
 			sel := currentSelection(selStore.GetSelection())
 			if sel == nil || sel.Kind != entity.SelectionCollection {
 				return
 			}
-			selStore.UpdateCollection(sel.CollectionID, save.Name, save.Auth, save.Nats, save.Kafka)
+			// Connect uses current draft values without forcing disk save.
+			drafts.PutCollectionDraft(sel.CollectionID, entity.CollectionDraft{
+				Name: save.Name, Auth: save.Auth, Nats: save.Nats, Kafka: save.Kafka,
+			}, drafts.IsCollectionDirty(sel.CollectionID))
 			switch constants.NormalizeCollectionType(sel.CollectionType) {
 			case constants.CollectionTypeNATS:
 				if save.Nats == nil {
@@ -76,32 +94,77 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		},
 	})
 
-	folderSettings := collection.NewFolderView(func(name string, auth entity.Auth) {
-		sel := currentSelection(selStore.GetSelection())
-		if sel == nil || sel.Kind != entity.SelectionFolder {
-			return
-		}
-		selStore.UpdateFolder(sel.CollectionID, sel.ItemID, name, auth)
-	})
+	var folderSettings *collection.FolderView
+	folderSettings = collection.NewFolderView(
+		func(name string, auth entity.Auth) {
+			sel := currentSelection(selStore.GetSelection())
+			if sel == nil || sel.Kind != entity.SelectionFolder {
+				return
+			}
+			drafts.PutFolderDraft(sel.ItemID, entity.FolderDraft{
+				CollectionID: sel.CollectionID, Name: name, Auth: auth,
+			}, true)
+			folderSettings.SetDirty(true)
+		},
+		func(name string, auth entity.Auth) {
+			sel := currentSelection(selStore.GetSelection())
+			if sel == nil || sel.Kind != entity.SelectionFolder {
+				return
+			}
+			drafts.PutFolderDraft(sel.ItemID, entity.FolderDraft{
+				CollectionID: sel.CollectionID, Name: name, Auth: auth,
+			}, true)
+			drafts.SaveFolder(sel.CollectionID, sel.ItemID)
+			folderSettings.SetDirty(false)
+		},
+	)
 
-	saveRequestAuth := func(auth entity.Auth) {
+	putRequestDraft := func(mutate func(*entity.RequestDraft)) {
 		sel := currentSelection(selStore.GetSelection())
 		if sel == nil || sel.Kind != entity.SelectionRequest {
 			return
 		}
-		selStore.UpdateRequestAuth(sel.CollectionID, sel.ItemID, auth)
-	}
-	saveRequestName := func(name string) {
-		sel := currentSelection(selStore.GetSelection())
-		if sel == nil || sel.Kind != entity.SelectionRequest {
-			return
+		d, ok := drafts.GetRequestDraft(sel.ItemID)
+		if !ok {
+			d = drafts.EnsureRequestDraft(sel.CollectionID, sel.ItemID, sel.Name, sel.Request)
 		}
-		selStore.UpdateRequestName(sel.CollectionID, sel.ItemID, name)
+		mutate(&d)
+		d.CollectionID = sel.CollectionID
+		drafts.PutRequestDraft(sel.ItemID, d, true)
 	}
 
 	restPanel := RestContainer(app)
-	grpcPanel := grpcui.NewRequestView(saveRequestAuth, saveRequestName)
-	wsPanel := wsui.NewRequestView(saveRequestAuth, saveRequestName)
+
+	grpcPanel := grpcui.NewRequestView(
+		func(name string, req entity.GrpcRequest, auth entity.Auth) {
+			putRequestDraft(func(d *entity.RequestDraft) {
+				d.Name = name
+				d.Request.Auth = auth
+				d.Request.Grpc = &req
+			})
+		},
+		func() {
+			sel := currentSelection(selStore.GetSelection())
+			if sel != nil {
+				drafts.SaveRequest(sel.CollectionID, sel.ItemID)
+			}
+		},
+	)
+	wsPanel := wsui.NewRequestView(
+		func(name string, req entity.WsRequest, auth entity.Auth) {
+			putRequestDraft(func(d *entity.RequestDraft) {
+				d.Name = name
+				d.Request.Auth = auth
+				d.Request.Ws = &req
+			})
+		},
+		func() {
+			sel := currentSelection(selStore.GetSelection())
+			if sel != nil {
+				drafts.SaveRequest(sel.CollectionID, sel.ItemID)
+			}
+		},
+	)
 
 	var natsPanel *natsui.RequestView
 	var natsCollectionID string
@@ -114,17 +177,13 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 	}
 	natsMessagesView := natsui.NewMessagesView(
 		func(all bool) { refreshNatsMessages() },
-		func() {
-			fyne.CurrentApp().Clipboard().SetContent(natsPanel.Messages.Text())
-		},
+		func() { fyne.CurrentApp().Clipboard().SetContent(natsPanel.Messages.Text()) },
 		func() {
 			natsStore.ClearMessages(natsCollectionID, natsPanel.Subject())
 			refreshNatsMessages()
 		},
 	)
-	natsStore.AddMessageListener(func() {
-		fyne.Do(refreshNatsMessages)
-	})
+	natsStore.AddMessageListener(func() { fyne.Do(refreshNatsMessages) })
 
 	natsPanel = natsui.NewRequestView(
 		func(method constants.NatsMethod, req entity.NatsRequest) {
@@ -150,7 +209,18 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			natsStore.Unsubscribe(sel.CollectionID, sel.ItemID)
 			natsPanel.SetSubActive(false)
 		},
-		saveRequestName,
+		func(name string, req entity.NatsRequest) {
+			putRequestDraft(func(d *entity.RequestDraft) {
+				d.Name = name
+				d.Request.Nats = &req
+			})
+		},
+		func() {
+			sel := currentSelection(selStore.GetSelection())
+			if sel != nil {
+				drafts.SaveRequest(sel.CollectionID, sel.ItemID)
+			}
+		},
 		natsMessagesView,
 	)
 
@@ -160,28 +230,19 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		if kafkaPanel == nil {
 			return
 		}
-		text := kafkaStore.MessagesText(
-			kafkaCollectionID,
-			kafkaPanel.Topic(),
-			kafkaPanel.Messages.Filter(),
-			kafkaPanel.Messages.ShowAll(),
-		)
+		text := kafkaStore.MessagesText(kafkaCollectionID, kafkaPanel.Topic(), kafkaPanel.Messages.Filter(), kafkaPanel.Messages.ShowAll())
 		kafkaPanel.Messages.SetText(text)
 	}
 	kafkaMessagesView := kafkaui.NewMessagesView(
 		func(all bool) { refreshKafkaMessages() },
 		func(q string) { refreshKafkaMessages() },
-		func() {
-			fyne.CurrentApp().Clipboard().SetContent(kafkaPanel.Messages.Text())
-		},
+		func() { fyne.CurrentApp().Clipboard().SetContent(kafkaPanel.Messages.Text()) },
 		func() {
 			kafkaStore.ClearMessages(kafkaCollectionID, kafkaPanel.Topic())
 			refreshKafkaMessages()
 		},
 	)
-	kafkaStore.AddMessageListener(func() {
-		fyne.Do(refreshKafkaMessages)
-	})
+	kafkaStore.AddMessageListener(func() { fyne.Do(refreshKafkaMessages) })
 
 	kafkaPanel = kafkaui.NewRequestView(
 		func(method constants.KafkaMethod, req entity.KafkaRequest) {
@@ -207,7 +268,18 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			kafkaStore.StopConsume(sel.CollectionID, sel.ItemID)
 			kafkaPanel.SetConsumeActive(false)
 		},
-		saveRequestName,
+		func(name string, req entity.KafkaRequest) {
+			putRequestDraft(func(d *entity.RequestDraft) {
+				d.Name = name
+				d.Request.Kafka = &req
+			})
+		},
+		func() {
+			sel := currentSelection(selStore.GetSelection())
+			if sel != nil {
+				drafts.SaveRequest(sel.CollectionID, sel.ItemID)
+			}
+		},
 		kafkaMessagesView,
 	)
 
@@ -227,7 +299,6 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		kafkaPanel.CanvasObject,
 	}
 	stack := container.NewStack(panels...)
-
 	show := func(idx int) {
 		for i, p := range panels {
 			if i == idx {
@@ -239,6 +310,30 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		stack.Refresh()
 	}
 	show(0)
+
+	syncDirtyHeaders := func(sel *entity.Selection) {
+		if sel == nil {
+			return
+		}
+		switch sel.Kind {
+		case entity.SelectionCollection:
+			colSettings.SetDirty(drafts.IsCollectionDirty(sel.CollectionID))
+		case entity.SelectionFolder:
+			folderSettings.SetDirty(drafts.IsFolderDirty(sel.ItemID))
+		case entity.SelectionRequest:
+			dirty := drafts.IsRequestDirty(sel.ItemID)
+			grpcPanel.SetDirty(dirty)
+			wsPanel.SetDirty(dirty)
+			natsPanel.SetDirty(dirty)
+			kafkaPanel.SetDirty(dirty)
+		}
+	}
+
+	drafts.AddDirtyListener(func() {
+		fyne.Do(func() {
+			syncDirtyHeaders(currentSelection(selStore.GetSelection()))
+		})
+	})
 
 	selStore.GetSelection().AddListener(binding.NewDataListener(func() {
 		sel := currentSelection(selStore.GetSelection())
@@ -257,42 +352,34 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 				connected = kafkaStore.IsConnected(sel.CollectionID)
 			}
 			colSettings.Set(sel.Name, sel.Auth, sel.Nats, sel.Kafka, sel.CollectionType, connected)
+			colSettings.SetDirty(drafts.IsCollectionDirty(sel.CollectionID))
 			show(1)
 		case entity.SelectionFolder:
 			folderSettings.Set(sel.Name, sel.Auth)
+			folderSettings.SetDirty(drafts.IsFolderDirty(sel.ItemID))
 			show(2)
 		case entity.SelectionRequest:
+			d, _ := drafts.GetRequestDraft(sel.ItemID)
+			dirty := drafts.IsRequestDirty(sel.ItemID)
 			switch constants.NormalizeCollectionType(sel.CollectionType) {
 			case constants.CollectionTypeGRPC:
-				var req *entity.GrpcRequest
-				if sel.Request != nil {
-					req = sel.Request.Grpc
-				}
-				grpcPanel.Set(req, sel.Name, sel.Auth)
+				grpcPanel.Set(d.Request.Grpc, d.Name, d.Request.Auth)
+				grpcPanel.SetDirty(dirty)
 				show(4)
 			case constants.CollectionTypeWS:
-				var req *entity.WsRequest
-				if sel.Request != nil {
-					req = sel.Request.Ws
-				}
-				wsPanel.Set(req, sel.Name, sel.Auth)
+				wsPanel.Set(d.Request.Ws, d.Name, d.Request.Auth)
+				wsPanel.SetDirty(dirty)
 				show(5)
 			case constants.CollectionTypeNATS:
-				var req *entity.NatsRequest
-				if sel.Request != nil {
-					req = sel.Request.Nats
-				}
 				natsCollectionID = sel.CollectionID
-				natsPanel.Set(req, sel.Name, natsStore.IsSubscribed(sel.CollectionID, sel.ItemID))
+				natsPanel.Set(d.Request.Nats, d.Name, natsStore.IsSubscribed(sel.CollectionID, sel.ItemID))
+				natsPanel.SetDirty(dirty)
 				refreshNatsMessages()
 				show(6)
 			case constants.CollectionTypeKafka:
-				var req *entity.KafkaRequest
-				if sel.Request != nil {
-					req = sel.Request.Kafka
-				}
 				kafkaCollectionID = sel.CollectionID
-				kafkaPanel.Set(req, sel.Name, kafkaStore.IsConsuming(sel.CollectionID, sel.ItemID))
+				kafkaPanel.Set(d.Request.Kafka, d.Name, kafkaStore.IsConsuming(sel.CollectionID, sel.ItemID))
+				kafkaPanel.SetDirty(dirty)
 				refreshKafkaMessages()
 				show(7)
 			default:

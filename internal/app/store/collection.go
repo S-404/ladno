@@ -224,7 +224,7 @@ func (s *SelectionStore) CreateCollection(colType constants.CollectionType) (str
 		Id:        utils.NewID("c"),
 		Version:   1,
 		Type:      colType,
-		Name:      "new",
+		Name:      entity.DefaultNewCollectionName,
 		Auth:      entity.Auth{Type: constants.AuthTypeNoAuth},
 		Items:     []entity.CollectionItem{},
 		CreatedAt: now,
@@ -574,7 +574,7 @@ func (s *SelectionStore) RelocateItem(fromCollectionID, itemID, toCollectionID, 
 func newFolderItem() entity.CollectionItem {
 	return entity.CollectionItem{
 		Id:   utils.NewID("f"),
-		Name: "new",
+		Name: entity.DefaultNewFolderName,
 		Auth: entity.Auth{Type: constants.AuthTypeInherited},
 		Item: []entity.CollectionItem{},
 	}
@@ -598,7 +598,7 @@ func newRequestItem(colType constants.CollectionType) entity.CollectionItem {
 	}
 	return entity.CollectionItem{
 		Id:      utils.NewID("r"),
-		Name:    "new",
+		Name:    entity.DefaultNewRequestName,
 		Auth:    entity.Auth{Type: constants.AuthTypeInherited},
 		Request: req,
 	}
@@ -615,6 +615,7 @@ func cloneRequestItem(src entity.CollectionItem) entity.CollectionItem {
 	}
 	r := *src.Request
 	r.Header = cloneVariables(src.Request.Header)
+	r.FormData = cloneVariables(src.Request.FormData)
 	r.Auth = cloneAuth(src.Request.Auth)
 	r.Url.Variable = cloneVariables(src.Request.Url.Variable)
 	if src.Request.Grpc != nil {

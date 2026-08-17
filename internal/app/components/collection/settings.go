@@ -17,6 +17,7 @@ type SettingsSave struct {
 }
 
 type SettingsCallbacks struct {
+	OnChange     func(SettingsSave)
 	OnSave       func(SettingsSave)
 	OnConnect    func(SettingsSave)
 	OnDisconnect func()
@@ -27,18 +28,25 @@ type SettingsView struct {
 	Set              func(name string, auth entity.Auth, nats *entity.NatsConnection, kafka *entity.KafkaConnection, colType constants.CollectionType, connected bool)
 	Get              func() SettingsSave
 	Save             func()
+	SetDirty         func(dirty bool)
 	SetConnectStatus func(text string)
 	SetConnected     func(connected bool)
 }
 
 func NewSettingsView(cb SettingsCallbacks) *SettingsView {
-	nameEntry := widget.NewEntry()
+	var applying bool
+	var getSave func() SettingsSave
+	header := ui.NewEntityHeader("Collection", func() {
+		if cb.OnSave != nil && getSave != nil {
+			cb.OnSave(getSave())
+		}
+	})
+
+	nameEntry := ui.NewEntry()
 	nameEntry.SetPlaceHolder("Collection name")
 
 	typeLabel := widget.NewLabel("")
 	typeLabel.TextStyle = fyne.TextStyle{Italic: true}
-
-	authPanel := ui.NewAuthPanel(ui.AuthPanelOptions{AllowInherited: false})
 
 	hostEntry := ui.NewEnvInput()
 	hostEntry.SetPlaceHolder("{{natsHost}} or localhost")
@@ -46,7 +54,6 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 	portEntry.SetPlaceHolder("{{natsPort}} or 4222")
 	tokenEntry := ui.NewEnvInput()
 	tokenEntry.SetPlaceHolder("{{natsToken}}")
-
 	brokersEntry := ui.NewEnvInput()
 	brokersEntry.SetPlaceHolder("{{kafkaBrokers}} or localhost:9092")
 
@@ -57,9 +64,10 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 
 	var currentType constants.CollectionType
 	var connected bool
+	var authPanel *ui.AuthPanel
 	content := container.NewStack()
 
-	getSave := func() SettingsSave {
+	getSave = func() SettingsSave {
 		out := SettingsSave{Name: nameEntry.Text}
 		switch currentType {
 		case constants.CollectionTypeNATS:
@@ -70,24 +78,33 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 			}
 			out.Auth = entity.Auth{Type: constants.AuthTypeNoAuth}
 		case constants.CollectionTypeKafka:
-			out.Kafka = &entity.KafkaConnection{
-				Brokers: brokersEntry.Text(),
-			}
+			out.Kafka = &entity.KafkaConnection{Brokers: brokersEntry.Text()}
 			out.Auth = entity.Auth{Type: constants.AuthTypeNoAuth}
 		default:
-			out.Auth = authPanel.Get()
+			if authPanel != nil {
+				out.Auth = authPanel.Get()
+			}
 		}
 		return out
 	}
 
-	doSave := func() {
-		if cb.OnSave != nil {
-			cb.OnSave(getSave())
+	notify := func() {
+		if applying || cb.OnChange == nil {
+			return
 		}
+		cb.OnChange(getSave())
 	}
 
-	saveBtn := widget.NewButton("Save", doSave)
-	saveBtn.Importance = widget.HighImportance
+	authPanel = ui.NewAuthPanel(ui.AuthPanelOptions{
+		AllowInherited: false,
+		OnChange:       func(entity.Auth) { notify() },
+	})
+
+	nameEntry.OnChanged = func(string) { notify() }
+	hostEntry.OnChanged(func(string) { notify() })
+	portEntry.OnChanged(func(string) { notify() })
+	tokenEntry.OnChanged(func(string) { notify() })
+	brokersEntry.OnChanged(func(string) { notify() })
 
 	connBtn := widget.NewButton("Connect", nil)
 	applyConnBtn := func() {
@@ -121,37 +138,38 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 		switch currentType {
 		case constants.CollectionTypeNATS:
 			content.Objects = []fyne.CanvasObject{
-				container.NewPadded(container.NewVBox(
-					widget.NewLabel("Collection"),
-					widget.NewForm(
-						widget.NewFormItem("Name", nameEntry),
-						widget.NewFormItem("Type", typeLabel),
-						widget.NewFormItem("Host", hostEntry),
-						widget.NewFormItem("Port", portEntry),
-						widget.NewFormItem("Token", tokenEntry),
-					),
-					envHint,
-					container.NewHBox(saveBtn, connBtn),
-					connStatus,
-				)),
+				container.NewBorder(header.Object, nil, nil, nil,
+					container.NewPadded(container.NewVBox(
+						widget.NewForm(
+							widget.NewFormItem("Name", nameEntry),
+							widget.NewFormItem("Type", typeLabel),
+							widget.NewFormItem("Host", hostEntry),
+							widget.NewFormItem("Port", portEntry),
+							widget.NewFormItem("Token", tokenEntry),
+						),
+						envHint,
+						connBtn,
+						connStatus,
+					)),
+				),
 			}
 		case constants.CollectionTypeKafka:
 			content.Objects = []fyne.CanvasObject{
-				container.NewPadded(container.NewVBox(
-					widget.NewLabel("Collection"),
-					widget.NewForm(
-						widget.NewFormItem("Name", nameEntry),
-						widget.NewFormItem("Type", typeLabel),
-						widget.NewFormItem("Brokers", brokersEntry),
-					),
-					envHint,
-					container.NewHBox(saveBtn, connBtn),
-					connStatus,
-				)),
+				container.NewBorder(header.Object, nil, nil, nil,
+					container.NewPadded(container.NewVBox(
+						widget.NewForm(
+							widget.NewFormItem("Name", nameEntry),
+							widget.NewFormItem("Type", typeLabel),
+							widget.NewFormItem("Brokers", brokersEntry),
+						),
+						envHint,
+						connBtn,
+						connStatus,
+					)),
+				),
 			}
 		default:
 			general := container.NewPadded(container.NewVBox(
-				widget.NewLabel("Collection"),
 				widget.NewForm(
 					widget.NewFormItem("Name", nameEntry),
 					widget.NewFormItem("Type", typeLabel),
@@ -162,7 +180,7 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 				container.NewTabItem("Auth", authPanel.CanvasObject),
 			)
 			content.Objects = []fyne.CanvasObject{
-				container.NewBorder(nil, container.NewPadded(saveBtn), nil, nil, tabs),
+				container.NewBorder(header.Object, nil, nil, nil, tabs),
 			}
 		}
 		content.Refresh()
@@ -176,6 +194,7 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 
 	v := &SettingsView{CanvasObject: content}
 	v.Set = func(name string, auth entity.Auth, nats *entity.NatsConnection, kafka *entity.KafkaConnection, colType constants.CollectionType, isConnected bool) {
+		applying = true
 		currentType = constants.NormalizeCollectionType(colType)
 		nameEntry.SetText(name)
 		typeLabel.SetText(string(currentType))
@@ -184,7 +203,6 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 		if isConnected && isConnectable() {
 			connStatus.SetText("Connected")
 		}
-
 		switch currentType {
 		case constants.CollectionTypeNATS:
 			if nats == nil {
@@ -201,13 +219,17 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 		default:
 			authPanel.Set(auth)
 		}
+		applying = false
 		render()
 	}
 	v.Get = getSave
-	v.Save = doSave
-	v.SetConnectStatus = func(text string) {
-		connStatus.SetText(text)
+	v.Save = func() {
+		if cb.OnSave != nil {
+			cb.OnSave(getSave())
+		}
 	}
+	v.SetDirty = header.SetDirty
+	v.SetConnectStatus = func(text string) { connStatus.SetText(text) }
 	v.SetConnected = func(ok bool) {
 		setConnected(ok)
 		if ok {

@@ -10,46 +10,67 @@ import (
 
 type FolderView struct {
 	fyne.CanvasObject
-	Set  func(name string, auth entity.Auth)
-	Get  func() (name string, auth entity.Auth)
-	Save func()
+	Set      func(name string, auth entity.Auth)
+	Get      func() (name string, auth entity.Auth)
+	Save     func()
+	SetDirty func(dirty bool)
 }
 
-func NewFolderView(onSave func(name string, auth entity.Auth)) *FolderView {
-	nameEntry := widget.NewEntry()
+func NewFolderView(onChange func(name string, auth entity.Auth), onSave func(name string, auth entity.Auth)) *FolderView {
+	var applying bool
+	nameEntry := ui.NewEntry()
 	nameEntry.SetPlaceHolder("Folder name")
 
-	authPanel := ui.NewAuthPanel(ui.AuthPanelOptions{AllowInherited: true})
-
-	saveBtn := widget.NewButton("Save", func() {
-		if onSave != nil {
-			onSave(nameEntry.Text, authPanel.Get())
+	var get func() (string, entity.Auth)
+	header := ui.NewEntityHeader("Folder", func() {
+		if onSave == nil || get == nil {
+			return
 		}
+		name, auth := get()
+		onSave(name, auth)
 	})
-	saveBtn.Importance = widget.HighImportance
+
+	notify := func() {
+		if applying || onChange == nil || get == nil {
+			return
+		}
+		name, auth := get()
+		onChange(name, auth)
+	}
+
+	authPanel := ui.NewAuthPanel(ui.AuthPanelOptions{
+		AllowInherited: true,
+		OnChange:       func(entity.Auth) { notify() },
+	})
+	nameEntry.OnChanged = func(string) { notify() }
+
+	get = func() (string, entity.Auth) {
+		return nameEntry.Text, authPanel.Get()
+	}
 
 	general := container.NewPadded(container.NewVBox(
-		widget.NewLabel("Folder"),
-		widget.NewForm(
-			widget.NewFormItem("Name", nameEntry),
-		),
+		widget.NewForm(widget.NewFormItem("Name", nameEntry)),
 	))
-
 	tabs := container.NewAppTabs(
 		container.NewTabItem("General", general),
 		container.NewTabItem("Auth", authPanel.CanvasObject),
 	)
-
-	root := container.NewBorder(nil, container.NewPadded(saveBtn), nil, nil, tabs)
+	root := container.NewBorder(header.Object, nil, nil, nil, tabs)
 
 	v := &FolderView{CanvasObject: root}
 	v.Set = func(name string, auth entity.Auth) {
+		applying = true
 		nameEntry.SetText(name)
 		authPanel.Set(auth)
+		applying = false
 	}
-	v.Get = func() (string, entity.Auth) {
-		return nameEntry.Text, authPanel.Get()
+	v.Get = get
+	v.Save = func() {
+		if onSave != nil {
+			name, auth := get()
+			onSave(name, auth)
+		}
 	}
-	v.Save = func() { saveBtn.OnTapped() }
+	v.SetDirty = header.SetDirty
 	return v
 }

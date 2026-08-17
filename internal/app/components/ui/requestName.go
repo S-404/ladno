@@ -6,27 +6,28 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// RequestNameField — редактируемое имя запроса (сохранение при потере фокуса / Enter).
+// RequestNameField — редактируемое имя запроса.
 type RequestNameField struct {
 	Object fyne.CanvasObject
 	Set    func(name string)
 	Get    func() string
 }
 
-func NewRequestNameField(onSave func(name string)) *RequestNameField {
+func NewRequestNameField(onChange func(name string)) *RequestNameField {
 	entry := &nameFocusEntry{}
 	entry.ExtendBaseWidget(entry)
 	entry.SetPlaceHolder("Request name")
 
 	var applying bool
-	save := func() {
-		if applying || onSave == nil {
+	notify := func() {
+		if applying || onChange == nil {
 			return
 		}
-		onSave(entry.Text)
+		onChange(entry.Text)
 	}
-	entry.onFocusLost = save
-	entry.OnSubmitted = func(string) { save() }
+	entry.onFocusLost = notify
+	entry.OnSubmitted = func(string) { notify() }
+	entry.OnChanged = func(string) { notify() }
 
 	form := widget.NewForm(widget.NewFormItem("Name", entry))
 	return &RequestNameField{
@@ -50,4 +51,12 @@ func (e *nameFocusEntry) FocusLost() {
 	if e.onFocusLost != nil {
 		e.onFocusLost()
 	}
+}
+
+func (e *nameFocusEntry) TypedShortcut(s fyne.Shortcut) {
+	if isSaveShortcut(s) {
+		triggerGlobalSave()
+		return
+	}
+	e.Entry.TypedShortcut(s)
 }

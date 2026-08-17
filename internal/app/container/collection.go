@@ -1,6 +1,7 @@
 package container
 
 import (
+	"fmt"
 	"log"
 
 	"fyne.io/fyne/v2"
@@ -30,58 +31,60 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 
 	var tree *collection.Tree
 
+	drafts := app.Store.Draft
+
 	selectCollection := func(col entity.Collection) {
 		col.Type = constants.NormalizeCollectionType(col.Type)
+		d := drafts.EnsureCollectionDraft(col)
 		var nats *entity.NatsConnection
-		if col.Nats != nil {
-			cp := *col.Nats
+		if d.Nats != nil {
+			cp := *d.Nats
 			nats = &cp
 		}
 		var kafka *entity.KafkaConnection
-		if col.Kafka != nil {
-			cp := *col.Kafka
+		if d.Kafka != nil {
+			cp := *d.Kafka
 			kafka = &cp
 		}
 		selStore.SetSelection(entity.Selection{
 			Kind:           entity.SelectionCollection,
 			CollectionID:   col.Id,
 			CollectionType: col.Type,
-			Name:           col.Name,
-			Auth:           col.Auth,
+			Name:           d.Name,
+			Auth:           d.Auth,
 			Nats:           nats,
 			Kafka:          kafka,
 		})
 	}
 	selectFolder := func(col entity.Collection, item entity.CollectionItem, path []string) {
 		col.Type = constants.NormalizeCollectionType(col.Type)
+		d := drafts.EnsureFolderDraft(col.Id, item.Id, item.Name, item.Auth)
 		selStore.SetSelection(entity.Selection{
 			Kind:           entity.SelectionFolder,
 			CollectionID:   col.Id,
 			CollectionType: col.Type,
 			ItemID:         item.Id,
 			Path:           path,
-			Name:           item.Name,
-			Auth:           item.Auth,
+			Name:           d.Name,
+			Auth:           d.Auth,
 		})
 	}
 	selectRequest := func(col entity.Collection, item entity.CollectionItem, path []string) {
 		col.Type = constants.NormalizeCollectionType(col.Type)
-		auth := entity.Auth{Type: constants.AuthTypeInherited}
-		if item.Request != nil {
-			auth = item.Request.Auth
-		}
+		d := drafts.EnsureRequestDraft(col.Id, item.Id, item.Name, item.Request)
+		req := d.Request
 		selStore.SetSelection(entity.Selection{
 			Kind:           entity.SelectionRequest,
 			CollectionID:   col.Id,
 			CollectionType: col.Type,
 			ItemID:         item.Id,
 			Path:           path,
-			Name:           item.Name,
-			Auth:           auth,
-			Request:        item.Request,
+			Name:           d.Name,
+			Auth:           req.Auth,
+			Request:        &req,
 		})
-		if col.Type == constants.CollectionTypeREST && item.Request != nil {
-			restStore.SetDraft(draftFromCollectionItem(item))
+		if col.Type == constants.CollectionTypeREST {
+			restStore.SetDraft(restDraftFromRequestDraft(d))
 		}
 	}
 
@@ -271,6 +274,36 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 			},
 		},
 	)
+	tree.SetDirtyResolver(collection.DirtyResolver{
+		IsDirty: func(collectionID, itemID string, isCollection, isFolder bool) bool {
+			if isCollection {
+				return drafts.IsCollectionDirty(collectionID)
+			}
+			if isFolder {
+				return drafts.IsFolderDirty(itemID)
+			}
+			return drafts.IsRequestDirty(itemID)
+		},
+		ResolveLabel: func(collectionID, itemID string, isCollection, isFolder bool, fallback string) string {
+			if isCollection {
+				return drafts.CollectionDisplayName(collectionID, fallback)
+			}
+			if isFolder {
+				return drafts.FolderDisplayName(itemID, fallback)
+			}
+			d, ok := drafts.GetRequestDraft(itemID)
+			if !ok {
+				return fallback
+			}
+			if colType := collectionTypeByID(wsStore, collectionID); colType == constants.CollectionTypeREST {
+				return fmt.Sprintf("[%s] %s", d.Request.Method, d.Name)
+			}
+			return d.Name
+		},
+	})
+	drafts.AddDirtyListener(func() {
+		fyne.Do(tree.RefreshDirty)
+	})
 
 	refreshConnected := func() {
 		ids := natsStore.ConnectedIDs()
@@ -346,13 +379,17 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 	)
 }
 
-func draftFromCollectionItem(item entity.CollectionItem) entity.RestDraft {
-	req := item.Request
+func restDraftFromRequestDraft(d entity.RequestDraft) entity.RestDraft {
+	req := d.Request
 	pathParams := map[string]string{}
 	for _, v := range req.Url.Variable {
 		if v.Key != "" {
 			pathParams[v.Key] = v.Value
 		}
+	}
+	bodyMode := req.BodyMode
+	if bodyMode == "" {
+		bodyMode = entity.RestBodyRaw
 	}
 	return entity.RestDraft{
 		Method:     string(req.Method),
@@ -360,8 +397,25 @@ func draftFromCollectionItem(item entity.CollectionItem) entity.RestDraft {
 		PathParams: pathParams,
 		Headers:    req.Header,
 		Auth:       req.Auth,
-		BodyMode:   entity.RestBodyRaw,
+		BodyMode:   bodyMode,
+		RawBody:    req.Body,
+		FormData:   req.FormData,
 	}
+}
+
+func collectionTypeByID(wsStore interface {
+	GetSelectedWorkspace() *entity.Workspace
+}, collectionID string) constants.CollectionType {
+	ws := wsStore.GetSelectedWorkspace()
+	if ws == nil {
+		return ""
+	}
+	for i := range ws.Collections {
+		if ws.Collections[i].Id == collectionID {
+			return constants.NormalizeCollectionType(ws.Collections[i].Type)
+		}
+	}
+	return ""
 }
 
 func findCollectionItem(items []entity.CollectionItem, id string) *entity.CollectionItem {

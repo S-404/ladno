@@ -15,6 +15,7 @@ type RequestView struct {
 	Get          func() entity.NatsRequest
 	SetRunning   func(running bool)
 	SetSubActive func(active bool)
+	SetDirty     func(dirty bool)
 	Messages     *MessagesView
 	Subject      func() string
 }
@@ -22,12 +23,12 @@ type RequestView struct {
 func NewRequestView(
 	onRun func(method constants.NatsMethod, req entity.NatsRequest),
 	onUnsub func(),
-	onNameSave func(name string),
+	onChange func(name string, req entity.NatsRequest),
+	onSave func(),
 	messages *MessagesView,
 ) *RequestView {
-	title := widget.NewLabel("NATS request")
-	title.TextStyle = fyne.TextStyle{Bold: true}
-	nameField := ui.NewRequestNameField(onNameSave)
+	var applying bool
+	header := ui.NewEntityHeader("NATS request", onSave)
 	statusLabel := widget.NewLabel("")
 	statusLabel.TextStyle = fyne.TextStyle{Italic: true}
 
@@ -37,11 +38,18 @@ func NewRequestView(
 	payload.SetPlaceHolder(`{"ok": true, "token": "{{token}}"}`)
 	payload.SetMinRowsVisible(6)
 
-	headers := ui.NewKVTable(nil, nil)
-	envHint := widget.NewLabel("Subject, headers and payload support {{var}} from the active environment.")
-	envHint.TextStyle = fyne.TextStyle{Italic: true}
+	var nameField *ui.RequestNameField
+	var headers *ui.KVTable
+	var getReq func() entity.NatsRequest
 
-	getReq := func() entity.NatsRequest {
+	notify := func() {
+		if applying || onChange == nil || nameField == nil || getReq == nil {
+			return
+		}
+		onChange(nameField.Get(), getReq())
+	}
+	headers = ui.NewKVTable(nil, func([]ui.KVRow) { notify() })
+	getReq = func() entity.NatsRequest {
 		rows := headers.GetRows()
 		vars := make([]entity.Variable, 0, len(rows))
 		for _, r := range rows {
@@ -50,12 +58,14 @@ func NewRequestView(
 			}
 			vars = append(vars, entity.Variable{Key: r.Key, Value: r.Value, Type: "string"})
 		}
-		return entity.NatsRequest{
-			Subject: subject.Text(),
-			Headers: vars,
-			Payload: payload.Text(),
-		}
+		return entity.NatsRequest{Subject: subject.Text(), Headers: vars, Payload: payload.Text()}
 	}
+	nameField = ui.NewRequestNameField(func(string) { notify() })
+	subject.OnChanged(func(string) { notify() })
+	payload.OnChanged(func(string) { notify() })
+
+	envHint := widget.NewLabel("Subject, headers and payload support {{var}} from the active environment.")
+	envHint.TextStyle = fyne.TextStyle{Italic: true}
 
 	publishBtn := widget.NewButton("Publish", func() {
 		if onRun != nil {
@@ -93,43 +103,28 @@ func NewRequestView(
 	})
 	applySubBtn()
 
-	actions := container.NewBorder(
-		nil, nil,
-		container.NewHBox(publishBtn, requestBtn, subBtn),
-		statusLabel,
-		nil,
-	)
-
+	actions := container.NewBorder(nil, nil, container.NewHBox(publishBtn, requestBtn, subBtn), statusLabel, nil)
 	requestPanel := container.NewBorder(
 		container.NewVBox(
-			title,
+			header.Object,
 			nameField.Object,
-			widget.NewForm(
-				widget.NewFormItem("Subject", subject),
-			),
+			widget.NewForm(widget.NewFormItem("Subject", subject)),
 			widget.NewLabel("Headers"),
 			headers,
 			widget.NewLabel("Payload"),
 			envHint,
 		),
-		actions,
-		nil, nil,
-		payload,
+		actions, nil, nil, payload,
 	)
-
-	msgObj := messages.Object()
 	split := container.NewVSplit(
 		ui.NewMinSizeBox(fyne.NewSize(200, 80), container.NewPadded(requestPanel)),
-		ui.NewMinSizeBox(fyne.NewSize(200, 80), msgObj),
+		ui.NewMinSizeBox(fyne.NewSize(200, 80), messages.Object()),
 	)
 	split.SetOffset(0.55)
 
-	v := &RequestView{
-		CanvasObject: split,
-		Messages:     messages,
-		Subject:      func() string { return subject.Text() },
-	}
+	v := &RequestView{CanvasObject: split, Messages: messages, Subject: func() string { return subject.Text() }}
 	v.Get = getReq
+	v.SetDirty = header.SetDirty
 	v.SetRunning = func(running bool) {
 		if running {
 			publishBtn.Disable()
@@ -153,6 +148,7 @@ func NewRequestView(
 		statusLabel.SetText("")
 	}
 	v.Set = func(req *entity.NatsRequest, name string, subscribed bool) {
+		applying = true
 		nameField.Set(name)
 		statusLabel.SetText("")
 		if req == nil {
@@ -160,16 +156,17 @@ func NewRequestView(
 			payload.SetText("")
 			headers.SetRows(nil)
 			v.SetSubActive(false)
-			return
+		} else {
+			subject.SetText(req.Subject)
+			payload.SetText(req.Payload)
+			rows := make([]ui.KVRow, 0, len(req.Headers))
+			for _, h := range req.Headers {
+				rows = append(rows, ui.KVRow{Enabled: true, Key: h.Key, Value: h.Value})
+			}
+			headers.SetRows(rows)
+			v.SetSubActive(subscribed)
 		}
-		subject.SetText(req.Subject)
-		payload.SetText(req.Payload)
-		rows := make([]ui.KVRow, 0, len(req.Headers))
-		for _, h := range req.Headers {
-			rows = append(rows, ui.KVRow{Enabled: true, Key: h.Key, Value: h.Value})
-		}
-		headers.SetRows(rows)
-		v.SetSubActive(subscribed)
+		applying = false
 	}
 	return v
 }

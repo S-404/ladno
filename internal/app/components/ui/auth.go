@@ -11,7 +11,9 @@ import (
 type AuthPanelOptions struct {
 	// AllowInherited включает тип Inherited (для folder/request).
 	AllowInherited bool
-	// OnSave если задан — показывает кнопку Save.
+	// OnChange вызывается при изменении auth (без отдельной кнопки Save).
+	OnChange func(auth entity.Auth)
+	// OnSave если задан — показывает кнопку Save (legacy).
 	OnSave func(auth entity.Auth)
 }
 
@@ -31,12 +33,21 @@ func NewAuthPanel(opts AuthPanelOptions) *AuthPanel {
 		options = append([]string{string(constants.AuthTypeInherited)}, options...)
 	}
 
-	authSelect := widget.NewSelect(options, nil)
+	var applying bool
+	var getAuth func() entity.Auth
+	notify := func() {
+		if applying || opts.OnChange == nil || getAuth == nil {
+			return
+		}
+		opts.OnChange(getAuth())
+	}
+
+	authSelect := widget.NewSelect(options, func(string) { notify() })
 	authSelect.SetSelected(string(constants.AuthTypeNoAuth))
 
-	authData := NewKVTable(nil, nil)
+	authData := NewKVTable(nil, func([]KVRow) { notify() })
 
-	getAuth := func() entity.Auth {
+	getAuth = func() entity.Auth {
 		rows := authData.GetRows()
 		vars := make([]entity.Variable, 0, len(rows))
 		for _, r := range rows {
@@ -61,7 +72,7 @@ func NewAuthPanel(opts AuthPanelOptions) *AuthPanel {
 	)
 
 	var root fyne.CanvasObject = container.NewPadded(container.NewVScroll(form))
-	if opts.OnSave != nil {
+	if opts.OnSave != nil && opts.OnChange == nil {
 		saveBtn := widget.NewButton("Save", func() {
 			opts.OnSave(getAuth())
 		})
@@ -73,6 +84,7 @@ func NewAuthPanel(opts AuthPanelOptions) *AuthPanel {
 
 	p := &AuthPanel{CanvasObject: root}
 	p.Set = func(auth entity.Auth) {
+		applying = true
 		t := auth.Type
 		if t == "" {
 			if opts.AllowInherited {
@@ -90,6 +102,7 @@ func NewAuthPanel(opts AuthPanelOptions) *AuthPanel {
 			rows = append(rows, KVRow{Enabled: true, Key: d.Key, Value: d.Value})
 		}
 		authData.SetRows(rows)
+		applying = false
 	}
 	p.Get = getAuth
 	return p

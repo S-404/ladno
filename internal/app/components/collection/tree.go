@@ -53,6 +53,12 @@ type treeNode struct {
 	path         []string
 }
 
+// DirtyResolver reports unsaved edits for tree rows.
+type DirtyResolver struct {
+	IsDirty      func(collectionID, itemID string, isCollection, isFolder bool) bool
+	ResolveLabel func(collectionID, itemID string, isCollection, isFolder bool, fallback string) string
+}
+
 type Tree struct {
 	widget.BaseWidget
 
@@ -66,6 +72,7 @@ type Tree struct {
 	handler   SelectHandler
 	context   ContextHandler
 	reorder   ReorderHandler
+	dirty     DirtyResolver
 	tree      *widget.Tree
 
 	rowsByUID map[string]*treeRow
@@ -85,6 +92,7 @@ type Tree struct {
 }
 
 var colorConnected = color.NRGBA{R: 0x34, G: 0xA8, B: 0x53, A: 0xFF}
+var colorDirty = color.NRGBA{R: 0xFF, G: 0x98, B: 0x00, A: 0xFF}
 var colorInsert = color.NRGBA{R: 0x1E, G: 0x88, B: 0xE5, A: 0xFF}
 
 const dragThreshold = float32(6)
@@ -147,7 +155,17 @@ func NewTree(handler SelectHandler, context ContextHandler, reorder ReorderHandl
 			}
 
 			row.icon.SetResource(res)
-			row.label.SetText(n.label)
+			label := n.label
+			isCol := n.kind == nodeCollection
+			isFolder := n.kind == nodeFolder
+			itemID := ""
+			if !isCol {
+				itemID = n.item.Id
+			}
+			if ct.dirty.ResolveLabel != nil {
+				label = ct.dirty.ResolveLabel(n.collectionID, itemID, isCol, isFolder, n.label)
+			}
+			row.label.SetText(label)
 			row.SetDraggingSource(uid != "" && uid == dragSource)
 			if uid != "" && uid == dropInto {
 				row.SetDropIndicator(dropIntoIndicator)
@@ -161,7 +179,12 @@ func NewTree(handler SelectHandler, context ContextHandler, reorder ReorderHandl
 				row.SetDropIndicator(dropNone)
 			}
 
-			if n.kind == nodeCollection && connected {
+			dirty := ct.dirty.IsDirty != nil && ct.dirty.IsDirty(n.collectionID, itemID, isCol, isFolder)
+			if dirty {
+				row.status.FillColor = colorDirty
+				row.status.StrokeColor = colorDirty
+				row.status.Show()
+			} else if n.kind == nodeCollection && connected {
 				row.status.FillColor = colorConnected
 				row.status.StrokeColor = colorConnected
 				row.status.Show()
@@ -181,6 +204,21 @@ func NewTree(handler SelectHandler, context ContextHandler, reorder ReorderHandl
 
 func (ct *Tree) onRowPrimary(uid string) {
 	ct.tree.Select(uid)
+}
+
+func (ct *Tree) SetDirtyResolver(r DirtyResolver) {
+	ct.mu.Lock()
+	ct.dirty = r
+	ct.mu.Unlock()
+	if ct.tree != nil {
+		ct.tree.Refresh()
+	}
+}
+
+func (ct *Tree) RefreshDirty() {
+	if ct.tree != nil {
+		ct.tree.Refresh()
+	}
 }
 
 func (ct *Tree) registerRow(uid string, row *treeRow) {
@@ -907,8 +945,8 @@ func (ct *Tree) rebuild() {
 	ct.cols = cols
 	ct.mu.Unlock()
 
-	log.Printf("[collections] Tree.rebuild filter=%q collections=%d nodes=%d roots=%v",
-		filter, len(visible), len(nodes), childIDs[""])
+	log.Printf("[collections] Tree.rebuild filter=%q collections=%d nodes=%d roots=%v opened=%d",
+		filter, len(visible), len(nodes), childIDs[""], len(opened))
 
 	ct.tree.Refresh()
 
@@ -916,32 +954,28 @@ func (ct *Tree) rebuild() {
 	roots := append([]string{}, ct.childIDs[""]...)
 	ct.mu.RUnlock()
 
-	// Close previously opened branches so Fyne reloads children after parent changes.
+	if filter != "" {
+		for _, uid := range roots {
+			ct.openAllUnder(uid)
+		}
+		return
+	}
+
+	// First populate: expand collections so the tree isn't fully collapsed.
+	if len(prevNodes) == 0 {
+		for _, uid := range roots {
+			ct.tree.OpenBranch(uid)
+		}
+		return
+	}
+
+	// Preserve expand/collapse across rebuilds (e.g. Save → PublishWorkspace).
 	for _, uid := range opened {
 		ct.mu.RLock()
 		_, exists := ct.nodes[uid]
 		ct.mu.RUnlock()
 		if exists {
-			ct.tree.CloseBranch(uid)
-		}
-	}
-	ct.tree.Refresh()
-
-	for _, uid := range roots {
-		if filter != "" {
-			ct.openAllUnder(uid)
-			continue
-		}
-		ct.tree.OpenBranch(uid)
-	}
-	if filter == "" {
-		for _, uid := range opened {
-			ct.mu.RLock()
-			_, exists := ct.nodes[uid]
-			ct.mu.RUnlock()
-			if exists {
-				ct.tree.OpenBranch(uid)
-			}
+			ct.tree.OpenBranch(uid)
 		}
 	}
 }

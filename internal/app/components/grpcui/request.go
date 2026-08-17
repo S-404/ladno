@@ -10,28 +10,53 @@ import (
 
 type RequestView struct {
 	fyne.CanvasObject
-	Set     func(req *entity.GrpcRequest, name string, auth entity.Auth)
-	GetAuth func() entity.Auth
+	Set      func(req *entity.GrpcRequest, name string, auth entity.Auth)
+	SetDirty func(dirty bool)
 }
 
-func NewRequestView(onAuthSave func(auth entity.Auth), onNameSave func(name string)) *RequestView {
-	title := widget.NewLabel("gRPC request")
-	title.TextStyle = fyne.TextStyle{Bold: true}
-	nameField := ui.NewRequestNameField(onNameSave)
+func NewRequestView(onChange func(name string, req entity.GrpcRequest, auth entity.Auth), onSave func()) *RequestView {
+	var applying bool
+	header := ui.NewEntityHeader("gRPC request", onSave)
 
-	target := widget.NewEntry()
+	target := ui.NewEntry()
 	target.SetPlaceHolder("host:port")
-	method := widget.NewEntry()
+	method := ui.NewEntry()
 	method.SetPlaceHolder("package.Service/Method")
-	message := widget.NewMultiLineEntry()
+	message := ui.NewMultiLineEntry()
 	message.SetPlaceHolder("JSON message")
 	message.SetMinRowsVisible(8)
 
-	meta := ui.NewKVTable(nil, nil)
-	authPanel := ui.NewAuthPanel(ui.AuthPanelOptions{
-		AllowInherited: true,
-		OnSave:         onAuthSave,
-	})
+	var nameField *ui.RequestNameField
+	var meta *ui.KVTable
+	var authPanel *ui.AuthPanel
+	var getReq func() entity.GrpcRequest
+
+	notify := func() {
+		if applying || onChange == nil || nameField == nil || authPanel == nil || getReq == nil {
+			return
+		}
+		onChange(nameField.Get(), getReq(), authPanel.Get())
+	}
+
+	meta = ui.NewKVTable(nil, func([]ui.KVRow) { notify() })
+	getReq = func() entity.GrpcRequest {
+		rows := meta.GetRows()
+		vars := make([]entity.Variable, 0, len(rows))
+		for _, r := range rows {
+			if r.Key == "" {
+				continue
+			}
+			vars = append(vars, entity.Variable{Key: r.Key, Value: r.Value, Type: "string"})
+		}
+		return entity.GrpcRequest{
+			Target: target.Text, Method: method.Text, Message: message.Text, Metadata: vars,
+		}
+	}
+	nameField = ui.NewRequestNameField(func(string) { notify() })
+	authPanel = ui.NewAuthPanel(ui.AuthPanelOptions{AllowInherited: true, OnChange: func(entity.Auth) { notify() }})
+	target.OnChanged = func(string) { notify() }
+	method.OnChanged = func(string) { notify() }
+	message.OnChanged = func(string) { notify() }
 
 	send := widget.NewButton("Send", nil)
 	send.Disable()
@@ -40,7 +65,7 @@ func NewRequestView(onAuthSave func(auth entity.Auth), onNameSave func(name stri
 
 	requestTab := container.NewBorder(
 		container.NewVBox(
-			title,
+			header.Object,
 			nameField.Object,
 			widget.NewForm(
 				widget.NewFormItem("Target", target),
@@ -54,7 +79,6 @@ func NewRequestView(onAuthSave func(auth entity.Auth), onNameSave func(name stri
 		nil, nil,
 		message,
 	)
-
 	tabs := container.NewAppTabs(
 		container.NewTabItem("Request", container.NewPadded(requestTab)),
 		container.NewTabItem("Auth", authPanel.CanvasObject),
@@ -62,6 +86,7 @@ func NewRequestView(onAuthSave func(auth entity.Auth), onNameSave func(name stri
 
 	v := &RequestView{CanvasObject: tabs}
 	v.Set = func(req *entity.GrpcRequest, name string, auth entity.Auth) {
+		applying = true
 		nameField.Set(name)
 		authPanel.Set(auth)
 		if req == nil {
@@ -69,17 +94,18 @@ func NewRequestView(onAuthSave func(auth entity.Auth), onNameSave func(name stri
 			method.SetText("")
 			message.SetText("")
 			meta.SetRows(nil)
-			return
+		} else {
+			target.SetText(req.Target)
+			method.SetText(req.Method)
+			message.SetText(req.Message)
+			rows := make([]ui.KVRow, 0, len(req.Metadata))
+			for _, m := range req.Metadata {
+				rows = append(rows, ui.KVRow{Enabled: true, Key: m.Key, Value: m.Value})
+			}
+			meta.SetRows(rows)
 		}
-		target.SetText(req.Target)
-		method.SetText(req.Method)
-		message.SetText(req.Message)
-		rows := make([]ui.KVRow, 0, len(req.Metadata))
-		for _, m := range req.Metadata {
-			rows = append(rows, ui.KVRow{Enabled: true, Key: m.Key, Value: m.Value})
-		}
-		meta.SetRows(rows)
+		applying = false
 	}
-	v.GetAuth = authPanel.Get
+	v.SetDirty = header.SetDirty
 	return v
 }

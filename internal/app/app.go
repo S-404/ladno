@@ -7,6 +7,7 @@ import (
 	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity/shared"
 
+	appContainer "github.com/s-404/ladno/internal/app/container"
 	"github.com/s-404/ladno/internal/app/layout"
 	"github.com/s-404/ladno/internal/app/repository"
 	"github.com/s-404/ladno/internal/app/service"
@@ -41,4 +42,5 @@ func Init(window fyne.Window) {
 	body.SetOffset(0.75)
 
 	app.Window.SetContent(container.NewBorder(header, nil, nil, nil, body))
+	appContainer.BindGlobalSaveShortcut(&app)
 }

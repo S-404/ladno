@@ -132,6 +132,14 @@ func (e *envFocusEntry) FocusLost() {
 	}
 }
 
+func (e *envFocusEntry) TypedShortcut(s fyne.Shortcut) {
+	if isSaveShortcut(s) {
+		triggerGlobalSave()
+		return
+	}
+	e.Entry.TypedShortcut(s)
+}
+
 // EnvInput — Entry с подсветкой {{var}} вне фокуса.
 type EnvInput struct {
 	widget.BaseWidget

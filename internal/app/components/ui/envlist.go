@@ -28,6 +28,7 @@ type EnvList struct {
 	selectedID string
 	onSelect   func(id string)
 	onReorder  func(id string, toIndex int)
+	isDirty    func(id string) bool
 
 	rowsByID map[string]*envListRow
 	root     *fyne.Container
@@ -93,6 +94,13 @@ func (l *EnvList) SetSelected(id string) {
 	l.refreshIndicators()
 }
 
+func (l *EnvList) SetDirtyCheck(fn func(id string) bool) {
+	l.mu.Lock()
+	l.isDirty = fn
+	l.mu.Unlock()
+	l.refreshIndicators()
+}
+
 func (l *EnvList) rebuild() {
 	l.mu.Lock()
 	items := append([]EnvListItem(nil), l.items...)
@@ -101,10 +109,14 @@ func (l *EnvList) rebuild() {
 	l.rowsByID = map[string]*envListRow{}
 	l.mu.Unlock()
 
+	l.mu.Lock()
+	dirtyFn := l.isDirty
+	l.mu.Unlock()
 	objs := make([]fyne.CanvasObject, 0, len(items))
 	for _, it := range items {
 		row := newEnvListRow(l)
-		row.SetItem(it.ID, it.Name, it.ID == selected, it.ID == active)
+		dirty := dirtyFn != nil && dirtyFn(it.ID)
+		row.SetItem(it.ID, it.Name, it.ID == selected, it.ID == active, dirty)
 		l.mu.Lock()
 		l.rowsByID[it.ID] = row
 		l.mu.Unlock()
@@ -128,6 +140,7 @@ func (l *EnvList) refreshIndicators() {
 		rows[id] = r
 	}
 	items := append([]EnvListItem(nil), l.items...)
+	dirtyFn := l.isDirty
 	l.mu.Unlock()
 
 	for _, it := range items {
@@ -135,7 +148,8 @@ func (l *EnvList) refreshIndicators() {
 		if row == nil {
 			continue
 		}
-		row.SetItem(it.ID, it.Name, it.ID == selected, it.ID == active)
+		dirty := dirtyFn != nil && dirtyFn(it.ID)
+		row.SetItem(it.ID, it.Name, it.ID == selected, it.ID == active, dirty)
 		row.SetDraggingSource(it.ID == source && source != "")
 		ind := dropNone
 		if lineID != "" && it.ID == lineID {
@@ -317,6 +331,8 @@ func (l *EnvList) selectID(id string) {
 	}
 }
 
+var colorEnvDirty = color.NRGBA{R: 0xFF, G: 0x98, B: 0x00, A: 0xFF}
+
 type envListRow struct {
 	widget.BaseWidget
 	list *EnvList
@@ -324,6 +340,7 @@ type envListRow struct {
 	hold HoldDrag
 
 	label      *widget.Label
+	dot        *canvas.Circle
 	topLine    *canvas.Rectangle
 	bottomLine *canvas.Rectangle
 	root       *fyne.Container
@@ -332,16 +349,21 @@ type envListRow struct {
 func newEnvListRow(list *EnvList) *envListRow {
 	label := widget.NewLabel("")
 	label.Truncation = fyne.TextTruncateEllipsis
+	dot := canvas.NewCircle(color.Transparent)
+	dot.Hide()
+	dotBox := NewMinSizeBox(fyne.NewSize(8, 8), dot)
 	topLine := canvas.NewRectangle(color.Transparent)
 	topLine.SetMinSize(fyne.NewSize(1, 2))
 	topLine.Hide()
 	bottomLine := canvas.NewRectangle(color.Transparent)
 	bottomLine.SetMinSize(fyne.NewSize(1, 2))
 	bottomLine.Hide()
-	root := container.NewBorder(topLine, bottomLine, nil, nil, label)
+	body := container.NewBorder(nil, nil, container.NewCenter(dotBox), nil, label)
+	root := container.NewBorder(topLine, bottomLine, nil, nil, body)
 	r := &envListRow{
 		list:       list,
 		label:      label,
+		dot:        dot,
 		topLine:    topLine,
 		bottomLine: bottomLine,
 		root:       root,
@@ -350,7 +372,7 @@ func newEnvListRow(list *EnvList) *envListRow {
 	return r
 }
 
-func (r *envListRow) SetItem(id, name string, selected, active bool) {
+func (r *envListRow) SetItem(id, name string, selected, active, dirty bool) {
 	r.id = id
 	text := name
 	if active {
@@ -363,6 +385,14 @@ func (r *envListRow) SetItem(id, name string, selected, active bool) {
 		r.label.Importance = widget.MediumImportance
 	}
 	r.label.Refresh()
+	if dirty {
+		r.dot.FillColor = colorEnvDirty
+		r.dot.StrokeColor = colorEnvDirty
+		r.dot.Show()
+	} else {
+		r.dot.Hide()
+	}
+	r.dot.Refresh()
 }
 
 func (r *envListRow) SetDraggingSource(on bool) {

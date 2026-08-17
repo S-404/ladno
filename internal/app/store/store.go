@@ -5,6 +5,7 @@ import (
 )
 
 type Store struct {
+	Draft     IDraftStore
 	Env       IEnvStore
 	Kafka     IKafkaStore
 	Log       ILogStore
@@ -20,13 +21,15 @@ func NewStore(service *service.Service) *Store {
 	envStore := NewEnvStore(service.Env, settingsStore)
 	logStore := NewLogStore(settingsStore)
 	wsStore := NewWorkspaceStore(service.Workspace)
+	selStore := NewSelectionStore(wsStore)
 	return &Store{
+		Draft:     NewDraftStore(wsStore, selStore, envStore),
 		Env:       envStore,
 		Kafka:     NewKafkaStore(service.Kafka, envStore, logStore, wsStore, settingsStore),
 		Log:       logStore,
 		Nats:      NewNatsStore(service.Nats, envStore, logStore, wsStore, settingsStore),
 		Rest:      NewRestStore(service.Rest, envStore, logStore),
-		Selection: NewSelectionStore(wsStore),
+		Selection: selStore,
 		Settings:  settingsStore,
 		Workspace: wsStore,
 	}

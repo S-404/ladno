@@ -300,6 +300,14 @@ func (e *urlEntry) FocusLost() {
 	}
 }
 
+func (e *urlEntry) TypedShortcut(s fyne.Shortcut) {
+	if isSaveShortcut(s) {
+		triggerGlobalSave()
+		return
+	}
+	e.Entry.TypedShortcut(s)
+}
+
 func (e *urlEntry) KeyDown(key *fyne.KeyEvent) {
 	switch key.Name {
 	case fyne.KeyReturn, fyne.KeyEscape:

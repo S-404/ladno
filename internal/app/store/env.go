@@ -20,12 +20,14 @@ type IEnvStore interface {
 	GetIsFetching() *binding.Bool
 	Create(name string)
 	SaveSelected(name string, vars []entity.EnvVariable)
+	PersistEnv(id, name string, vars []entity.EnvVariable) bool
 	DeleteSelected()
 	CloneSelected()
 	MoveEnv(id string, toIndex int) bool
 	ActiveVariables() map[string]string
 	GetItemByIndex(index int) *entity.Env
 	GetEnvDataItem(item binding.DataItem) *entity.Env
+	GetEnvByID(id string) *entity.Env
 }
 
 type EnvStore struct {
@@ -150,16 +152,24 @@ func (s *EnvStore) SaveSelected(name string, vars []entity.EnvVariable) {
 	if sel == nil {
 		return
 	}
+	s.PersistEnv(sel.Id, name, vars)
+}
+
+// PersistEnv writes env to memory + disk (explicit Save).
+func (s *EnvStore) PersistEnv(id, name string, vars []entity.EnvVariable) bool {
+	if id == "" {
+		return false
+	}
 	copied := make([]entity.EnvVariable, len(vars))
 	copy(copied, vars)
-	sel.Name = name
-	sel.Variables = copied
-	s.replaceItem(sel)
-
 	updated := &entity.Env{
-		Id:        sel.Id,
+		Id:        id,
 		Name:      name,
 		Variables: copied,
+	}
+	s.replaceItem(updated)
+	if sel := s.selectedEnv(); sel != nil && sel.Id == id {
+		_ = s.Selected.Set(updated)
 	}
 	s.envService.Update(updated, func(saved *entity.Env, err error) {
 		fyne.Do(func() {
@@ -168,8 +178,26 @@ func (s *EnvStore) SaveSelected(name string, vars []entity.EnvVariable) {
 				return
 			}
 			s.replaceItem(saved)
+			if sel := s.selectedEnv(); sel != nil && sel.Id == id {
+				_ = s.Selected.Set(saved)
+			}
 		})
 	})
+	return true
+}
+
+func (s *EnvStore) GetEnvByID(id string) *entity.Env {
+	items, err := s.Items.Get()
+	if err != nil {
+		return nil
+	}
+	for _, item := range items {
+		env, ok := item.(*entity.Env)
+		if ok && env != nil && env.Id == id {
+			return env
+		}
+	}
+	return nil
 }
 
 func (s *EnvStore) DeleteSelected() {

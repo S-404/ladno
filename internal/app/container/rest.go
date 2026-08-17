@@ -14,19 +14,23 @@ import (
 func RestContainer(app *shared.App) fyne.CanvasObject {
 	restStore := app.Store.Rest
 	selStore := app.Store.Selection
+	drafts := app.Store.Draft
 	envStore := app.Store.Env
 	requestURL := binding.NewString()
-	requestURL.Set("")
+	_ = requestURL.Set("")
 
 	methods := []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}
 
 	var headers []ui.KVRow
-
+	var applying bool
 	var requestInput *rest.RequestInputView
 	var paramsView *rest.RequestParamsView
 	var bodyView *rest.RequestBodyView
 	var headersTable *ui.KVTable
 	var previewView *rest.PreviewView
+	var authPanel *ui.AuthPanel
+	var nameField *ui.RequestNameField
+	var header *ui.EntityHeader
 	responseView := rest.NewResponseView()
 
 	buildReq := func() entity.RestRequest {
@@ -47,37 +51,76 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		return req
 	}
 
-	send := func() {
-		restStore.Send(buildReq())
-	}
-
-	requestInput = rest.NewRequestInput(methods, requestURL, send)
-	paramsView = rest.NewRequestParams(requestURL)
-	headersTable = rest.NewRequestHeaders(nil, func(rows []ui.KVRow) {
-		headers = rows
-	})
-	bodyView = rest.NewRequestBody(rest.BodyState{Mode: rest.BodyModeRaw}, nil)
-	previewView = rest.NewPreviewView(func() string {
-		return restStore.Preview(buildReq())
-	})
-	authPanel := ui.NewAuthPanel(ui.AuthPanelOptions{
-		AllowInherited: true,
-		OnSave: func(auth entity.Auth) {
-			sel := currentSelection(selStore.GetSelection())
-			if sel == nil || sel.Kind != entity.SelectionRequest {
-				return
-			}
-			selStore.UpdateRequestAuth(sel.CollectionID, sel.ItemID, auth)
-		},
-	})
-
-	nameField := ui.NewRequestNameField(func(name string) {
+	flushDraft := func(markDirty bool) {
+		if applying {
+			return
+		}
 		sel := currentSelection(selStore.GetSelection())
 		if sel == nil || sel.Kind != entity.SelectionRequest {
 			return
 		}
-		selStore.UpdateRequestName(sel.CollectionID, sel.ItemID, name)
+		if constants.NormalizeCollectionType(sel.CollectionType) != constants.CollectionTypeREST {
+			return
+		}
+		rr := buildReq()
+		pathVars := make([]entity.Variable, 0, len(rr.PathParams))
+		for k, v := range rr.PathParams {
+			pathVars = append(pathVars, entity.Variable{Key: k, Value: v})
+		}
+		d := entity.RequestDraft{
+			CollectionID: sel.CollectionID,
+			Name:         nameField.Get(),
+			Request: entity.ItemRequest{
+				Method:   constants.RequestMethod(rr.Method),
+				Header:   rr.Headers,
+				Auth:     authPanel.Get(),
+				Url:      entity.RequestUrl{Raw: rr.URL, Variable: pathVars},
+				BodyMode: rr.BodyMode,
+				Body:     rr.RawBody,
+				FormData: rr.FormData,
+			},
+		}
+		drafts.PutRequestDraft(sel.ItemID, d, markDirty)
+		header.SetDirty(drafts.IsRequestDirty(sel.ItemID))
+	}
+
+	send := func() {
+		restStore.Send(buildReq())
+	}
+
+	header = ui.NewEntityHeader("HTTP request", func() {
+		sel := currentSelection(selStore.GetSelection())
+		if sel == nil || sel.Kind != entity.SelectionRequest {
+			return
+		}
+		flushDraft(true)
+		drafts.SaveRequest(sel.CollectionID, sel.ItemID)
+		header.SetDirty(false)
 	})
+
+	requestInput = rest.NewRequestInput(methods, requestURL, send, func(string) {
+		flushDraft(true)
+	})
+	paramsView = rest.NewRequestParams(requestURL)
+	headersTable = rest.NewRequestHeaders(nil, func(rows []ui.KVRow) {
+		headers = rows
+		flushDraft(true)
+	})
+	bodyView = rest.NewRequestBody(rest.BodyState{Mode: rest.BodyModeRaw}, func(rest.BodyState) {
+		flushDraft(true)
+	})
+	previewView = rest.NewPreviewView(func() string {
+		return restStore.Preview(buildReq())
+	})
+	authPanel = ui.NewAuthPanel(ui.AuthPanelOptions{
+		AllowInherited: true,
+		OnChange:       func(entity.Auth) { flushDraft(true) },
+	})
+	nameField = ui.NewRequestNameField(func(string) { flushDraft(true) })
+
+	requestURL.AddListener(binding.NewDataListener(func() {
+		flushDraft(true)
+	}))
 
 	requestTabs := container.NewAppTabs(
 		container.NewTabItem("Params", paramsView.Object),
@@ -93,7 +136,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 	}
 
 	request := container.NewBorder(
-		container.NewVBox(nameField.Object, requestInput.Object),
+		container.NewVBox(header.Object, nameField.Object, requestInput.Object),
 		nil, nil, nil,
 		container.NewStack(requestTabs),
 	)
@@ -133,18 +176,15 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		if !ok || draft == nil {
 			return
 		}
-
+		applying = true
 		if draft.Method != "" {
 			requestInput.SetMethod(draft.Method)
 		}
 		_ = requestURL.Set(draft.URL)
-
 		headerRows := variablesToKVRows(draft.Headers)
 		headers = headerRows
 		headersTable.SetRows(headerRows)
-
 		authPanel.Set(draft.Auth)
-
 		mode := rest.BodyModeRaw
 		if draft.BodyMode == entity.RestBodyFormData {
 			mode = rest.BodyModeFormData
@@ -154,9 +194,8 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 			RawText:  draft.RawBody,
 			FormRows: variablesToKVRows(draft.FormData),
 		})
-
 		paramsView.SetPathParams(draft.PathParams)
-
+		applying = false
 		if requestTabs.Selected() != nil && requestTabs.Selected().Text == "Preview" {
 			previewView.Refresh()
 		}
@@ -170,8 +209,21 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		if constants.NormalizeCollectionType(sel.CollectionType) != constants.CollectionTypeREST {
 			return
 		}
+		applying = true
 		nameField.Set(sel.Name)
+		applying = false
+		header.SetDirty(drafts.IsRequestDirty(sel.ItemID))
 	}))
+
+	drafts.AddDirtyListener(func() {
+		sel := currentSelection(selStore.GetSelection())
+		if sel == nil || sel.Kind != entity.SelectionRequest {
+			return
+		}
+		fyne.Do(func() {
+			header.SetDirty(drafts.IsRequestDirty(sel.ItemID))
+		})
+	})
 
 	envStore.GetActiveID().AddListener(binding.NewDataListener(func() {
 		if requestTabs.Selected() != nil && requestTabs.Selected().Text == "Preview" {

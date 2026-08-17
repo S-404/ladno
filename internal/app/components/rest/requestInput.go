@@ -14,16 +14,21 @@ type RequestInputView struct {
 	SetMethod func(method string)
 }
 
-func NewRequestInput(methods []string, requestString binding.String, onSend func()) *RequestInputView {
+func NewRequestInput(methods []string, requestString binding.String, onSend func(), onMethodChange func(string)) *RequestInputView {
 	input := ui.NewUrlInput(requestString)
 
 	selected := ""
 	if len(methods) > 0 {
 		selected = methods[0]
 	}
+	applying := false
 
 	methodSelect := widget.NewSelect(methods, func(s string) {
 		selected = s
+		if applying || onMethodChange == nil {
+			return
+		}
+		onMethodChange(s)
 	})
 
 	requestButton := widget.NewButton("Send", onSend)
@@ -31,7 +36,9 @@ func NewRequestInput(methods []string, requestString binding.String, onSend func
 	if len(methods) == 0 {
 		methodSelect.Hide()
 	} else {
+		applying = true
 		methodSelect.SetSelected(selected)
+		applying = false
 	}
 
 	border := container.NewBorder(
@@ -49,7 +56,9 @@ func NewRequestInput(methods []string, requestString binding.String, onSend func
 		},
 		SetMethod: func(method string) {
 			selected = method
+			applying = true
 			methodSelect.SetSelected(method)
+			applying = false
 		},
 	}
 }

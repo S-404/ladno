@@ -14,46 +14,54 @@ import (
 
 func EnvContainer(app *shared.App) fyne.CanvasObject {
 	envStore := app.Store.Env
+	drafts := app.Store.Draft
 	items := envStore.GetItems()
 
 	var applying bool
-	nameEntry := widget.NewEntry()
+	var header *ui.EntityHeader
+	var varsTable *ui.KVTable
+	nameEntry := ui.NewEntry()
 	nameEntry.SetPlaceHolder("Environment name")
 
-	var varsTable *ui.KVTable
+	header = ui.NewEntityHeader("Env variables", func() {
+		sel := selectedEnv(envStore)
+		if sel == nil {
+			return
+		}
+		flushEnvDraft(app, nameEntry.Text, varsTable.GetRows(), true)
+		drafts.SaveEnv(sel.Id)
+		header.SetDirty(false)
+	})
+
 	varsTable = ui.NewKVTable(nil, func(rows []ui.KVRow) {
 		if applying {
 			return
 		}
-		selVal, err := envStore.GetSelected().Get()
-		if err != nil || selVal == nil {
-			return
+		flushEnvDraft(app, nameEntry.Text, rows, true)
+		if sel := selectedEnv(envStore); sel != nil {
+			header.SetDirty(drafts.IsEnvDirty(sel.Id))
 		}
-		envStore.SaveSelected(nameEntry.Text, kvRowsToEnvVariables(rows))
 	})
 
 	nameEntry.OnChanged = func(string) {
 		if applying {
 			return
 		}
-		selVal, err := envStore.GetSelected().Get()
-		if err != nil || selVal == nil {
-			return
+		flushEnvDraft(app, nameEntry.Text, varsTable.GetRows(), true)
+		if sel := selectedEnv(envStore); sel != nil {
+			header.SetDirty(drafts.IsEnvDirty(sel.Id))
 		}
-		envStore.SaveSelected(nameEntry.Text, kvRowsToEnvVariables(varsTable.GetRows()))
 	}
 
 	var syncList func()
 	envList := ui.NewEnvList(
-		func(id string) {
-			envStore.Select(id)
-		},
+		func(id string) { envStore.Select(id) },
 		func(id string, toIndex int) {
 			envStore.MoveEnv(id, toIndex)
-			// UntypedList list-listeners skip same-length reorder; refresh explicitly.
 			syncList()
 		},
 	)
+	envList.SetDirtyCheck(drafts.IsEnvDirty)
 
 	syncList = func() {
 		raw, err := (*items).Get()
@@ -66,15 +74,15 @@ func EnvContainer(app *shared.App) fyne.CanvasObject {
 			if !ok || env == nil {
 				continue
 			}
-			listItems = append(listItems, ui.EnvListItem{ID: env.Id, Name: env.Name})
+			name := env.Name
+			if d, ok := drafts.GetEnvDraft(env.Id); ok {
+				name = d.Name
+			}
+			listItems = append(listItems, ui.EnvListItem{ID: env.Id, Name: name})
 		}
 		selID := ""
-		if sel := envStore.GetSelected(); sel != nil {
-			if v, err := sel.Get(); err == nil {
-				if env, ok := v.(*entity.Env); ok && env != nil {
-					selID = env.Id
-				}
-			}
+		if sel := selectedEnv(envStore); sel != nil {
+			selID = sel.Id
 		}
 		activeID, _ := envStore.GetActiveID().Get()
 		envList.SetItems(listItems, selID, activeID)
@@ -88,6 +96,7 @@ func EnvContainer(app *shared.App) fyne.CanvasObject {
 			varsTable.SetRows(nil)
 			nameEntry.Disable()
 			applying = false
+			header.SetDirty(false)
 			syncList()
 			return
 		}
@@ -95,42 +104,36 @@ func EnvContainer(app *shared.App) fyne.CanvasObject {
 		if !ok || env == nil {
 			return
 		}
+		d := drafts.EnsureEnvDraft(env)
 		applying = true
 		nameEntry.Enable()
-		nameEntry.SetText(env.Name)
-		varsTable.SetRows(envVariablesToKVRows(env.Variables))
+		nameEntry.SetText(d.Name)
+		varsTable.SetRows(envVariablesToKVRows(d.Variables))
 		applying = false
+		header.SetDirty(drafts.IsEnvDirty(env.Id))
 		syncList()
 	}
 
 	envStore.GetSelected().AddListener(binding.NewDataListener(applySelected))
 	envStore.GetActiveID().AddListener(binding.NewDataListener(syncList))
 	(*items).AddListener(binding.NewDataListener(syncList))
-
-	newBtn := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
-		entry := widget.NewEntry()
-		entry.SetText("New Environment")
-		dialog.ShowForm("New environment", "Create", "Cancel", []*widget.FormItem{
-			widget.NewFormItem("Name", entry),
-		}, func(ok bool) {
-			if !ok {
-				return
+	drafts.AddDirtyListener(func() {
+		fyne.Do(func() {
+			syncList()
+			if sel := selectedEnv(envStore); sel != nil {
+				header.SetDirty(drafts.IsEnvDirty(sel.Id))
 			}
-			name := entry.Text
-			if name == "" {
-				name = "New Environment"
-			}
-			envStore.Create(name)
-		}, app.Window)
+		})
 	})
 
+	newBtn := widget.NewButtonWithIcon("", theme.ContentAddIcon(), func() {
+		envStore.Create(entity.DefaultNewEnvName)
+	})
 	cloneBtn := widget.NewButtonWithIcon("", theme.ContentCopyIcon(), func() {
 		envStore.CloneSelected()
 	})
-
 	deleteBtn := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
-		val, _ := envStore.GetSelected().Get()
-		env, _ := val.(*entity.Env)
+		env := selectedEnv(envStore)
 		if env == nil {
 			return
 		}
@@ -143,37 +146,60 @@ func EnvContainer(app *shared.App) fyne.CanvasObject {
 
 	toolbar := container.NewHBox(newBtn, cloneBtn, deleteBtn)
 	loader := ui.NewLoader(envStore.GetIsFetching())
-
 	left := container.NewBorder(
-		toolbar,
-		nil, nil, nil,
+		toolbar, nil, nil, nil,
 		container.NewStack(container.NewVBox(loader), envList),
 	)
-
 	editor := container.NewBorder(
-		container.NewBorder(nil, nil, widget.NewLabel("Name"), nil, nameEntry),
+		container.NewVBox(
+			header.Object,
+			container.NewBorder(nil, nil, widget.NewLabel("Name"), nil, nameEntry),
+		),
 		nil, nil, nil,
 		varsTable,
 	)
-
 	split := container.NewHSplit(
 		ui.NewMinSizeBox(fyne.NewSize(140, 80), left),
 		ui.NewMinSizeBox(fyne.NewSize(200, 80), editor),
 	)
 	split.SetOffset(0.28)
-
 	envStore.FetchList()
 	return split
+}
+
+func selectedEnv(envStore interface {
+	GetSelected() binding.Untyped
+}) *entity.Env {
+	val, err := envStore.GetSelected().Get()
+	if err != nil || val == nil {
+		return nil
+	}
+	env, _ := val.(*entity.Env)
+	return env
+}
+
+func flushEnvDraft(app *shared.App, name string, rows []ui.KVRow, markDirty bool) {
+	sel := selectedEnv(app.Store.Env)
+	if sel == nil {
+		return
+	}
+	if rows == nil {
+		// keep existing draft vars if rows not provided
+		if d, ok := app.Store.Draft.GetEnvDraft(sel.Id); ok {
+			app.Store.Draft.PutEnvDraft(sel.Id, entity.EnvDraft{Name: name, Variables: d.Variables}, markDirty)
+			return
+		}
+	}
+	app.Store.Draft.PutEnvDraft(sel.Id, entity.EnvDraft{
+		Name:      name,
+		Variables: kvRowsToEnvVariables(rows),
+	}, markDirty)
 }
 
 func envVariablesToKVRows(vars []entity.EnvVariable) []ui.KVRow {
 	rows := make([]ui.KVRow, 0, len(vars))
 	for _, v := range vars {
-		rows = append(rows, ui.KVRow{
-			Enabled: v.Enabled,
-			Key:     v.Key,
-			Value:   v.Value,
-		})
+		rows = append(rows, ui.KVRow{Enabled: v.Enabled, Key: v.Key, Value: v.Value})
 	}
 	return rows
 }
@@ -184,11 +210,7 @@ func kvRowsToEnvVariables(rows []ui.KVRow) []entity.EnvVariable {
 		if r.Key == "" && r.Value == "" {
 			continue
 		}
-		out = append(out, entity.EnvVariable{
-			Key:     r.Key,
-			Value:   r.Value,
-			Enabled: r.Enabled,
-		})
+		out = append(out, entity.EnvVariable{Key: r.Key, Value: r.Value, Enabled: r.Enabled})
 	}
 	return out
 }
