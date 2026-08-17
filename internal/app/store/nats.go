@@ -31,6 +31,14 @@ type NatsMessage struct {
 	Time    time.Time
 }
 
+type natsTrafficEvent struct {
+	collectionID string
+	subject      string
+	data         string
+	header       nats.Header
+	matched      bool
+}
+
 // natsService is the broker surface NatsStore needs.
 type natsService interface {
 	Connect(conn entity.NatsConnection, cb func(*nats.Conn, service.NatsConnectResult))
@@ -74,6 +82,10 @@ type NatsStore struct {
 	workspace        natsWorkspace
 	settings         natsSettings
 	activeWorkspace  string
+
+	trafficMu             sync.Mutex
+	trafficPending        []natsTrafficEvent
+	trafficFlushScheduled bool
 }
 
 func NewNatsStore(
@@ -171,14 +183,14 @@ func (s *NatsStore) startMonitor(collectionID string, nc *nats.Conn) error {
 		}
 		subj := msg.Subject
 		data := string(msg.Data)
-		hdr := msg.Header
-		fyne.Do(func() {
-			if s.hasMatchingSub(collectionID, subj) {
-				s.AppendMessage(collectionID, subj, data)
-				s.logNatsInbound(subj, data, hdr, "subscribe", 0)
-				return
-			}
-			s.logNatsSubject(subj)
+		hdr := cloneNatsHeader(msg.Header)
+		matched := s.hasMatchingSub(collectionID, subj)
+		s.enqueueTraffic(natsTrafficEvent{
+			collectionID: collectionID,
+			subject:      subj,
+			data:         data,
+			header:       hdr,
+			matched:      matched,
 		})
 	})
 	if err != nil {
@@ -188,6 +200,61 @@ func (s *NatsStore) startMonitor(collectionID string, nc *nats.Conn) error {
 	s.monitors[collectionID] = mon
 	s.mu.Unlock()
 	return nil
+}
+
+func cloneNatsHeader(h nats.Header) nats.Header {
+	if len(h) == 0 {
+		return nil
+	}
+	out := make(nats.Header, len(h))
+	for k, vals := range h {
+		cp := make([]string, len(vals))
+		copy(cp, vals)
+		out[k] = cp
+	}
+	return out
+}
+
+func (s *NatsStore) enqueueTraffic(ev natsTrafficEvent) {
+	s.trafficMu.Lock()
+	s.trafficPending = append(s.trafficPending, ev)
+	limit := s.messageLimit()
+	if maxPending := limit * 2; maxPending > 0 && len(s.trafficPending) > maxPending {
+		s.trafficPending = s.trafficPending[len(s.trafficPending)-maxPending:]
+	}
+	schedule := !s.trafficFlushScheduled
+	if schedule {
+		s.trafficFlushScheduled = true
+	}
+	s.trafficMu.Unlock()
+	if schedule {
+		fyne.Do(s.flushTraffic)
+	}
+}
+
+func (s *NatsStore) flushTraffic() {
+	s.trafficMu.Lock()
+	pending := s.trafficPending
+	s.trafficPending = nil
+	s.trafficFlushScheduled = false
+	s.trafficMu.Unlock()
+	if len(pending) == 0 {
+		return
+	}
+
+	matchedAny := false
+	for _, ev := range pending {
+		if ev.matched {
+			s.appendMessageLocked(ev.collectionID, ev.subject, ev.data)
+			s.logNatsInbound(ev.subject, ev.data, ev.header, "subscribe", 0)
+			matchedAny = true
+			continue
+		}
+		s.logNatsSubject(ev.subject)
+	}
+	if matchedAny {
+		s.notifyMessageChange()
+	}
 }
 
 func (s *NatsStore) hasMatchingSub(collectionID, subject string) bool {
@@ -263,23 +330,23 @@ func (s *NatsStore) notifyMessageChange() {
 }
 
 func (s *NatsStore) AppendMessage(collectionID, subject, data string) {
+	s.appendMessageLocked(collectionID, subject, data)
+	s.notifyMessageChange()
+}
+
+func (s *NatsStore) appendMessageLocked(collectionID, subject, data string) {
 	if collectionID == "" {
 		return
 	}
 	limit := s.messageLimit()
 	s.mu.Lock()
-	list := s.messages[collectionID]
-	list = append(list, NatsMessage{
+	list := append(s.messages[collectionID], NatsMessage{
 		Subject: subject,
 		Data:    data,
 		Time:    time.Now(),
 	})
-	if len(list) > limit {
-		list = list[len(list)-limit:]
-	}
-	s.messages[collectionID] = list
+	s.messages[collectionID] = trimKeepNewest(list, limit)
 	s.mu.Unlock()
-	s.notifyMessageChange()
 }
 
 func (s *NatsStore) MessagesText(collectionID, subjectPattern string, all bool) string {
@@ -340,9 +407,7 @@ func (s *NatsStore) TrimMessagesToLimit() {
 	limit := s.messageLimit()
 	s.mu.Lock()
 	for id, list := range s.messages {
-		if len(list) > limit {
-			s.messages[id] = list[len(list)-limit:]
-		}
+		s.messages[id] = trimKeepNewest(list, limit)
 	}
 	s.mu.Unlock()
 	s.notifyMessageChange()

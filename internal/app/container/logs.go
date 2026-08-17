@@ -3,51 +3,76 @@ package container
 import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/s-404/ladno/internal/app/components/logs"
-	"github.com/s-404/ladno/internal/app/entity"
 	"github.com/s-404/ladno/internal/app/entity/shared"
+	"github.com/s-404/ladno/internal/app/store"
 )
 
 func LogsContainer(app *shared.App) fyne.CanvasObject {
 	logStore := app.Store.Log
-	items := logStore.GetItems()
 
 	listBox := container.NewVBox()
 	scroll := container.NewVScroll(listBox)
 
 	var rows []*logs.ExpandableEntry
 
-	rebuild := func() {
-		expanded := map[string]bool{}
-		for _, row := range rows {
-			if row != nil && row.IsExpanded() {
-				expanded[row.EntryID()] = true
+	applyBatch := func(batch store.LogBatch) {
+		if batch.Cleared {
+			rows = nil
+			listBox.Objects = nil
+			listBox.Refresh()
+			return
+		}
+		if batch.Reset != nil {
+			rows = rows[:0]
+			objs := make([]fyne.CanvasObject, 0, len(batch.Reset))
+			for _, e := range batch.Reset {
+				if e == nil {
+					continue
+				}
+				row := logs.NewExpandableEntry(e, false)
+				rows = append(rows, row)
+				objs = append(objs, row)
 			}
+			listBox.Objects = objs
+			listBox.Refresh()
+			if len(objs) > 0 {
+				scroll.ScrollToBottom()
+			}
+			return
 		}
 
-		all, _ := (*items).Get()
-		rows = rows[:0]
-		objs := make([]fyne.CanvasObject, 0, len(all))
-		for _, raw := range all {
-			entry, ok := raw.(*entity.LogEntry)
-			if !ok || entry == nil {
+		for _, e := range batch.Appended {
+			if e == nil {
 				continue
 			}
-			row := logs.NewExpandableEntry(entry, expanded[entry.Id])
+			row := logs.NewExpandableEntry(e, false)
 			rows = append(rows, row)
-			objs = append(objs, row)
+			listBox.Objects = append(listBox.Objects, row)
 		}
-		listBox.Objects = objs
+		if batch.DropOldest > 0 {
+			if batch.DropOldest >= len(rows) {
+				rows = nil
+				listBox.Objects = nil
+			} else {
+				rows = rows[batch.DropOldest:]
+				listBox.Objects = listBox.Objects[batch.DropOldest:]
+			}
+		}
 		listBox.Refresh()
-		if len(objs) > 0 {
+		if len(rows) > 0 {
 			scroll.ScrollToBottom()
 		}
 	}
 
-	(*items).AddListener(binding.NewDataListener(rebuild))
+	go func() {
+		for batch := range logStore.Updates() {
+			b := batch
+			fyne.Do(func() { applyBatch(b) })
+		}
+	}()
 
 	clearBtn := widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
 		logStore.Clear()

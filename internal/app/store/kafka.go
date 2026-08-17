@@ -217,10 +217,7 @@ func (s *KafkaStore) AppendMessage(collectionID string, msg KafkaMessage) {
 	limit := s.messageLimit()
 	s.mu.Lock()
 	list := append(s.messages[collectionID], msg)
-	if len(list) > limit {
-		list = list[len(list)-limit:]
-	}
-	s.messages[collectionID] = list
+	s.messages[collectionID] = trimKeepNewest(list, limit)
 	s.mu.Unlock()
 	s.notifyMessageChange()
 }
@@ -303,9 +300,7 @@ func (s *KafkaStore) TrimMessagesToLimit() {
 	limit := s.messageLimit()
 	s.mu.Lock()
 	for id, list := range s.messages {
-		if len(list) > limit {
-			s.messages[id] = list[len(list)-limit:]
-		}
+		s.messages[id] = trimKeepNewest(list, limit)
 	}
 	s.mu.Unlock()
 	s.notifyMessageChange()
