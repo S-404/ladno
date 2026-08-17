@@ -9,21 +9,17 @@ import (
 	"github.com/s-404/ladno/internal/app/entity"
 )
 
-type ILogStore interface {
-	GetItems() *binding.UntypedList
-	Append(entry *entity.LogEntry)
-	Clear()
-	GetItemByIndex(index int) *entity.LogEntry
-	GetLogDataItem(item binding.DataItem) *entity.LogEntry
-	TrimToLimit()
-}
-
 type LogStore struct {
 	Items    binding.UntypedList
-	settings ISettingsStore
+	settings messageLimitSettings
 }
 
-func NewLogStore(settings ISettingsStore) *LogStore {
+// messageLimitSettings is the settings surface LogStore reads.
+type messageLimitSettings interface {
+	GetMessageLimit() int
+}
+
+func NewLogStore(settings messageLimitSettings) *LogStore {
 	return &LogStore{
 		Items:    binding.NewUntypedList(),
 		settings: settings,

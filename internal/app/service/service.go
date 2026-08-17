@@ -3,11 +3,11 @@ package service
 import "github.com/s-404/ladno/internal/app/repository"
 
 type Service struct {
-	Env       IEnvService
-	Kafka     IKafkaService
-	Nats      INatsService
-	Rest      IRestService
-	Workspace IWorkspaceService
+	Env       *EnvService
+	Kafka     *KafkaService
+	Nats      *NatsService
+	Rest      *RestService
+	Workspace *WorkspaceService
 }
 
 func NewService(repos *repository.Repository) *Service {

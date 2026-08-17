@@ -13,31 +13,12 @@ type memWS struct {
 	publishes int
 }
 
-func (m *memWS) FetchWorkspaceList() {}
-func (m *memWS) GetItems() *binding.UntypedList {
-	l := binding.NewUntypedList()
-	return &l
-}
-func (m *memWS) GetWorkspaceListItemDataItem(binding.DataItem) *entity.WorkspaceLightWeight {
-	return nil
-}
-func (m *memWS) GetWorkspaceListItemByIndex(int) *entity.WorkspaceLightWeight { return nil }
-func (m *memWS) FetchWorkspace(string)                                        {}
-func (m *memWS) GetItem() binding.Untyped                                     { return binding.NewUntyped() }
-func (m *memWS) GetWorkspaceDataItem(binding.DataItem) *entity.Workspace      { return m.ws }
-func (m *memWS) GetSelectedWorkspace() *entity.Workspace                      { return m.ws }
+func (m *memWS) GetSelectedWorkspace() *entity.Workspace { return m.ws }
 func (m *memWS) PublishWorkspace(ws *entity.Workspace) {
 	m.publishes++
 	if ws != nil {
 		m.ws = ws
 	}
-}
-func (m *memWS) UpdateSelectedWorkspace(string, string) bool   { return false }
-func (m *memWS) Create(string, func(*entity.Workspace, error)) {}
-func (m *memWS) Delete(string, func(error))                    {}
-func (m *memWS) GetIsFetching() *binding.Bool {
-	b := binding.NewBool()
-	return &b
 }
 
 type memEnv struct {
@@ -45,15 +26,6 @@ type memEnv struct {
 	persists int
 }
 
-func (m *memEnv) FetchList()                                {}
-func (m *memEnv) GetItems() *binding.UntypedList            { l := binding.NewUntypedList(); return &l }
-func (m *memEnv) GetSelected() binding.Untyped              { return binding.NewUntyped() }
-func (m *memEnv) Select(string)                             {}
-func (m *memEnv) GetActiveID() binding.String               { return binding.NewString() }
-func (m *memEnv) SetActive(string)                          {}
-func (m *memEnv) GetIsFetching() *binding.Bool              { b := binding.NewBool(); return &b }
-func (m *memEnv) Create(string)                             {}
-func (m *memEnv) SaveSelected(string, []entity.EnvVariable) {}
 func (m *memEnv) PersistEnv(id, name string, vars []entity.EnvVariable) bool {
 	m.persists++
 	if m.envs == nil {
@@ -64,20 +36,8 @@ func (m *memEnv) PersistEnv(id, name string, vars []entity.EnvVariable) bool {
 	m.envs[id] = &entity.Env{Id: id, Name: name, Variables: cp}
 	return true
 }
-func (m *memEnv) DeleteSelected()                             {}
-func (m *memEnv) CloneSelected()                              {}
-func (m *memEnv) MoveEnv(string, int) bool                    { return false }
-func (m *memEnv) ActiveVariables() map[string]string          { return nil }
-func (m *memEnv) GetItemByIndex(int) *entity.Env              { return nil }
-func (m *memEnv) GetEnvDataItem(binding.DataItem) *entity.Env { return nil }
-func (m *memEnv) GetEnvByID(id string) *entity.Env {
-	if m.envs == nil {
-		return nil
-	}
-	return m.envs[id]
-}
 
-func newDraftTestSelection(ws IWorkspaceStore) *SelectionStore {
+func newDraftTestSelection(ws selectionWorkspace) *SelectionStore {
 	return &SelectionStore{
 		Selection: binding.NewUntyped(),
 		workspace: ws,

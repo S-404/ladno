@@ -18,21 +18,6 @@ const (
 	ThemeDark  = "dark"
 )
 
-type ISettingsStore interface {
-	GetMessageLimit() int
-	SetMessageLimit(n int) int
-
-	GetTheme() string
-	SetTheme(name string) string
-	ApplyTheme()
-
-	GetLastWorkspaceID() string
-	SetLastWorkspaceID(id string)
-
-	GetActiveEnvID() string
-	SetActiveEnvID(id string)
-}
-
 type SettingsStore struct{}
 
 func NewSettingsStore() *SettingsStore {

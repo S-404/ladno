@@ -10,33 +10,18 @@ import (
 	"github.com/s-404/ladno/internal/app/utils"
 )
 
-type ISelectionStore interface {
-	GetSelection() binding.Untyped
-	SetSelection(sel entity.Selection)
-	ClearSelection()
-
-	UpdateCollection(id string, name string, auth entity.Auth, nats *entity.NatsConnection, kafka *entity.KafkaConnection)
-	UpdateFolder(collectionID, itemID, name string, auth entity.Auth)
-	UpdateRequestAuth(collectionID, itemID string, auth entity.Auth)
-	UpdateRequestName(collectionID, itemID, name string)
-
-	CreateCollection(colType constants.CollectionType) (collectionID string, ok bool)
-	DeleteCollection(id string) bool
-	MoveCollection(id string, steps int) bool
-	AddFolder(collectionID, parentItemID string) (itemID string, path []string, ok bool)
-	AddRequest(collectionID, parentItemID string) (itemID string, path []string, ok bool)
-	DuplicateRequest(collectionID, itemID string) (newID string, path []string, ok bool)
-	DeleteItem(collectionID, itemID string) bool
-	MoveItem(collectionID, itemID string, steps int) bool
-	RelocateItem(fromCollectionID, itemID, toCollectionID, toParentItemID string, toIndex int) bool
+// selectionWorkspace is the workspace surface SelectionStore mutates.
+type selectionWorkspace interface {
+	GetSelectedWorkspace() *entity.Workspace
+	PublishWorkspace(ws *entity.Workspace)
 }
 
 type SelectionStore struct {
 	Selection binding.Untyped
-	workspace IWorkspaceStore
+	workspace selectionWorkspace
 }
 
-func NewSelectionStore(workspace IWorkspaceStore) *SelectionStore {
+func NewSelectionStore(workspace selectionWorkspace) *SelectionStore {
 	s := &SelectionStore{
 		Selection: binding.NewUntyped(),
 		workspace: workspace,

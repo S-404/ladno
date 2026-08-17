@@ -7,41 +7,31 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/data/binding"
 	"github.com/s-404/ladno/internal/app/entity"
-	"github.com/s-404/ladno/internal/app/service"
 	"github.com/s-404/ladno/internal/app/utils"
 )
 
-type IWorkspaceStore interface {
-	FetchWorkspaceList()
-	GetItems() *binding.UntypedList
-	GetWorkspaceListItemDataItem(item binding.DataItem) *entity.WorkspaceLightWeight
-	GetWorkspaceListItemByIndex(index int) *entity.WorkspaceLightWeight
-
-	FetchWorkspace(id string)
-	GetItem() binding.Untyped
-	GetWorkspaceDataItem(item binding.DataItem) *entity.Workspace
-	GetSelectedWorkspace() *entity.Workspace
-	PublishWorkspace(ws *entity.Workspace)
-	UpdateSelectedWorkspace(name, connectionConfig string) bool
+// workspaceService is the async persistence surface WorkspaceStore needs.
+type workspaceService interface {
+	List(cb func([]entity.WorkspaceLightWeight, error))
+	Find(id string, cb func(*entity.Workspace, error))
 	Create(name string, cb func(*entity.Workspace, error))
+	Save(workspace *entity.Workspace, cb func(error))
 	Delete(id string, cb func(error))
-
-	GetIsFetching() *binding.Bool
 }
 
 type WorkspaceStore struct {
 	Items            binding.UntypedList
 	SelectedItem     binding.Untyped
 	IsFetching       binding.Bool
-	workspaceService service.IWorkspaceService
+	workspaceService workspaceService
 }
 
-func NewWorkspaceStore(service service.IWorkspaceService) *WorkspaceStore {
+func NewWorkspaceStore(svc workspaceService) *WorkspaceStore {
 	store := WorkspaceStore{
 		Items:            binding.NewUntypedList(),
 		SelectedItem:     binding.NewUntyped(),
 		IsFetching:       binding.NewBool(),
-		workspaceService: service,
+		workspaceService: svc,
 	}
 
 	return &store

@@ -15,16 +15,6 @@ import (
 
 const envsFileName = "envs.json"
 
-type IEnvRepository interface {
-	FindAll() []*entity.Env
-	FindById(id string) *entity.Env
-	Create(env *entity.Env) (*entity.Env, error)
-	Update(env *entity.Env) (*entity.Env, error)
-	Delete(id string) error
-	Clone(id string) (*entity.Env, error)
-	Move(id string, toIndex int) error
-}
-
 type envsFile struct {
 	Version int           `json:"version"`
 	Envs    []*entity.Env `json:"envs"`

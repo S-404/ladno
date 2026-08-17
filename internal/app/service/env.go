@@ -2,24 +2,24 @@ package service
 
 import (
 	"github.com/s-404/ladno/internal/app/entity"
-	"github.com/s-404/ladno/internal/app/repository"
 )
 
-type IEnvService interface {
-	List(cb func([]*entity.Env, error))
-	Find(id string, cb func(*entity.Env, error))
-	Create(env *entity.Env, cb func(*entity.Env, error))
-	Update(env *entity.Env, cb func(*entity.Env, error))
-	Delete(id string, cb func(error))
-	Clone(id string, cb func(*entity.Env, error))
-	Move(id string, toIndex int, cb func(error))
+// envRepository is the persistence surface EnvService needs.
+type envRepository interface {
+	FindAll() []*entity.Env
+	FindById(id string) *entity.Env
+	Create(env *entity.Env) (*entity.Env, error)
+	Update(env *entity.Env) (*entity.Env, error)
+	Delete(id string) error
+	Clone(id string) (*entity.Env, error)
+	Move(id string, toIndex int) error
 }
 
 type EnvService struct {
-	repo repository.IEnvRepository
+	repo envRepository
 }
 
-func NewEnvService(repo repository.IEnvRepository) *EnvService {
+func NewEnvService(repo envRepository) *EnvService {
 	return &EnvService{repo: repo}
 }
 

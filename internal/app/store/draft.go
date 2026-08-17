@@ -3,42 +3,25 @@ package store
 import (
 	"sync"
 
+	"fyne.io/fyne/v2/data/binding"
 	"github.com/s-404/ladno/internal/app/entity"
 	"github.com/s-404/ladno/internal/app/entity/constants"
 )
 
-type IDraftStore interface {
-	EnsureRequestDraft(collectionID, itemID string, name string, req *entity.ItemRequest) entity.RequestDraft
-	GetRequestDraft(itemID string) (entity.RequestDraft, bool)
-	PutRequestDraft(itemID string, draft entity.RequestDraft, markDirty bool)
-	IsRequestDirty(itemID string) bool
-	SaveRequest(collectionID, itemID string) bool
+// draftWorkspace is the workspace surface DraftStore persists through.
+type draftWorkspace interface {
+	GetSelectedWorkspace() *entity.Workspace
+	PublishWorkspace(ws *entity.Workspace)
+}
 
-	EnsureFolderDraft(collectionID, itemID, name string, auth entity.Auth) entity.FolderDraft
-	GetFolderDraft(itemID string) (entity.FolderDraft, bool)
-	PutFolderDraft(itemID string, draft entity.FolderDraft, markDirty bool)
-	IsFolderDirty(itemID string) bool
-	SaveFolder(collectionID, itemID string) bool
+// draftSelection is the selection surface DraftStore updates after save.
+type draftSelection interface {
+	GetSelection() binding.Untyped
+}
 
-	EnsureCollectionDraft(col entity.Collection) entity.CollectionDraft
-	GetCollectionDraft(collectionID string) (entity.CollectionDraft, bool)
-	PutCollectionDraft(collectionID string, draft entity.CollectionDraft, markDirty bool)
-	IsCollectionDirty(collectionID string) bool
-	SaveCollection(collectionID string) bool
-
-	EnsureEnvDraft(env *entity.Env) entity.EnvDraft
-	GetEnvDraft(envID string) (entity.EnvDraft, bool)
-	PutEnvDraft(envID string, draft entity.EnvDraft, markDirty bool)
-	IsEnvDirty(envID string) bool
-	SaveEnv(envID string) bool
-
-	IsItemDirty(itemID string) bool
-	AddDirtyListener(fn func())
-	NotifyDirty()
-
-	RequestDisplayName(itemID, fallback string) string
-	FolderDisplayName(itemID, fallback string) string
-	CollectionDisplayName(collectionID, fallback string) string
+// draftEnv is the env persistence surface DraftStore needs.
+type draftEnv interface {
+	PersistEnv(id, name string, vars []entity.EnvVariable) bool
 }
 
 type DraftStore struct {
@@ -56,12 +39,12 @@ type DraftStore struct {
 
 	listeners []func()
 
-	workspace IWorkspaceStore
-	selection ISelectionStore
-	env       IEnvStore
+	workspace draftWorkspace
+	selection draftSelection
+	env       draftEnv
 }
 
-func NewDraftStore(workspace IWorkspaceStore, selection ISelectionStore, env IEnvStore) *DraftStore {
+func NewDraftStore(workspace draftWorkspace, selection draftSelection, env draftEnv) *DraftStore {
 	return &DraftStore{
 		requests:    map[string]entity.RequestDraft{},
 		folders:     map[string]entity.FolderDraft{},

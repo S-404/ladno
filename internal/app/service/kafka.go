@@ -26,12 +26,6 @@ type KafkaInbound struct {
 	Time      time.Time
 }
 
-type IKafkaService interface {
-	Dial(conn entity.KafkaConnection, cb func(brokers []string, res KafkaConnectResult))
-	Produce(brokers []string, topic, key string, headers []kafka.Header, payload []byte) error
-	Consume(ctx context.Context, brokers []string, topic, groupID string, handler func(KafkaInbound)) error
-}
-
 type KafkaService struct{}
 
 func NewKafkaService() *KafkaService {

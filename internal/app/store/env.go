@@ -6,28 +6,23 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/data/binding"
 	"github.com/s-404/ladno/internal/app/entity"
-	"github.com/s-404/ladno/internal/app/service"
 	"github.com/s-404/ladno/internal/app/utils"
 )
 
-type IEnvStore interface {
-	FetchList()
-	GetItems() *binding.UntypedList
-	GetSelected() binding.Untyped
-	Select(id string)
-	GetActiveID() binding.String
-	SetActive(id string)
-	GetIsFetching() *binding.Bool
-	Create(name string)
-	SaveSelected(name string, vars []entity.EnvVariable)
-	PersistEnv(id, name string, vars []entity.EnvVariable) bool
-	DeleteSelected()
-	CloneSelected()
-	MoveEnv(id string, toIndex int) bool
-	ActiveVariables() map[string]string
-	GetItemByIndex(index int) *entity.Env
-	GetEnvDataItem(item binding.DataItem) *entity.Env
-	GetEnvByID(id string) *entity.Env
+// envService is the async persistence surface EnvStore needs.
+type envService interface {
+	List(cb func([]*entity.Env, error))
+	Create(env *entity.Env, cb func(*entity.Env, error))
+	Update(env *entity.Env, cb func(*entity.Env, error))
+	Delete(id string, cb func(error))
+	Clone(id string, cb func(*entity.Env, error))
+	Move(id string, toIndex int, cb func(error))
+}
+
+// envSettings is the preferences surface EnvStore needs.
+type envSettings interface {
+	GetActiveEnvID() string
+	SetActiveEnvID(id string)
 }
 
 type EnvStore struct {
@@ -35,17 +30,17 @@ type EnvStore struct {
 	Selected   binding.Untyped
 	ActiveID   binding.String
 	IsFetching binding.Bool
-	envService service.IEnvService
-	settings   ISettingsStore
+	envService envService
+	settings   envSettings
 }
 
-func NewEnvStore(envService service.IEnvService, settings ISettingsStore) *EnvStore {
+func NewEnvStore(svc envService, settings envSettings) *EnvStore {
 	s := &EnvStore{
 		Items:      binding.NewUntypedList(),
 		Selected:   binding.NewUntyped(),
 		ActiveID:   binding.NewString(),
 		IsFetching: binding.NewBool(),
-		envService: envService,
+		envService: svc,
 		settings:   settings,
 	}
 	if settings != nil {

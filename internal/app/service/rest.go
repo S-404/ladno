@@ -13,11 +13,6 @@ import (
 	"github.com/s-404/ladno/internal/app/entity"
 )
 
-type IRestService interface {
-	Send(req entity.RestRequest, cb func(*entity.RestResponse))
-	BuildSnapshot(req entity.RestRequest) (*entity.RestRequestSnapshot, error)
-}
-
 type RestService struct {
 	client *http.Client
 }

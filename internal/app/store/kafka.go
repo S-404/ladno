@@ -16,24 +16,6 @@ import (
 	"github.com/segmentio/kafka-go"
 )
 
-type IKafkaStore interface {
-	Connect(collectionID, collectionName string, conn entity.KafkaConnection, onDone func(ok bool, status string))
-	IsConnected(collectionID string) bool
-	Disconnect(collectionID string)
-	DisconnectAll()
-	ConnectedIDs() map[string]bool
-	AddConnectionListener(fn func())
-
-	Run(collectionID, itemID string, method constants.KafkaMethod, req entity.KafkaRequest, onDone func(err error))
-	IsConsuming(collectionID, itemID string) bool
-	StopConsume(collectionID, itemID string)
-
-	MessagesText(collectionID, topic, filter string, showAll bool) string
-	ClearMessages(collectionID, topic string)
-	AddMessageListener(fn func())
-	TrimMessagesToLimit()
-}
-
 type kafkaSubKey struct {
 	collectionID string
 	itemID       string
@@ -58,6 +40,34 @@ type kafkaConnState struct {
 	display string
 }
 
+// kafkaService is the broker surface KafkaStore needs.
+type kafkaService interface {
+	Dial(conn entity.KafkaConnection, cb func(brokers []string, res service.KafkaConnectResult))
+	Produce(brokers []string, topic, key string, headers []kafka.Header, payload []byte) error
+	Consume(ctx context.Context, brokers []string, topic, groupID string, handler func(service.KafkaInbound)) error
+}
+
+// kafkaEnvVars is the env lookup KafkaStore needs.
+type kafkaEnvVars interface {
+	ActiveVariables() map[string]string
+}
+
+// kafkaLog is the log append surface KafkaStore needs.
+type kafkaLog interface {
+	Append(entry *entity.LogEntry)
+}
+
+// kafkaWorkspace is the workspace surface KafkaStore watches.
+type kafkaWorkspace interface {
+	GetItem() binding.Untyped
+	GetSelectedWorkspace() *entity.Workspace
+}
+
+// kafkaSettings is the settings surface KafkaStore reads.
+type kafkaSettings interface {
+	GetMessageLimit() int
+}
+
 type KafkaStore struct {
 	mu               sync.Mutex
 	conns            map[string]*kafkaConnState
@@ -65,26 +75,26 @@ type KafkaStore struct {
 	messages         map[string][]KafkaMessage
 	listeners        []func()
 	messageListeners []func()
-	kafkaService     service.IKafkaService
-	envStore         IEnvStore
-	logStore         ILogStore
-	workspace        IWorkspaceStore
-	settings         ISettingsStore
+	kafkaService     kafkaService
+	envStore         kafkaEnvVars
+	logStore         kafkaLog
+	workspace        kafkaWorkspace
+	settings         kafkaSettings
 	activeWorkspace  string
 }
 
 func NewKafkaStore(
-	kafkaService service.IKafkaService,
-	envStore IEnvStore,
-	logStore ILogStore,
-	workspace IWorkspaceStore,
-	settings ISettingsStore,
+	svc kafkaService,
+	envStore kafkaEnvVars,
+	logStore kafkaLog,
+	workspace kafkaWorkspace,
+	settings kafkaSettings,
 ) *KafkaStore {
 	s := &KafkaStore{
 		conns:        map[string]*kafkaConnState{},
 		subs:         map[kafkaSubKey]*kafkaActiveConsume{},
 		messages:     map[string][]KafkaMessage{},
-		kafkaService: kafkaService,
+		kafkaService: svc,
 		envStore:     envStore,
 		logStore:     logStore,
 		workspace:    workspace,
@@ -121,7 +131,7 @@ func (s *KafkaStore) Connect(collectionID, collectionName string, conn entity.Ka
 		}
 		return
 	}
-	conn = applyKafkaEnv(conn, s.envStore)
+	conn = applyKafkaEnv(conn, s.envStore.ActiveVariables())
 	s.kafkaService.Dial(conn, func(brokers []string, res service.KafkaConnectResult) {
 		fyne.Do(func() {
 			if res.Error != "" || len(brokers) == 0 {
@@ -355,7 +365,7 @@ func (s *KafkaStore) StopConsume(collectionID, itemID string) {
 }
 
 func (s *KafkaStore) Run(collectionID, itemID string, method constants.KafkaMethod, req entity.KafkaRequest, onDone func(err error)) {
-	req = applyKafkaRequestEnv(req, s.envStore)
+	req = applyKafkaRequestEnv(req, s.envStore.ActiveVariables())
 	method = constants.NormalizeKafkaMethod(method)
 
 	s.mu.Lock()
@@ -600,20 +610,12 @@ func (s *KafkaStore) logKafkaError(topic, errMsg string) {
 	})
 }
 
-func applyKafkaEnv(conn entity.KafkaConnection, envStore IEnvStore) entity.KafkaConnection {
-	if envStore == nil {
-		return conn
-	}
-	vars := envStore.ActiveVariables()
+func applyKafkaEnv(conn entity.KafkaConnection, vars map[string]string) entity.KafkaConnection {
 	conn.Brokers = utils.SubstituteEnvVars(conn.Brokers, vars)
 	return conn
 }
 
-func applyKafkaRequestEnv(req entity.KafkaRequest, envStore IEnvStore) entity.KafkaRequest {
-	if envStore == nil {
-		return req
-	}
-	vars := envStore.ActiveVariables()
+func applyKafkaRequestEnv(req entity.KafkaRequest, vars map[string]string) entity.KafkaRequest {
 	req.Topic = utils.SubstituteEnvVars(req.Topic, vars)
 	req.Key = utils.SubstituteEnvVars(req.Key, vars)
 	req.Payload = utils.SubstituteEnvVars(req.Payload, vars)

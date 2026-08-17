@@ -15,25 +15,6 @@ import (
 	"github.com/s-404/ladno/internal/app/utils"
 )
 
-type INatsStore interface {
-	Connect(collectionID, collectionName string, conn entity.NatsConnection, onDone func(ok bool, status string))
-	IsConnected(collectionID string) bool
-	Disconnect(collectionID string)
-	DisconnectAll()
-	ConnectedIDs() map[string]bool
-	AddConnectionListener(fn func())
-
-	Run(collectionID, itemID string, method constants.NatsMethod, req entity.NatsRequest, onDone func(err error))
-	IsSubscribed(collectionID, itemID string) bool
-	Unsubscribe(collectionID, itemID string)
-
-	AppendMessage(collectionID, subject, data string)
-	MessagesText(collectionID, subjectPattern string, all bool) string
-	ClearMessages(collectionID, subjectPattern string)
-	AddMessageListener(fn func())
-	TrimMessagesToLimit()
-}
-
 type natsSubKey struct {
 	collectionID string
 	itemID       string
@@ -50,6 +31,35 @@ type NatsMessage struct {
 	Time    time.Time
 }
 
+// natsService is the broker surface NatsStore needs.
+type natsService interface {
+	Connect(conn entity.NatsConnection, cb func(*nats.Conn, service.NatsConnectResult))
+	Publish(nc *nats.Conn, subject string, headers nats.Header, payload []byte) error
+	Request(nc *nats.Conn, subject string, headers nats.Header, payload []byte, timeout time.Duration) (*nats.Msg, error)
+	Subscribe(nc *nats.Conn, subject string, handler nats.MsgHandler) (*nats.Subscription, error)
+}
+
+// natsEnvVars is the env lookup NatsStore needs.
+type natsEnvVars interface {
+	ActiveVariables() map[string]string
+}
+
+// natsLog is the log append surface NatsStore needs.
+type natsLog interface {
+	Append(entry *entity.LogEntry)
+}
+
+// natsWorkspace is the workspace surface NatsStore watches.
+type natsWorkspace interface {
+	GetItem() binding.Untyped
+	GetSelectedWorkspace() *entity.Workspace
+}
+
+// natsSettings is the settings surface NatsStore reads.
+type natsSettings interface {
+	GetMessageLimit() int
+}
+
 type NatsStore struct {
 	mu               sync.Mutex
 	conns            map[string]*nats.Conn
@@ -58,27 +68,27 @@ type NatsStore struct {
 	messages         map[string][]NatsMessage      // collectionID → traffic
 	listeners        []func()
 	messageListeners []func()
-	natsService      service.INatsService
-	envStore         IEnvStore
-	logStore         ILogStore
-	workspace        IWorkspaceStore
-	settings         ISettingsStore
+	natsService      natsService
+	envStore         natsEnvVars
+	logStore         natsLog
+	workspace        natsWorkspace
+	settings         natsSettings
 	activeWorkspace  string
 }
 
 func NewNatsStore(
-	natsService service.INatsService,
-	envStore IEnvStore,
-	logStore ILogStore,
-	workspace IWorkspaceStore,
-	settings ISettingsStore,
+	svc natsService,
+	envStore natsEnvVars,
+	logStore natsLog,
+	workspace natsWorkspace,
+	settings natsSettings,
 ) *NatsStore {
 	s := &NatsStore{
 		conns:       map[string]*nats.Conn{},
 		subs:        map[natsSubKey]*natsActiveSub{},
 		monitors:    map[string]*nats.Subscription{},
 		messages:    map[string][]NatsMessage{},
-		natsService: natsService,
+		natsService: svc,
 		envStore:    envStore,
 		logStore:    logStore,
 		workspace:   workspace,
@@ -116,7 +126,7 @@ func (s *NatsStore) Connect(collectionID, collectionName string, conn entity.Nat
 		return
 	}
 
-	conn = applyNatsEnv(conn, s.envStore)
+	conn = applyNatsEnv(conn, s.envStore.ActiveVariables())
 
 	s.natsService.Connect(conn, func(nc *nats.Conn, res service.NatsConnectResult) {
 		fyne.Do(func() {
@@ -401,7 +411,7 @@ func (s *NatsStore) Unsubscribe(collectionID, itemID string) {
 }
 
 func (s *NatsStore) Run(collectionID, itemID string, method constants.NatsMethod, req entity.NatsRequest, onDone func(err error)) {
-	req = applyNatsRequestEnv(req, s.envStore)
+	req = applyNatsRequestEnv(req, s.envStore.ActiveVariables())
 	method = constants.NormalizeNatsMethod(method)
 
 	s.mu.Lock()
@@ -679,11 +689,7 @@ func natsSubjectMatch(pattern, subject string) bool {
 	return len(pp) == len(ss)
 }
 
-func applyNatsEnv(conn entity.NatsConnection, envStore IEnvStore) entity.NatsConnection {
-	if envStore == nil {
-		return conn
-	}
-	vars := envStore.ActiveVariables()
+func applyNatsEnv(conn entity.NatsConnection, vars map[string]string) entity.NatsConnection {
 	if len(vars) == 0 {
 		return conn
 	}
@@ -693,11 +699,7 @@ func applyNatsEnv(conn entity.NatsConnection, envStore IEnvStore) entity.NatsCon
 	return conn
 }
 
-func applyNatsRequestEnv(req entity.NatsRequest, envStore IEnvStore) entity.NatsRequest {
-	if envStore == nil {
-		return req
-	}
-	vars := envStore.ActiveVariables()
+func applyNatsRequestEnv(req entity.NatsRequest, vars map[string]string) entity.NatsRequest {
 	if len(vars) == 0 {
 		return req
 	}

@@ -6,35 +6,40 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/data/binding"
 	"github.com/s-404/ladno/internal/app/entity"
-	"github.com/s-404/ladno/internal/app/service"
 	"github.com/s-404/ladno/internal/app/utils"
 )
 
-type IRestStore interface {
-	GetDraft() binding.Untyped
-	SetDraft(draft entity.RestDraft)
-	GetIsSending() *binding.Bool
-	GetResponse() binding.Untyped
-	Send(req entity.RestRequest)
-	Preview(req entity.RestRequest) string
-	ClearResponse()
+// restService is the HTTP surface RestStore needs.
+type restService interface {
+	Send(req entity.RestRequest, cb func(*entity.RestResponse))
+	BuildSnapshot(req entity.RestRequest) (*entity.RestRequestSnapshot, error)
+}
+
+// restEnvVars is the env lookup RestStore needs.
+type restEnvVars interface {
+	ActiveVariables() map[string]string
+}
+
+// restLog is the log append surface RestStore needs.
+type restLog interface {
+	Append(entry *entity.LogEntry)
 }
 
 type RestStore struct {
 	Draft       binding.Untyped
 	Response    binding.Untyped
 	IsSending   binding.Bool
-	restService service.IRestService
-	envStore    IEnvStore
-	logStore    ILogStore
+	restService restService
+	envStore    restEnvVars
+	logStore    restLog
 }
 
-func NewRestStore(restService service.IRestService, envStore IEnvStore, logStore ILogStore) *RestStore {
+func NewRestStore(svc restService, envStore restEnvVars, logStore restLog) *RestStore {
 	return &RestStore{
 		Draft:       binding.NewUntyped(),
 		Response:    binding.NewUntyped(),
 		IsSending:   binding.NewBool(),
-		restService: restService,
+		restService: svc,
 		envStore:    envStore,
 		logStore:    logStore,
 	}

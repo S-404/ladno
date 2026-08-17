@@ -16,16 +16,6 @@ import (
 
 const workspacesFileName = "workspaces.json"
 
-type IWorkspaceRepository interface {
-	FindById(id string) *entity.Workspace
-	List(titleSearch string) []*entity.Workspace
-	FindAllLightweight() []entity.WorkspaceLightWeight
-	FindAll() []*entity.Workspace
-	Create(name string) (*entity.Workspace, error)
-	Save(workspace *entity.Workspace) error
-	Delete(id string) error
-}
-
 type workspacesFile struct {
 	Version    int                 `json:"version"`
 	Workspaces []*entity.Workspace `json:"workspaces"`

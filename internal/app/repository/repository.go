@@ -7,8 +7,8 @@ import (
 )
 
 type Repository struct {
-	Env       IEnvRepository
-	Workspace IWorkspaceRepository
+	Env       *EnvRepository
+	Workspace *WorkspaceRepository
 	Storage   *storage.Store
 }
 

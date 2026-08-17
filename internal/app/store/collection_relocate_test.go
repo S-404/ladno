@@ -12,30 +12,11 @@ type memWorkspaceStore struct {
 	ws *entity.Workspace
 }
 
-func (m *memWorkspaceStore) FetchWorkspaceList() {}
-func (m *memWorkspaceStore) GetItems() *binding.UntypedList {
-	l := binding.NewUntypedList()
-	return &l
-}
-func (m *memWorkspaceStore) GetWorkspaceListItemDataItem(binding.DataItem) *entity.WorkspaceLightWeight {
-	return nil
-}
-func (m *memWorkspaceStore) GetWorkspaceListItemByIndex(int) *entity.WorkspaceLightWeight { return nil }
-func (m *memWorkspaceStore) FetchWorkspace(string)                                        {}
-func (m *memWorkspaceStore) GetItem() binding.Untyped                                     { return binding.NewUntyped() }
-func (m *memWorkspaceStore) GetWorkspaceDataItem(binding.DataItem) *entity.Workspace      { return m.ws }
-func (m *memWorkspaceStore) GetSelectedWorkspace() *entity.Workspace                      { return m.ws }
+func (m *memWorkspaceStore) GetSelectedWorkspace() *entity.Workspace { return m.ws }
 func (m *memWorkspaceStore) PublishWorkspace(ws *entity.Workspace) {
 	if ws != nil {
 		m.ws = ws
 	}
-}
-func (m *memWorkspaceStore) UpdateSelectedWorkspace(string, string) bool   { return false }
-func (m *memWorkspaceStore) Create(string, func(*entity.Workspace, error)) {}
-func (m *memWorkspaceStore) Delete(string, func(error))                    {}
-func (m *memWorkspaceStore) GetIsFetching() *binding.Bool {
-	b := binding.NewBool()
-	return &b
 }
 
 func newTestSelectionStore(ws *entity.Workspace) *SelectionStore {

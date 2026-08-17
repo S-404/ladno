@@ -2,23 +2,23 @@ package service
 
 import (
 	"github.com/s-404/ladno/internal/app/entity"
-	"github.com/s-404/ladno/internal/app/repository"
 )
 
-type IWorkspaceService interface {
-	List(cb func([]entity.WorkspaceLightWeight, error))
-	FindAll(cb func([]*entity.Workspace, error))
-	Find(id string, cb func(*entity.Workspace, error))
-	Create(name string, cb func(*entity.Workspace, error))
-	Save(workspace *entity.Workspace, cb func(error))
-	Delete(id string, cb func(error))
+// workspaceRepository is the persistence surface WorkspaceService needs.
+type workspaceRepository interface {
+	FindById(id string) *entity.Workspace
+	FindAllLightweight() []entity.WorkspaceLightWeight
+	FindAll() []*entity.Workspace
+	Create(name string) (*entity.Workspace, error)
+	Save(workspace *entity.Workspace) error
+	Delete(id string) error
 }
 
 type WorkspaceService struct {
-	workspaceRepository repository.IWorkspaceRepository
+	workspaceRepository workspaceRepository
 }
 
-func newWorkspaceService(workspaceRepository repository.IWorkspaceRepository) *WorkspaceService {
+func newWorkspaceService(workspaceRepository workspaceRepository) *WorkspaceService {
 	return &WorkspaceService{
 		workspaceRepository: workspaceRepository,
 	}
@@ -26,8 +26,6 @@ func newWorkspaceService(workspaceRepository repository.IWorkspaceRepository) *W
 
 func (s *WorkspaceService) List(cb func([]entity.WorkspaceLightWeight, error)) {
 	go func() {
-		// Искусственная задержка
-		//time.Sleep(1 * time.Second)
 		data := s.workspaceRepository.FindAllLightweight()
 		cb(data, nil)
 	}()
@@ -35,8 +33,6 @@ func (s *WorkspaceService) List(cb func([]entity.WorkspaceLightWeight, error)) {
 
 func (s *WorkspaceService) FindAll(cb func([]*entity.Workspace, error)) {
 	go func() {
-		// Искусственная задержка
-		//time.Sleep(1 * time.Second)
 		data := s.workspaceRepository.FindAll()
 		cb(data, nil)
 	}()

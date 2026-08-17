@@ -22,13 +22,6 @@ type NatsMessage struct {
 	Header  nats.Header
 }
 
-type INatsService interface {
-	Connect(conn entity.NatsConnection, cb func(*nats.Conn, NatsConnectResult))
-	Publish(nc *nats.Conn, subject string, headers nats.Header, payload []byte) error
-	Request(nc *nats.Conn, subject string, headers nats.Header, payload []byte, timeout time.Duration) (*nats.Msg, error)
-	Subscribe(nc *nats.Conn, subject string, handler nats.MsgHandler) (*nats.Subscription, error)
-}
-
 type NatsService struct{}
 
 func NewNatsService() *NatsService {
