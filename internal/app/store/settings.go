@@ -8,6 +8,7 @@ import (
 const (
 	prefMessageLimitKey    = "messageHistoryLimit"
 	prefThemeKey           = "uiTheme"
+	prefFontSizeKey        = "uiFontSize"
 	prefLastWorkspaceKey   = "lastWorkspaceId"
 	prefActiveEnvKey       = "activeEnvId"
 	defaultMessageLimit    = 1000
@@ -16,6 +17,11 @@ const (
 
 	ThemeLight = "light"
 	ThemeDark  = "dark"
+
+	FontSizeSmall  = "small"
+	FontSizeMedium = "medium"
+	FontSizeLarge  = "large"
+	FontSizeXLarge = "xlarge"
 )
 
 type SettingsStore struct{}
@@ -51,12 +57,24 @@ func (s *SettingsStore) SetTheme(name string) string {
 	return name
 }
 
+func (s *SettingsStore) GetFontSize() string {
+	return normalizeFontSize(s.prefs().StringWithFallback(prefFontSizeKey, FontSizeMedium))
+}
+
+func (s *SettingsStore) SetFontSize(name string) string {
+	name = normalizeFontSize(name)
+	s.prefs().SetString(prefFontSizeKey, name)
+	s.ApplyTheme()
+	return name
+}
+
 func (s *SettingsStore) ApplyTheme() {
+	textSize := fontSizePoints(s.GetFontSize())
 	switch s.GetTheme() {
 	case ThemeLight:
-		fyne.CurrentApp().Settings().SetTheme(uitheme.Light())
+		fyne.CurrentApp().Settings().SetTheme(uitheme.Light(textSize))
 	default:
-		fyne.CurrentApp().Settings().SetTheme(uitheme.Dark())
+		fyne.CurrentApp().Settings().SetTheme(uitheme.Dark(textSize))
 	}
 }
 
@@ -91,4 +109,26 @@ func normalizeTheme(name string) string {
 		return ThemeLight
 	}
 	return ThemeDark
+}
+
+func normalizeFontSize(name string) string {
+	switch name {
+	case FontSizeSmall, FontSizeLarge, FontSizeXLarge:
+		return name
+	default:
+		return FontSizeMedium
+	}
+}
+
+func fontSizePoints(name string) float32 {
+	switch normalizeFontSize(name) {
+	case FontSizeSmall:
+		return 12
+	case FontSizeLarge:
+		return 16
+	case FontSizeXLarge:
+		return 18
+	default:
+		return 14
+	}
 }

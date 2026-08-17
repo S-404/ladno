@@ -146,6 +146,34 @@ func generalSettingsTab(app *shared.App) fyne.CanvasObject {
 		settings.SetTheme(name)
 	}
 
+	fontLabels := []string{"Small", "Medium", "Large", "Extra large"}
+	fontSelect := widget.NewSelect(fontLabels, nil)
+	switch settings.GetFontSize() {
+	case store.FontSizeSmall:
+		fontSelect.SetSelected("Small")
+	case store.FontSizeLarge:
+		fontSelect.SetSelected("Large")
+	case store.FontSizeXLarge:
+		fontSelect.SetSelected("Extra large")
+	default:
+		fontSelect.SetSelected("Medium")
+	}
+	fontSizeFromLabel := func(v string) string {
+		switch v {
+		case "Small":
+			return store.FontSizeSmall
+		case "Large":
+			return store.FontSizeLarge
+		case "Extra large":
+			return store.FontSizeXLarge
+		default:
+			return store.FontSizeMedium
+		}
+	}
+	fontSelect.OnChanged = func(v string) {
+		settings.SetFontSize(fontSizeFromLabel(v))
+	}
+
 	status := widget.NewLabel("")
 	status.TextStyle = fyne.TextStyle{Italic: true}
 
@@ -166,8 +194,10 @@ func generalSettingsTab(app *shared.App) fyne.CanvasObject {
 			themeName = store.ThemeLight
 		}
 		settings.SetTheme(themeName)
+		fontName := fontSizeFromLabel(fontSelect.Selected)
+		settings.SetFontSize(fontName)
 
-		status.SetText(fmt.Sprintf("Saved: theme=%s, keep last %d messages", themeName, applied))
+		status.SetText(fmt.Sprintf("Saved: theme=%s, font=%s, keep last %d messages", themeName, fontName, applied))
 	})
 	saveBtn.Importance = widget.HighImportance
 
@@ -175,6 +205,7 @@ func generalSettingsTab(app *shared.App) fyne.CanvasObject {
 		widget.NewLabelWithStyle("Appearance", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		widget.NewForm(
 			widget.NewFormItem("Theme", themeSelect),
+			widget.NewFormItem("Font size", fontSelect),
 		),
 		widget.NewLabelWithStyle("History", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		widget.NewForm(
