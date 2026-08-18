@@ -42,8 +42,7 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 		}
 	})
 
-	nameEntry := ui.NewEntry()
-	nameEntry.SetPlaceHolder("Collection name")
+	var nameField *ui.EditableName
 
 	typeLabel := widget.NewLabel("")
 	typeLabel.TextStyle = fyne.TextStyle{Italic: true}
@@ -68,7 +67,7 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 	content := container.NewStack()
 
 	getSave = func() SettingsSave {
-		out := SettingsSave{Name: nameEntry.Text}
+		out := SettingsSave{Name: nameField.Get()}
 		switch currentType {
 		case constants.CollectionTypeNATS:
 			out.Nats = &entity.NatsConnection{
@@ -99,8 +98,8 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 		AllowInherited: false,
 		OnChange:       func(entity.Auth) { notify() },
 	})
+	nameField = ui.NewEditableName("Collection name", func(string) { notify() })
 
-	nameEntry.OnChanged = func(string) { notify() }
 	hostEntry.OnChanged(func(string) { notify() })
 	portEntry.OnChanged(func(string) { notify() })
 	tokenEntry.OnChanged(func(string) { notify() })
@@ -141,7 +140,7 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 				container.NewBorder(header.Object, nil, nil, nil,
 					container.NewPadded(container.NewVBox(
 						widget.NewForm(
-							widget.NewFormItem("Name", nameEntry),
+							widget.NewFormItem("Name", nameField.Object),
 							widget.NewFormItem("Type", typeLabel),
 							widget.NewFormItem("Host", hostEntry),
 							widget.NewFormItem("Port", portEntry),
@@ -158,7 +157,7 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 				container.NewBorder(header.Object, nil, nil, nil,
 					container.NewPadded(container.NewVBox(
 						widget.NewForm(
-							widget.NewFormItem("Name", nameEntry),
+							widget.NewFormItem("Name", nameField.Object),
 							widget.NewFormItem("Type", typeLabel),
 							widget.NewFormItem("Brokers", brokersEntry),
 						),
@@ -171,7 +170,7 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 		default:
 			general := container.NewPadded(container.NewVBox(
 				widget.NewForm(
-					widget.NewFormItem("Name", nameEntry),
+					widget.NewFormItem("Name", nameField.Object),
 					widget.NewFormItem("Type", typeLabel),
 				),
 			))
@@ -196,7 +195,7 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 	v.Set = func(name string, auth entity.Auth, nats *entity.NatsConnection, kafka *entity.KafkaConnection, colType constants.CollectionType, isConnected bool) {
 		applying = true
 		currentType = constants.NormalizeCollectionType(colType)
-		nameEntry.SetText(name)
+		nameField.Set(name)
 		typeLabel.SetText(string(currentType))
 		connStatus.SetText("")
 		setConnected(isConnected)

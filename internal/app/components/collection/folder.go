@@ -18,8 +18,7 @@ type FolderView struct {
 
 func NewFolderView(onChange func(name string, auth entity.Auth), onSave func(name string, auth entity.Auth)) *FolderView {
 	var applying bool
-	nameEntry := ui.NewEntry()
-	nameEntry.SetPlaceHolder("Folder name")
+	var nameField *ui.EditableName
 
 	var get func() (string, entity.Auth)
 	header := ui.NewEntityHeader("Folder", func() {
@@ -42,14 +41,14 @@ func NewFolderView(onChange func(name string, auth entity.Auth), onSave func(nam
 		AllowInherited: true,
 		OnChange:       func(entity.Auth) { notify() },
 	})
-	nameEntry.OnChanged = func(string) { notify() }
+	nameField = ui.NewEditableName("Folder name", func(string) { notify() })
 
 	get = func() (string, entity.Auth) {
-		return nameEntry.Text, authPanel.Get()
+		return nameField.Get(), authPanel.Get()
 	}
 
 	general := container.NewPadded(container.NewVBox(
-		widget.NewForm(widget.NewFormItem("Name", nameEntry)),
+		widget.NewForm(widget.NewFormItem("Name", nameField.Object)),
 	))
 	tabs := container.NewAppTabs(
 		container.NewTabItem("General", general),
@@ -60,7 +59,7 @@ func NewFolderView(onChange func(name string, auth entity.Auth), onSave func(nam
 	v := &FolderView{CanvasObject: root}
 	v.Set = func(name string, auth entity.Auth) {
 		applying = true
-		nameEntry.SetText(name)
+		nameField.Set(name)
 		authPanel.Set(auth)
 		applying = false
 	}
