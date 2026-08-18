@@ -268,12 +268,19 @@ func buildBody(req entity.RestRequest) (io.Reader, string, string, error) {
 func buildBodyContent(req entity.RestRequest) (io.Reader, string, string, error) {
 	switch req.BodyMode {
 	case entity.RestBodyFormData:
-		var buf bytes.Buffer
-		w := multipart.NewWriter(&buf)
+		fields := make([]entity.Variable, 0, len(req.FormData))
 		for _, row := range req.FormData {
 			if row.Key == "" {
 				continue
 			}
+			fields = append(fields, row)
+		}
+		if len(fields) == 0 {
+			return nil, "", "", nil
+		}
+		var buf bytes.Buffer
+		w := multipart.NewWriter(&buf)
+		for _, row := range fields {
 			if err := w.WriteField(row.Key, row.Value); err != nil {
 				return nil, "", "", err
 			}
