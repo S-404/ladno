@@ -11,12 +11,12 @@ import (
 
 type RequestView struct {
 	fyne.CanvasObject
-	Set       func(req *entity.WsRequest, name string, auth entity.Auth)
+	Set       func(req *entity.WsRequest, name string)
 	SetDirty  func(dirty bool)
 	FocusName func()
 }
 
-func NewRequestView(onChange func(name string, req entity.WsRequest, auth entity.Auth), onSave func()) *RequestView {
+func NewRequestView(onChange func(name string, req entity.WsRequest), onSave func()) *RequestView {
 	var applying bool
 	var header *ui.EntityHeader
 
@@ -27,14 +27,13 @@ func NewRequestView(onChange func(name string, req entity.WsRequest, auth entity
 	message.SetMinRowsVisible(8)
 
 	var headers *ui.KVTable
-	var authPanel *ui.AuthPanel
 	var getReq func() entity.WsRequest
 
 	notify := func() {
-		if applying || onChange == nil || header == nil || authPanel == nil || getReq == nil {
+		if applying || onChange == nil || header == nil || getReq == nil {
 			return
 		}
-		onChange(header.GetName(), getReq(), authPanel.Get())
+		onChange(header.GetName(), getReq())
 	}
 
 	header = ui.NewEntityHeader(theme.DocumentIcon(), "Request name", func(string) { notify() }, onSave)
@@ -51,7 +50,6 @@ func NewRequestView(onChange func(name string, req entity.WsRequest, auth entity
 		}
 		return entity.WsRequest{URL: urlEntry.Text, Message: message.Text, Headers: vars}
 	}
-	authPanel = ui.NewAuthPanel(ui.AuthPanelOptions{AllowInherited: true, OnChange: func(entity.Auth) { notify() }})
 	urlEntry.OnChanged = func(string) { notify() }
 	message.OnChanged = func(string) { notify() }
 
@@ -62,7 +60,7 @@ func NewRequestView(onChange func(name string, req entity.WsRequest, auth entity
 	hint := widget.NewLabel("WebSocket is not implemented yet")
 	hint.TextStyle = fyne.TextStyle{Italic: true}
 
-	requestTab := container.NewBorder(
+	root := container.NewBorder(
 		container.NewVBox(
 			header.Object,
 			widget.NewForm(widget.NewFormItem("URL", urlEntry)),
@@ -74,16 +72,11 @@ func NewRequestView(onChange func(name string, req entity.WsRequest, auth entity
 		nil, nil,
 		message,
 	)
-	tabs := container.NewAppTabs(
-		container.NewTabItem("Request", container.NewPadded(requestTab)),
-		container.NewTabItem("Auth", authPanel.CanvasObject),
-	)
 
-	v := &RequestView{CanvasObject: tabs}
-	v.Set = func(req *entity.WsRequest, name string, auth entity.Auth) {
+	v := &RequestView{CanvasObject: container.NewPadded(root)}
+	v.Set = func(req *entity.WsRequest, name string) {
 		applying = true
 		header.SetName(name)
-		authPanel.Set(auth)
 		if req == nil {
 			urlEntry.SetText("")
 			message.SetText("")

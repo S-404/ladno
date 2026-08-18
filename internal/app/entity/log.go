@@ -16,8 +16,9 @@ type LogEntry struct {
 
 // RestRequestSnapshot — итоговый HTTP-запрос после env/path подстановок.
 type RestRequestSnapshot struct {
-	Method  string              `json:"method"`
-	URL     string              `json:"url"`
-	Headers map[string][]string `json:"headers"`
-	Body    string              `json:"body"`
+	Method           string              `json:"method"`
+	URL              string              `json:"url"`
+	Headers          map[string][]string `json:"headers"`
+	Body             string              `json:"body"`
+	SecretHeaderKeys []string            `json:"secretHeaderKeys,omitempty"`
 }

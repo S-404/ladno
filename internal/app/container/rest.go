@@ -27,7 +27,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 	var requestInput *rest.RequestInputView
 	var paramsView *rest.RequestParamsView
 	var bodyView *rest.RequestBodyView
-	var headersTable *ui.KVTable
+	var headersView *rest.RequestHeadersView
 	var previewView *rest.PreviewView
 	var authPanel *ui.AuthPanel
 	var header *ui.EntityHeader
@@ -49,6 +49,17 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 			req.BodyMode = entity.RestBodyRaw
 		}
 		return req
+	}
+
+	var preparedReq func() entity.RestRequest
+	var refreshAutoHeaders func()
+	preparedReq = func() entity.RestRequest {
+		req := buildReq()
+		sel := currentSelection(selStore.GetSelection())
+		if sel == nil || sel.Kind != entity.SelectionRequest || authPanel == nil {
+			return req
+		}
+		return applyRESTAuth(app, req, sel.CollectionID, sel.ItemID, authPanel.Get())
 	}
 
 	flushDraft := func(markDirty bool) {
@@ -82,10 +93,13 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		}
 		drafts.PutRequestDraft(sel.ItemID, d, markDirty)
 		header.SetDirty(drafts.IsRequestDirty(sel.ItemID))
+		applying = true
+		refreshAutoHeaders()
+		applying = false
 	}
 
 	send := func() {
-		restStore.Send(buildReq())
+		restStore.Send(preparedReq())
 	}
 
 	header = ui.NewEntityHeader(theme.DocumentIcon(), "Request name", func(string) {
@@ -104,20 +118,43 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		flushDraft(true)
 	})
 	paramsView = rest.NewRequestParams(requestURL)
-	headersTable = rest.NewRequestHeaders(nil, func(rows []ui.KVRow) {
+	headersView = rest.NewRequestHeaders(nil, func(rows []ui.KVRow) {
 		headers = rows
 		flushDraft(true)
 	})
 	bodyView = rest.NewRequestBody(rest.BodyState{Mode: rest.BodyModeRaw}, func(rest.BodyState) {
 		flushDraft(true)
 	})
-	previewView = rest.NewPreviewView(func() string {
-		return restStore.Preview(buildReq())
+	previewView = rest.NewPreviewView(func(showSecrets bool) string {
+		return restStore.Preview(preparedReq(), showSecrets)
 	})
 	authPanel = ui.NewAuthPanel(ui.AuthPanelOptions{
 		AllowInherited: true,
 		OnChange:       func(entity.Auth) { flushDraft(true) },
 	})
+
+	refreshAutoHeaders = func() {
+		if headersView == nil || authPanel == nil {
+			return
+		}
+		sel := currentSelection(selStore.GetSelection())
+		if sel == nil || sel.Kind != entity.SelectionRequest {
+			headersView.SetAuto(nil)
+			return
+		}
+		resolved := resolveRESTAuth(app, sel.CollectionID, sel.ItemID, authPanel.Get())
+		auto := entity.AuthGeneratedHeaders(resolved)
+		rows := make([]ui.KVRow, 0, len(auto))
+		for _, h := range auto {
+			rows = append(rows, ui.KVRow{
+				Enabled: true,
+				Key:     h.Key,
+				Value:   h.Value,
+				Secret:  true,
+			})
+		}
+		headersView.SetAuto(rows)
+	}
 
 	requestURL.AddListener(binding.NewDataListener(func() {
 		flushDraft(true)
@@ -125,7 +162,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 
 	requestTabs := container.NewAppTabs(
 		container.NewTabItem("Params", paramsView.Object),
-		container.NewTabItem("Headers", headersTable),
+		container.NewTabItem("Headers", headersView.Object),
 		container.NewTabItem("Auth", authPanel.CanvasObject),
 		container.NewTabItem("Body", bodyView.Object),
 		container.NewTabItem("Preview", previewView.Object),
@@ -184,8 +221,9 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		_ = requestURL.Set(draft.URL)
 		headerRows := variablesToKVRows(draft.Headers)
 		headers = headerRows
-		headersTable.SetRows(headerRows)
+		headersView.SetManual(headerRows)
 		authPanel.Set(draft.Auth)
+		refreshAutoHeaders()
 		mode := rest.BodyModeRaw
 		if draft.BodyMode == entity.RestBodyFormData {
 			mode = rest.BodyModeFormData
@@ -212,6 +250,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		}
 		applying = true
 		header.SetName(sel.Name)
+		refreshAutoHeaders()
 		applying = false
 		header.SetDirty(drafts.IsRequestDirty(sel.ItemID))
 		if sel.FocusName {
@@ -227,6 +266,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		}
 		fyne.Do(func() {
 			header.SetDirty(drafts.IsRequestDirty(sel.ItemID))
+			refreshAutoHeaders()
 		})
 	})
 

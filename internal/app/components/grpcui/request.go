@@ -11,12 +11,12 @@ import (
 
 type RequestView struct {
 	fyne.CanvasObject
-	Set       func(req *entity.GrpcRequest, name string, auth entity.Auth)
+	Set       func(req *entity.GrpcRequest, name string)
 	SetDirty  func(dirty bool)
 	FocusName func()
 }
 
-func NewRequestView(onChange func(name string, req entity.GrpcRequest, auth entity.Auth), onSave func()) *RequestView {
+func NewRequestView(onChange func(name string, req entity.GrpcRequest), onSave func()) *RequestView {
 	var applying bool
 	var header *ui.EntityHeader
 
@@ -29,14 +29,13 @@ func NewRequestView(onChange func(name string, req entity.GrpcRequest, auth enti
 	message.SetMinRowsVisible(8)
 
 	var meta *ui.KVTable
-	var authPanel *ui.AuthPanel
 	var getReq func() entity.GrpcRequest
 
 	notify := func() {
-		if applying || onChange == nil || header == nil || authPanel == nil || getReq == nil {
+		if applying || onChange == nil || header == nil || getReq == nil {
 			return
 		}
-		onChange(header.GetName(), getReq(), authPanel.Get())
+		onChange(header.GetName(), getReq())
 	}
 
 	header = ui.NewEntityHeader(theme.DocumentIcon(), "Request name", func(string) { notify() }, onSave)
@@ -55,7 +54,6 @@ func NewRequestView(onChange func(name string, req entity.GrpcRequest, auth enti
 			Target: target.Text, Method: method.Text, Message: message.Text, Metadata: vars,
 		}
 	}
-	authPanel = ui.NewAuthPanel(ui.AuthPanelOptions{AllowInherited: true, OnChange: func(entity.Auth) { notify() }})
 	target.OnChanged = func(string) { notify() }
 	method.OnChanged = func(string) { notify() }
 	message.OnChanged = func(string) { notify() }
@@ -65,7 +63,7 @@ func NewRequestView(onChange func(name string, req entity.GrpcRequest, auth enti
 	hint := widget.NewLabel("gRPC send is not implemented yet")
 	hint.TextStyle = fyne.TextStyle{Italic: true}
 
-	requestTab := container.NewBorder(
+	root := container.NewBorder(
 		container.NewVBox(
 			header.Object,
 			widget.NewForm(
@@ -80,16 +78,11 @@ func NewRequestView(onChange func(name string, req entity.GrpcRequest, auth enti
 		nil, nil,
 		message,
 	)
-	tabs := container.NewAppTabs(
-		container.NewTabItem("Request", container.NewPadded(requestTab)),
-		container.NewTabItem("Auth", authPanel.CanvasObject),
-	)
 
-	v := &RequestView{CanvasObject: tabs}
-	v.Set = func(req *entity.GrpcRequest, name string, auth entity.Auth) {
+	v := &RequestView{CanvasObject: container.NewPadded(root)}
+	v.Set = func(req *entity.GrpcRequest, name string) {
 		applying = true
 		header.SetName(name)
-		authPanel.Set(auth)
 		if req == nil {
 			target.SetText("")
 			method.SetText("")

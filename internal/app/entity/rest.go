@@ -18,6 +18,10 @@ type RestRequest struct {
 	BodyMode   RestBodyMode
 	RawBody    string
 	FormData   []Variable
+	// Auth — уже resolved (без Inherited); применяется после env-подстановки.
+	Auth Auth
+	// SecretHeaderKeys — заголовки, добавленные auth (для редaktion в preview/логах).
+	SecretHeaderKeys []string
 }
 
 // RestResponse — результат выполнения HTTP-запроса.

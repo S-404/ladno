@@ -2,6 +2,7 @@ package store
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -161,7 +162,7 @@ func FormatRestLogDetail(resp *entity.RestResponse) string {
 			snap = &entity.RestRequestSnapshot{Method: resp.Method, URL: resp.URL}
 		}
 	}
-	b.WriteString(FormatRestRequestPreview(snap, nil))
+	b.WriteString(FormatRestRequestPreview(snap, nil, false))
 
 	b.WriteString("\n── RESPONSE ──\n")
 	if resp == nil {
@@ -183,7 +184,7 @@ func FormatRestLogDetail(resp *entity.RestResponse) string {
 	}
 	if len(resp.Headers) > 0 {
 		b.WriteString("\nHeaders:\n")
-		writeHeaders(&b, resp.Headers)
+		writeHeaders(&b, resp.Headers, false, nil)
 	}
 	if resp.Body != "" {
 		b.WriteString("\nBody:\n")
@@ -194,7 +195,8 @@ func FormatRestLogDetail(resp *entity.RestResponse) string {
 }
 
 // FormatRestRequestPreview — текст превью/лога только по REQUEST (как в логах).
-func FormatRestRequestPreview(req *entity.RestRequestSnapshot, buildErr error) string {
+// showSecrets=false скрывает значения секретных заголовков (Authorization).
+func FormatRestRequestPreview(req *entity.RestRequestSnapshot, buildErr error, showSecrets bool) string {
 	var b strings.Builder
 	b.WriteString("── REQUEST ──\n")
 	if req == nil {
@@ -213,7 +215,7 @@ func FormatRestRequestPreview(req *entity.RestRequestSnapshot, buildErr error) s
 	b.WriteByte('\n')
 	if len(req.Headers) > 0 {
 		b.WriteString("\nHeaders:\n")
-		writeHeaders(&b, req.Headers)
+		writeHeaders(&b, req.Headers, showSecrets, req.SecretHeaderKeys)
 	}
 	if req.Body != "" {
 		b.WriteString("\nBody:\n")
@@ -228,16 +230,50 @@ func FormatRestRequestPreview(req *entity.RestRequestSnapshot, buildErr error) s
 	return b.String()
 }
 
-func writeHeaders(b *strings.Builder, headers map[string][]string) {
-	for k, vals := range headers {
-		for _, v := range vals {
+func writeHeaders(b *strings.Builder, headers map[string][]string, showSecrets bool, secretKeys []string) {
+	keys := make([]string, 0, len(headers))
+	for k := range headers {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return strings.ToLower(keys[i]) < strings.ToLower(keys[j])
+	})
+	for _, k := range keys {
+		for _, v := range headers[k] {
 			b.WriteString("  ")
 			b.WriteString(k)
 			b.WriteString(": ")
-			b.WriteString(v)
+			if !showSecrets && isSecretHeader(k, secretKeys) {
+				b.WriteString(redactSecret(v))
+			} else {
+				b.WriteString(v)
+			}
 			b.WriteByte('\n')
 		}
 	}
+}
+
+func isSecretHeader(key string, secretKeys []string) bool {
+	if isSecretHeaderKey(key) {
+		return true
+	}
+	for _, k := range secretKeys {
+		if strings.EqualFold(strings.TrimSpace(k), strings.TrimSpace(key)) {
+			return true
+		}
+	}
+	return false
+}
+
+func isSecretHeaderKey(key string) bool {
+	return strings.EqualFold(strings.TrimSpace(key), "Authorization")
+}
+
+func redactSecret(v string) string {
+	if v == "" {
+		return ""
+	}
+	return "••••••••"
 }
 
 func truncateLogBody(body string) string {

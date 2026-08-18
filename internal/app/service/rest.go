@@ -72,10 +72,11 @@ func (s *RestService) BuildSnapshot(req entity.RestRequest) (*entity.RestRequest
 	}
 
 	return &entity.RestRequestSnapshot{
-		Method:  method,
-		URL:     resolvedURL,
-		Headers: headers,
-		Body:    bodyText,
+		Method:           method,
+		URL:              resolvedURL,
+		Headers:          headers,
+		Body:             bodyText,
+		SecretHeaderKeys: append([]string{}, req.SecretHeaderKeys...),
 	}, nil
 }
 

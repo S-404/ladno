@@ -35,12 +35,16 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) *RequestB
 	if state.Mode == "" {
 		state.Mode = BodyModeRaw
 	}
+	var applying bool
 
 	rawEntry := ui.NewEnvMultiLineInput()
 	rawEntry.SetPlaceHolder("Paste JSON, XML or plain text…")
 	rawEntry.SetText(state.RawText)
 	rawEntry.SetMinRowsVisible(8)
 	rawEntry.OnChanged(func(v string) {
+		if applying {
+			return
+		}
 		state.RawText = v
 		if onChange != nil {
 			onChange(state)
@@ -48,6 +52,9 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) *RequestB
 	})
 
 	formTable := ui.NewKVTable(state.FormRows, func(rows []ui.KVRow) {
+		if applying {
+			return
+		}
 		state.FormRows = rows
 		if onChange != nil {
 			onChange(state)
@@ -58,7 +65,7 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) *RequestB
 
 	var modeSelect *widget.Select
 
-	applyMode := func(mode BodyMode) {
+	applyMode := func(mode BodyMode, notify bool) {
 		state.Mode = mode
 		switch mode {
 		case BodyModeRaw:
@@ -69,16 +76,19 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) *RequestB
 			formTable.Show()
 		}
 		stack.Refresh()
-		if onChange != nil {
+		if notify && onChange != nil {
 			onChange(state)
 		}
 	}
 
-	applyMode(state.Mode)
+	applyMode(state.Mode, false)
 
 	modes := []string{string(BodyModeRaw), string(BodyModeFormData)}
 	modeSelect = widget.NewSelect(modes, func(s string) {
-		applyMode(BodyMode(s))
+		if applying {
+			return
+		}
+		applyMode(BodyMode(s), true)
 	})
 	modeSelect.SetSelected(string(state.Mode))
 
@@ -98,11 +108,13 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) *RequestB
 			if next.Mode == "" {
 				next.Mode = BodyModeRaw
 			}
+			applying = true
 			state = next
 			rawEntry.SetText(state.RawText)
 			formTable.SetRows(state.FormRows)
 			modeSelect.SetSelected(string(state.Mode))
-			applyMode(state.Mode)
+			applyMode(state.Mode, false)
+			applying = false
 		},
 	}
 }

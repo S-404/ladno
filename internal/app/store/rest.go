@@ -67,12 +67,10 @@ func (s *RestStore) ClearResponse() {
 	s.Response.Set(nil)
 }
 
-func (s *RestStore) Preview(req entity.RestRequest) string {
-	if s.envStore != nil {
-		req = applyEnvVars(req, s.envStore.ActiveVariables())
-	}
+func (s *RestStore) Preview(req entity.RestRequest, showSecrets bool) string {
+	req = s.prepareRequest(req)
 	snap, err := s.restService.BuildSnapshot(req)
-	return FormatRestRequestPreview(snap, err)
+	return FormatRestRequestPreview(snap, err, showSecrets)
 }
 
 func (s *RestStore) Send(req entity.RestRequest) {
@@ -83,9 +81,7 @@ func (s *RestStore) Send(req entity.RestRequest) {
 	s.IsSending.Set(true)
 	s.Response.Set(nil)
 
-	if s.envStore != nil {
-		req = applyEnvVars(req, s.envStore.ActiveVariables())
-	}
+	req = s.prepareRequest(req)
 
 	s.restService.Send(req, func(resp *entity.RestResponse) {
 		fyne.Do(func() {
@@ -94,6 +90,31 @@ func (s *RestStore) Send(req entity.RestRequest) {
 			s.logRest(resp)
 		})
 	})
+}
+
+func (s *RestStore) prepareRequest(req entity.RestRequest) entity.RestRequest {
+	if s.envStore != nil {
+		vars := s.envStore.ActiveVariables()
+		req = applyEnvVars(req, vars)
+		req.Auth = applyEnvToAuth(req.Auth, vars)
+	}
+	return entity.ApplyAuth(req, req.Auth)
+}
+
+func applyEnvToAuth(auth entity.Auth, vars map[string]string) entity.Auth {
+	if len(vars) == 0 || len(auth.Data) == 0 {
+		return auth
+	}
+	data := make([]entity.Variable, len(auth.Data))
+	for i, d := range auth.Data {
+		data[i] = entity.Variable{
+			Key:   utils.SubstituteEnvVars(d.Key, vars),
+			Value: utils.SubstituteEnvVars(d.Value, vars),
+			Type:  d.Type,
+		}
+	}
+	auth.Data = data
+	return auth
 }
 
 func (s *RestStore) logRest(resp *entity.RestResponse) {

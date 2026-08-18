@@ -136,10 +136,9 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 	restPanel := RestContainer(app)
 
 	grpcPanel := grpcui.NewRequestView(
-		func(name string, req entity.GrpcRequest, auth entity.Auth) {
+		func(name string, req entity.GrpcRequest) {
 			putRequestDraft(func(d *entity.RequestDraft) {
 				d.Name = name
-				d.Request.Auth = auth
 				d.Request.Grpc = &req
 			})
 		},
@@ -151,10 +150,9 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		},
 	)
 	wsPanel := wsui.NewRequestView(
-		func(name string, req entity.WsRequest, auth entity.Auth) {
+		func(name string, req entity.WsRequest) {
 			putRequestDraft(func(d *entity.RequestDraft) {
 				d.Name = name
-				d.Request.Auth = auth
 				d.Request.Ws = &req
 			})
 		},
@@ -359,7 +357,7 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 				fyne.Do(colSettings.FocusName)
 			}
 		case entity.SelectionFolder:
-			folderSettings.Set(sel.Name, sel.Auth)
+			folderSettings.Set(sel.Name, sel.Auth, constants.NormalizeCollectionType(sel.CollectionType) == constants.CollectionTypeREST)
 			folderSettings.SetDirty(drafts.IsFolderDirty(sel.ItemID))
 			show(2)
 			if sel.FocusName {
@@ -375,14 +373,14 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			}
 			switch constants.NormalizeCollectionType(sel.CollectionType) {
 			case constants.CollectionTypeGRPC:
-				grpcPanel.Set(d.Request.Grpc, d.Name, d.Request.Auth)
+				grpcPanel.Set(d.Request.Grpc, d.Name)
 				grpcPanel.SetDirty(dirty)
 				show(4)
 				if focusName {
 					fyne.Do(grpcPanel.FocusName)
 				}
 			case constants.CollectionTypeWS:
-				wsPanel.Set(d.Request.Ws, d.Name, d.Request.Auth)
+				wsPanel.Set(d.Request.Ws, d.Name)
 				wsPanel.SetDirty(dirty)
 				show(5)
 				if focusName {

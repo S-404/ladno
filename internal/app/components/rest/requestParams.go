@@ -113,7 +113,7 @@ func NewRequestParams(requestURL binding.String) *RequestParamsView {
 		GetPathParams: func() map[string]string {
 			vals := map[string]string{}
 			for _, r := range pathTable.GetRows() {
-				if r.Key != "" && r.Value != "" {
+				if r.Key != "" {
 					vals[r.Key] = r.Value
 				}
 			}

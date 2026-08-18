@@ -192,3 +192,68 @@ func TestDirtyOnlyEditedIDs(t *testing.T) {
 		t.Fatal("display name")
 	}
 }
+
+func TestPutRequestDraftEquivalentNotDirty(t *testing.T) {
+	req := &entity.ItemRequest{
+		Method: constants.GET,
+		Auth:   entity.Auth{Type: constants.AuthTypeInherited},
+		Url: entity.RequestUrl{
+			Raw:      "https://api.example.com/:id",
+			Variable: []entity.Variable{{Key: "id", Value: ""}},
+		},
+		BodyMode: "",
+	}
+	ws := &entity.Workspace{
+		Id: "ws",
+		Collections: []entity.Collection{{
+			Id:    "c1",
+			Type:  constants.CollectionTypeREST,
+			Items: []entity.CollectionItem{{Id: "r1", Name: "R", Request: req}},
+		}},
+	}
+	mem := &memWS{ws: ws}
+	d := NewDraftStore(mem, newDraftTestSelection(mem), &memEnv{})
+
+	base := d.EnsureRequestDraft("c1", "r1", "R", req)
+	// UI-shaped flush: default body mode, auth fields expanded, path params omitted when empty.
+	ui := entity.RequestDraft{
+		CollectionID: "c1",
+		Name:         "R",
+		Request: entity.ItemRequest{
+			Method:   constants.GET,
+			Auth:     entity.Auth{Type: constants.AuthTypeInherited, Data: nil},
+			Url:      entity.RequestUrl{Raw: "https://api.example.com/:id"},
+			BodyMode: entity.RestBodyRaw,
+			Body:     "",
+		},
+	}
+	d.PutRequestDraft("r1", ui, true)
+	if d.IsRequestDirty("r1") {
+		t.Fatalf("equivalent UI flush should not dirty; base=%+v ui=%+v", base.Request, ui.Request)
+	}
+
+	// Token auth: missing prefix in store vs default Bearer from UI.
+	tok := entity.RequestDraft{
+		CollectionID: "c1",
+		Name:         "R",
+		Request: entity.ItemRequest{
+			Method: constants.GET,
+			Auth: entity.Auth{
+				Type: constants.AuthTypeBearer,
+				Data: []entity.Variable{{Key: constants.AuthDataToken, Value: "abc"}},
+			},
+			Url: entity.RequestUrl{Raw: "https://api.example.com/:id"},
+		},
+	}
+	d.PutRequestDraft("r1", tok, false)
+	uiTok := tok
+	uiTok.Request.Auth.Data = []entity.Variable{
+		{Key: constants.AuthDataPrefix, Value: constants.AuthDefaultTokenPrefix},
+		{Key: constants.AuthDataToken, Value: "abc"},
+	}
+	uiTok.Request.BodyMode = entity.RestBodyRaw
+	d.PutRequestDraft("r1", uiTok, true)
+	if d.IsRequestDirty("r1") {
+		t.Fatal("token prefix default should not dirty")
+	}
+}

@@ -112,7 +112,13 @@ func formatHeaders(headers map[string][]string) string {
 		for _, val := range vals {
 			b.WriteString(k)
 			b.WriteString(": ")
-			b.WriteString(val)
+			if strings.EqualFold(strings.TrimSpace(k), "Authorization") {
+				if val != "" {
+					b.WriteString("••••••••")
+				}
+			} else {
+				b.WriteString(val)
+			}
 			b.WriteByte('\n')
 		}
 	}

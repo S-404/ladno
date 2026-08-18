@@ -13,12 +13,13 @@ type PreviewView struct {
 	Refresh func()
 }
 
-func NewPreviewView(onRefresh func() string) *PreviewView {
+func NewPreviewView(onRefresh func(showSecrets bool) string) *PreviewView {
 	text := widget.NewLabel("")
 	text.Wrapping = fyne.TextWrapBreak
 	text.TextStyle = fyne.TextStyle{Monospace: true}
 	text.Selectable = true
 
+	showSecrets := false
 	var current string
 	setText := func(v string) {
 		current = v
@@ -33,18 +34,31 @@ func NewPreviewView(onRefresh func() string) *PreviewView {
 	refreshBtn := widget.NewButtonWithIcon("Refresh", theme.ViewRefreshIcon(), nil)
 	refreshBtn.Importance = widget.LowImportance
 
+	eyeBtn := widget.NewButtonWithIcon("", theme.VisibilityOffIcon(), nil)
+	eyeBtn.Importance = widget.LowImportance
+
 	doRefresh := func() {
 		if onRefresh == nil {
 			return
 		}
-		setText(onRefresh())
+		setText(onRefresh(showSecrets))
 	}
 	refreshBtn.OnTapped = doRefresh
+	eyeBtn.OnTapped = func() {
+		showSecrets = !showSecrets
+		if showSecrets {
+			eyeBtn.SetIcon(theme.VisibilityIcon())
+		} else {
+			eyeBtn.SetIcon(theme.VisibilityOffIcon())
+		}
+		eyeBtn.Refresh()
+		doRefresh()
+	}
 
 	toolbar := container.NewBorder(
 		nil, nil,
 		widget.NewLabel("Preview (resolved request)"),
-		container.NewHBox(refreshBtn, copyBtn),
+		container.NewHBox(eyeBtn, refreshBtn, copyBtn),
 		nil,
 	)
 

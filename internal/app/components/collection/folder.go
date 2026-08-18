@@ -4,13 +4,14 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/widget"
 	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity"
 )
 
 type FolderView struct {
 	fyne.CanvasObject
-	Set       func(name string, auth entity.Auth)
+	Set       func(name string, auth entity.Auth, showAuth bool)
 	Get       func() (name string, auth entity.Auth)
 	Save      func()
 	SetDirty  func(dirty bool)
@@ -20,6 +21,8 @@ type FolderView struct {
 func NewFolderView(onChange func(name string, auth entity.Auth), onSave func(name string, auth entity.Auth)) *FolderView {
 	var applying bool
 	var header *ui.EntityHeader
+	var showAuth bool
+	var lastAuth entity.Auth
 
 	var get func() (string, entity.Auth)
 
@@ -35,6 +38,9 @@ func NewFolderView(onChange func(name string, auth entity.Auth), onSave func(nam
 		AllowInherited: true,
 		OnChange:       func(entity.Auth) { notify() },
 	})
+	noAuthHint := widget.NewLabel("Auth is available only for REST collections.")
+	noAuthHint.TextStyle = fyne.TextStyle{Italic: true}
+	body := container.NewStack(authPanel.CanvasObject, container.NewPadded(noAuthHint))
 
 	header = ui.NewEntityHeader(theme.FolderIcon(), "Folder name", func(string) { notify() }, func() {
 		if onSave == nil || get == nil {
@@ -45,16 +51,29 @@ func NewFolderView(onChange func(name string, auth entity.Auth), onSave func(nam
 	})
 
 	get = func() (string, entity.Auth) {
-		return header.GetName(), authPanel.Get()
+		if showAuth {
+			return header.GetName(), authPanel.Get()
+		}
+		return header.GetName(), lastAuth
 	}
 
-	root := container.NewBorder(header.Object, nil, nil, nil, authPanel.CanvasObject)
+	root := container.NewBorder(header.Object, nil, nil, nil, body)
 
 	v := &FolderView{CanvasObject: root}
-	v.Set = func(name string, auth entity.Auth) {
+	v.Set = func(name string, auth entity.Auth, withAuth bool) {
 		applying = true
+		showAuth = withAuth
+		lastAuth = auth
 		header.SetName(name)
-		authPanel.Set(auth)
+		if withAuth {
+			authPanel.CanvasObject.Show()
+			noAuthHint.Hide()
+			authPanel.Set(auth)
+		} else {
+			authPanel.CanvasObject.Hide()
+			noAuthHint.Show()
+		}
+		body.Refresh()
 		applying = false
 	}
 	v.Get = get

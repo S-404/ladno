@@ -628,10 +628,29 @@ func cloneRequestItem(src entity.CollectionItem) entity.CollectionItem {
 }
 
 func cloneAuth(a entity.Auth) entity.Auth {
-	return entity.Auth{
-		Type: a.Type,
+	out := entity.Auth{
+		Type: constants.NormalizeAuthType(a.Type),
 		Data: cloneVariables(a.Data),
 	}
+	if out.Type == "" {
+		out.Type = constants.AuthTypeNoAuth
+	}
+	// Legacy Token auth without prefix → default Bearer (stable drafts / UI).
+	if out.Type == constants.AuthTypeBearer {
+		hasPrefix := false
+		for _, v := range out.Data {
+			if v.Key == constants.AuthDataPrefix {
+				hasPrefix = true
+				break
+			}
+		}
+		if !hasPrefix {
+			out.Data = append(append([]entity.Variable{}, out.Data...), entity.Variable{
+				Key: constants.AuthDataPrefix, Value: constants.AuthDefaultTokenPrefix,
+			})
+		}
+	}
+	return out
 }
 
 func cloneVariables(in []entity.Variable) []entity.Variable {

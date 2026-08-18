@@ -146,6 +146,11 @@ func (s *DraftStore) GetRequestDraft(itemID string) (entity.RequestDraft, bool) 
 
 func (s *DraftStore) PutRequestDraft(itemID string, draft entity.RequestDraft, markDirty bool) {
 	s.mu.Lock()
+	if markDirty {
+		if prev, ok := s.requests[itemID]; ok && requestDraftEqual(prev, draft) {
+			markDirty = false
+		}
+	}
 	s.requests[itemID] = draft
 	if markDirty {
 		s.dirtyReq[itemID] = true
@@ -460,4 +465,107 @@ func (s *DraftStore) CollectionDisplayName(collectionID, fallback string) string
 		return d.Name
 	}
 	return fallback
+}
+
+func requestDraftEqual(a, b entity.RequestDraft) bool {
+	if a.CollectionID != b.CollectionID || a.Name != b.Name {
+		return false
+	}
+	return itemRequestEqual(a.Request, b.Request)
+}
+
+func itemRequestEqual(a, b entity.ItemRequest) bool {
+	ma, mb := string(a.Method), string(b.Method)
+	if ma == "" {
+		ma = string(constants.GET)
+	}
+	if mb == "" {
+		mb = string(constants.GET)
+	}
+	if ma != mb {
+		return false
+	}
+	if a.Url.Raw != b.Url.Raw {
+		return false
+	}
+	am := a.BodyMode
+	bm := b.BodyMode
+	if am == "" {
+		am = entity.RestBodyRaw
+	}
+	if bm == "" {
+		bm = entity.RestBodyRaw
+	}
+	if am != bm || a.Body != b.Body {
+		return false
+	}
+	return variablesEqual(a.Header, b.Header) &&
+		variablesEqual(a.FormData, b.FormData) &&
+		variablesEqual(a.Url.Variable, b.Url.Variable) &&
+		authEqual(a.Auth, b.Auth)
+}
+
+func authEqual(a, b entity.Auth) bool {
+	at := constants.NormalizeAuthType(a.Type)
+	bt := constants.NormalizeAuthType(b.Type)
+	if at != bt {
+		return false
+	}
+	switch at {
+	case constants.AuthTypeInherited, constants.AuthTypeNoAuth:
+		return true
+	case constants.AuthTypeBasic:
+		return entity.AuthVar(a.Data, constants.AuthDataUsername) == entity.AuthVar(b.Data, constants.AuthDataUsername) &&
+			entity.AuthVar(a.Data, constants.AuthDataPassword) == entity.AuthVar(b.Data, constants.AuthDataPassword)
+	case constants.AuthTypeBearer:
+		pa := constants.AuthDefaultTokenPrefix
+		pb := constants.AuthDefaultTokenPrefix
+		if entity.AuthHasVar(a.Data, constants.AuthDataPrefix) {
+			pa = entity.AuthVar(a.Data, constants.AuthDataPrefix)
+		}
+		if entity.AuthHasVar(b.Data, constants.AuthDataPrefix) {
+			pb = entity.AuthVar(b.Data, constants.AuthDataPrefix)
+		}
+		return pa == pb &&
+			entity.AuthVar(a.Data, constants.AuthDataToken) == entity.AuthVar(b.Data, constants.AuthDataToken)
+	case constants.AuthTypeAPIKey:
+		aa := entity.AuthVar(a.Data, constants.AuthDataAddTo)
+		ab := entity.AuthVar(b.Data, constants.AuthDataAddTo)
+		if aa == "" {
+			aa = constants.AuthAddToHeader
+		}
+		if ab == "" {
+			ab = constants.AuthAddToHeader
+		}
+		return entity.AuthVar(a.Data, constants.AuthDataKey) == entity.AuthVar(b.Data, constants.AuthDataKey) &&
+			entity.AuthVar(a.Data, constants.AuthDataValue) == entity.AuthVar(b.Data, constants.AuthDataValue) &&
+			aa == ab
+	default:
+		return variablesEqual(a.Data, b.Data)
+	}
+}
+
+func variablesEqual(a, b []entity.Variable) bool {
+	am := varMap(a)
+	bm := varMap(b)
+	if len(am) != len(bm) {
+		return false
+	}
+	for k, v := range am {
+		if bm[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+func varMap(in []entity.Variable) map[string]string {
+	out := make(map[string]string, len(in))
+	for _, v := range in {
+		if v.Key == "" || v.Value == "" {
+			continue
+		}
+		out[v.Key] = v.Value
+	}
+	return out
 }
