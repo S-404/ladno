@@ -4,6 +4,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
+	"fyne.io/fyne/v2/theme"
 	"github.com/s-404/ladno/internal/app/components/rest"
 	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity"
@@ -29,7 +30,6 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 	var headersTable *ui.KVTable
 	var previewView *rest.PreviewView
 	var authPanel *ui.AuthPanel
-	var nameField *ui.RequestNameField
 	var header *ui.EntityHeader
 	responseView := rest.NewResponseView()
 
@@ -69,7 +69,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		}
 		d := entity.RequestDraft{
 			CollectionID: sel.CollectionID,
-			Name:         nameField.Get(),
+			Name:         header.GetName(),
 			Request: entity.ItemRequest{
 				Method:   constants.RequestMethod(rr.Method),
 				Header:   rr.Headers,
@@ -88,7 +88,9 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		restStore.Send(buildReq())
 	}
 
-	header = ui.NewEntityHeader("HTTP request", func() {
+	header = ui.NewEntityHeader(theme.DocumentIcon(), "Request name", func(string) {
+		flushDraft(true)
+	}, func() {
 		sel := currentSelection(selStore.GetSelection())
 		if sel == nil || sel.Kind != entity.SelectionRequest {
 			return
@@ -116,7 +118,6 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		AllowInherited: true,
 		OnChange:       func(entity.Auth) { flushDraft(true) },
 	})
-	nameField = ui.NewRequestNameField(func(string) { flushDraft(true) })
 
 	requestURL.AddListener(binding.NewDataListener(func() {
 		flushDraft(true)
@@ -136,7 +137,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 	}
 
 	request := container.NewBorder(
-		container.NewVBox(header.Object, nameField.Object, requestInput.Object),
+		container.NewVBox(header.Object, requestInput.Object),
 		nil, nil, nil,
 		container.NewStack(requestTabs),
 	)
@@ -210,7 +211,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 			return
 		}
 		applying = true
-		nameField.Set(sel.Name)
+		header.SetName(sel.Name)
 		applying = false
 		header.SetDirty(drafts.IsRequestDirty(sel.ItemID))
 	}))

@@ -18,15 +18,6 @@ type EditableName struct {
 	Get    func() string
 }
 
-// RequestNameField — имя запроса с формой Name (click-to-edit).
-type RequestNameField = EditableName
-
-func NewRequestNameField(onChange func(name string)) *RequestNameField {
-	e := NewEditableName("Request name", onChange)
-	e.Object = container.NewVBox(widget.NewForm(widget.NewFormItem("Name", e.Object)))
-	return e
-}
-
 func NewEditableName(placeholder string, onChange func(name string)) *EditableName {
 	var name string
 	var editOriginal string

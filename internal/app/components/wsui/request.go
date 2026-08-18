@@ -3,6 +3,7 @@ package wsui
 import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity"
@@ -16,7 +17,7 @@ type RequestView struct {
 
 func NewRequestView(onChange func(name string, req entity.WsRequest, auth entity.Auth), onSave func()) *RequestView {
 	var applying bool
-	header := ui.NewEntityHeader("WebSocket request", onSave)
+	var header *ui.EntityHeader
 
 	urlEntry := ui.NewEntry()
 	urlEntry.SetPlaceHolder("ws://host/path")
@@ -24,17 +25,19 @@ func NewRequestView(onChange func(name string, req entity.WsRequest, auth entity
 	message.SetPlaceHolder("Message")
 	message.SetMinRowsVisible(8)
 
-	var nameField *ui.RequestNameField
 	var headers *ui.KVTable
 	var authPanel *ui.AuthPanel
 	var getReq func() entity.WsRequest
 
 	notify := func() {
-		if applying || onChange == nil || nameField == nil || authPanel == nil || getReq == nil {
+		if applying || onChange == nil || header == nil || authPanel == nil || getReq == nil {
 			return
 		}
-		onChange(nameField.Get(), getReq(), authPanel.Get())
+		onChange(header.GetName(), getReq(), authPanel.Get())
 	}
+
+	header = ui.NewEntityHeader(theme.DocumentIcon(), "Request name", func(string) { notify() }, onSave)
+
 	headers = ui.NewKVTable(nil, func([]ui.KVRow) { notify() })
 	getReq = func() entity.WsRequest {
 		rows := headers.GetRows()
@@ -47,7 +50,6 @@ func NewRequestView(onChange func(name string, req entity.WsRequest, auth entity
 		}
 		return entity.WsRequest{URL: urlEntry.Text, Message: message.Text, Headers: vars}
 	}
-	nameField = ui.NewRequestNameField(func(string) { notify() })
 	authPanel = ui.NewAuthPanel(ui.AuthPanelOptions{AllowInherited: true, OnChange: func(entity.Auth) { notify() }})
 	urlEntry.OnChanged = func(string) { notify() }
 	message.OnChanged = func(string) { notify() }
@@ -62,7 +64,6 @@ func NewRequestView(onChange func(name string, req entity.WsRequest, auth entity
 	requestTab := container.NewBorder(
 		container.NewVBox(
 			header.Object,
-			nameField.Object,
 			widget.NewForm(widget.NewFormItem("URL", urlEntry)),
 			widget.NewLabel("Headers"),
 			headers,
@@ -80,7 +81,7 @@ func NewRequestView(onChange func(name string, req entity.WsRequest, auth entity
 	v := &RequestView{CanvasObject: tabs}
 	v.Set = func(req *entity.WsRequest, name string, auth entity.Auth) {
 		applying = true
-		nameField.Set(name)
+		header.SetName(name)
 		authPanel.Set(auth)
 		if req == nil {
 			urlEntry.SetText("")

@@ -23,7 +23,7 @@ func EnvContainer(app *shared.App) fyne.CanvasObject {
 	nameEntry := ui.NewEntry()
 	nameEntry.SetPlaceHolder("Environment name")
 
-	header = ui.NewEntityHeader("Env variables", func() {
+	header = ui.NewTitledEntityHeader("Env variables", func() {
 		sel := selectedEnv(envStore)
 		if sel == nil {
 			return

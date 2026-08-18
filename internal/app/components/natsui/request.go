@@ -3,6 +3,7 @@ package natsui
 import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity"
@@ -28,7 +29,7 @@ func NewRequestView(
 	messages *MessagesView,
 ) *RequestView {
 	var applying bool
-	header := ui.NewEntityHeader("NATS request", onSave)
+	var header *ui.EntityHeader
 	statusLabel := widget.NewLabel("")
 	statusLabel.TextStyle = fyne.TextStyle{Italic: true}
 
@@ -38,16 +39,18 @@ func NewRequestView(
 	payload.SetPlaceHolder(`{"ok": true, "token": "{{token}}"}`)
 	payload.SetMinRowsVisible(6)
 
-	var nameField *ui.RequestNameField
 	var headers *ui.KVTable
 	var getReq func() entity.NatsRequest
 
 	notify := func() {
-		if applying || onChange == nil || nameField == nil || getReq == nil {
+		if applying || onChange == nil || header == nil || getReq == nil {
 			return
 		}
-		onChange(nameField.Get(), getReq())
+		onChange(header.GetName(), getReq())
 	}
+
+	header = ui.NewEntityHeader(theme.DocumentIcon(), "Request name", func(string) { notify() }, onSave)
+
 	headers = ui.NewKVTable(nil, func([]ui.KVRow) { notify() })
 	getReq = func() entity.NatsRequest {
 		rows := headers.GetRows()
@@ -60,7 +63,6 @@ func NewRequestView(
 		}
 		return entity.NatsRequest{Subject: subject.Text(), Headers: vars, Payload: payload.Text()}
 	}
-	nameField = ui.NewRequestNameField(func(string) { notify() })
 	subject.OnChanged(func(string) { notify() })
 	payload.OnChanged(func(string) { notify() })
 
@@ -107,7 +109,6 @@ func NewRequestView(
 	requestPanel := container.NewBorder(
 		container.NewVBox(
 			header.Object,
-			nameField.Object,
 			widget.NewForm(widget.NewFormItem("Subject", subject)),
 			widget.NewLabel("Headers"),
 			headers,
@@ -149,7 +150,7 @@ func NewRequestView(
 	}
 	v.Set = func(req *entity.NatsRequest, name string, subscribed bool) {
 		applying = true
-		nameField.Set(name)
+		header.SetName(name)
 		statusLabel.SetText("")
 		if req == nil {
 			subject.SetText("")

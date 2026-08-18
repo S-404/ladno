@@ -3,7 +3,7 @@ package collection
 import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/widget"
+	"fyne.io/fyne/v2/theme"
 	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity"
 )
@@ -18,16 +18,9 @@ type FolderView struct {
 
 func NewFolderView(onChange func(name string, auth entity.Auth), onSave func(name string, auth entity.Auth)) *FolderView {
 	var applying bool
-	var nameField *ui.EditableName
+	var header *ui.EntityHeader
 
 	var get func() (string, entity.Auth)
-	header := ui.NewEntityHeader("Folder", func() {
-		if onSave == nil || get == nil {
-			return
-		}
-		name, auth := get()
-		onSave(name, auth)
-	})
 
 	notify := func() {
 		if applying || onChange == nil || get == nil {
@@ -41,25 +34,25 @@ func NewFolderView(onChange func(name string, auth entity.Auth), onSave func(nam
 		AllowInherited: true,
 		OnChange:       func(entity.Auth) { notify() },
 	})
-	nameField = ui.NewEditableName("Folder name", func(string) { notify() })
+
+	header = ui.NewEntityHeader(theme.FolderIcon(), "Folder name", func(string) { notify() }, func() {
+		if onSave == nil || get == nil {
+			return
+		}
+		name, auth := get()
+		onSave(name, auth)
+	})
 
 	get = func() (string, entity.Auth) {
-		return nameField.Get(), authPanel.Get()
+		return header.GetName(), authPanel.Get()
 	}
 
-	general := container.NewPadded(container.NewVBox(
-		widget.NewForm(widget.NewFormItem("Name", nameField.Object)),
-	))
-	tabs := container.NewAppTabs(
-		container.NewTabItem("General", general),
-		container.NewTabItem("Auth", authPanel.CanvasObject),
-	)
-	root := container.NewBorder(header.Object, nil, nil, nil, tabs)
+	root := container.NewBorder(header.Object, nil, nil, nil, authPanel.CanvasObject)
 
 	v := &FolderView{CanvasObject: root}
 	v.Set = func(name string, auth entity.Auth) {
 		applying = true
-		nameField.Set(name)
+		header.SetName(name)
 		authPanel.Set(auth)
 		applying = false
 	}

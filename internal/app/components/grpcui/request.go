@@ -3,6 +3,7 @@ package grpcui
 import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity"
@@ -16,7 +17,7 @@ type RequestView struct {
 
 func NewRequestView(onChange func(name string, req entity.GrpcRequest, auth entity.Auth), onSave func()) *RequestView {
 	var applying bool
-	header := ui.NewEntityHeader("gRPC request", onSave)
+	var header *ui.EntityHeader
 
 	target := ui.NewEntry()
 	target.SetPlaceHolder("host:port")
@@ -26,17 +27,18 @@ func NewRequestView(onChange func(name string, req entity.GrpcRequest, auth enti
 	message.SetPlaceHolder("JSON message")
 	message.SetMinRowsVisible(8)
 
-	var nameField *ui.RequestNameField
 	var meta *ui.KVTable
 	var authPanel *ui.AuthPanel
 	var getReq func() entity.GrpcRequest
 
 	notify := func() {
-		if applying || onChange == nil || nameField == nil || authPanel == nil || getReq == nil {
+		if applying || onChange == nil || header == nil || authPanel == nil || getReq == nil {
 			return
 		}
-		onChange(nameField.Get(), getReq(), authPanel.Get())
+		onChange(header.GetName(), getReq(), authPanel.Get())
 	}
+
+	header = ui.NewEntityHeader(theme.DocumentIcon(), "Request name", func(string) { notify() }, onSave)
 
 	meta = ui.NewKVTable(nil, func([]ui.KVRow) { notify() })
 	getReq = func() entity.GrpcRequest {
@@ -52,7 +54,6 @@ func NewRequestView(onChange func(name string, req entity.GrpcRequest, auth enti
 			Target: target.Text, Method: method.Text, Message: message.Text, Metadata: vars,
 		}
 	}
-	nameField = ui.NewRequestNameField(func(string) { notify() })
 	authPanel = ui.NewAuthPanel(ui.AuthPanelOptions{AllowInherited: true, OnChange: func(entity.Auth) { notify() }})
 	target.OnChanged = func(string) { notify() }
 	method.OnChanged = func(string) { notify() }
@@ -66,7 +67,6 @@ func NewRequestView(onChange func(name string, req entity.GrpcRequest, auth enti
 	requestTab := container.NewBorder(
 		container.NewVBox(
 			header.Object,
-			nameField.Object,
 			widget.NewForm(
 				widget.NewFormItem("Target", target),
 				widget.NewFormItem("Method", method),
@@ -87,7 +87,7 @@ func NewRequestView(onChange func(name string, req entity.GrpcRequest, auth enti
 	v := &RequestView{CanvasObject: tabs}
 	v.Set = func(req *entity.GrpcRequest, name string, auth entity.Auth) {
 		applying = true
-		nameField.Set(name)
+		header.SetName(name)
 		authPanel.Set(auth)
 		if req == nil {
 			target.SetText("")

@@ -7,14 +7,50 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// EntityHeader — заголовок типа сущности + Save (активна только когда dirty).
+// EntityHeader — [иконка типа] [имя] [сохранить].
 type EntityHeader struct {
 	Object   fyne.CanvasObject
 	SetDirty func(dirty bool)
-	SetTitle func(title string)
+	SetName  func(name string)
+	GetName  func() string
+	SetIcon  func(res fyne.Resource)
 }
 
-func NewEntityHeader(title string, onSave func()) *EntityHeader {
+func NewEntityHeader(icon fyne.Resource, placeholder string, onNameChange func(string), onSave func()) *EntityHeader {
+	iconW := widget.NewIcon(icon)
+	nameField := NewEditableName(placeholder, onNameChange)
+
+	saveBtn := widget.NewButtonWithIcon("", theme.DocumentSaveIcon(), func() {
+		if onSave != nil {
+			onSave()
+		}
+	})
+	saveBtn.Importance = widget.LowImportance
+	saveBtn.Disable()
+
+	root := container.NewBorder(nil, nil, iconW, saveBtn, nameField.Object)
+	return &EntityHeader{
+		Object: root,
+		SetDirty: func(dirty bool) {
+			if dirty {
+				saveBtn.Enable()
+				saveBtn.Importance = widget.HighImportance
+			} else {
+				saveBtn.Disable()
+				saveBtn.Importance = widget.LowImportance
+			}
+			saveBtn.Refresh()
+		},
+		SetName: nameField.Set,
+		GetName: nameField.Get,
+		SetIcon: func(res fyne.Resource) {
+			iconW.SetResource(res)
+		},
+	}
+}
+
+// NewTitledEntityHeader — [заголовок] [сохранить] (без редактируемого имени).
+func NewTitledEntityHeader(title string, onSave func()) *EntityHeader {
 	label := widget.NewLabel(title)
 	label.TextStyle = fyne.TextStyle{Bold: true}
 
@@ -39,8 +75,8 @@ func NewEntityHeader(title string, onSave func()) *EntityHeader {
 			}
 			saveBtn.Refresh()
 		},
-		SetTitle: func(t string) {
-			label.SetText(t)
-		},
+		SetName: func(string) {},
+		GetName: func() string { return "" },
+		SetIcon: func(fyne.Resource) {},
 	}
 }

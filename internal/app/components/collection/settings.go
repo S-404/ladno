@@ -3,6 +3,7 @@ package collection
 import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity"
@@ -36,13 +37,7 @@ type SettingsView struct {
 func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 	var applying bool
 	var getSave func() SettingsSave
-	header := ui.NewEntityHeader("Collection", func() {
-		if cb.OnSave != nil && getSave != nil {
-			cb.OnSave(getSave())
-		}
-	})
-
-	var nameField *ui.EditableName
+	var header *ui.EntityHeader
 
 	typeLabel := widget.NewLabel("")
 	typeLabel.TextStyle = fyne.TextStyle{Italic: true}
@@ -66,8 +61,21 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 	var authPanel *ui.AuthPanel
 	content := container.NewStack()
 
+	notify := func() {
+		if applying || cb.OnChange == nil || getSave == nil {
+			return
+		}
+		cb.OnChange(getSave())
+	}
+
+	header = ui.NewEntityHeader(theme.ListIcon(), "Collection name", func(string) { notify() }, func() {
+		if cb.OnSave != nil && getSave != nil {
+			cb.OnSave(getSave())
+		}
+	})
+
 	getSave = func() SettingsSave {
-		out := SettingsSave{Name: nameField.Get()}
+		out := SettingsSave{Name: header.GetName()}
 		switch currentType {
 		case constants.CollectionTypeNATS:
 			out.Nats = &entity.NatsConnection{
@@ -87,18 +95,10 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 		return out
 	}
 
-	notify := func() {
-		if applying || cb.OnChange == nil {
-			return
-		}
-		cb.OnChange(getSave())
-	}
-
 	authPanel = ui.NewAuthPanel(ui.AuthPanelOptions{
 		AllowInherited: false,
 		OnChange:       func(entity.Auth) { notify() },
 	})
-	nameField = ui.NewEditableName("Collection name", func(string) { notify() })
 
 	hostEntry.OnChanged(func(string) { notify() })
 	portEntry.OnChanged(func(string) { notify() })
@@ -140,7 +140,6 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 				container.NewBorder(header.Object, nil, nil, nil,
 					container.NewPadded(container.NewVBox(
 						widget.NewForm(
-							widget.NewFormItem("Name", nameField.Object),
 							widget.NewFormItem("Type", typeLabel),
 							widget.NewFormItem("Host", hostEntry),
 							widget.NewFormItem("Port", portEntry),
@@ -157,7 +156,6 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 				container.NewBorder(header.Object, nil, nil, nil,
 					container.NewPadded(container.NewVBox(
 						widget.NewForm(
-							widget.NewFormItem("Name", nameField.Object),
 							widget.NewFormItem("Type", typeLabel),
 							widget.NewFormItem("Brokers", brokersEntry),
 						),
@@ -170,7 +168,6 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 		default:
 			general := container.NewPadded(container.NewVBox(
 				widget.NewForm(
-					widget.NewFormItem("Name", nameField.Object),
 					widget.NewFormItem("Type", typeLabel),
 				),
 			))
@@ -195,7 +192,7 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 	v.Set = func(name string, auth entity.Auth, nats *entity.NatsConnection, kafka *entity.KafkaConnection, colType constants.CollectionType, isConnected bool) {
 		applying = true
 		currentType = constants.NormalizeCollectionType(colType)
-		nameField.Set(name)
+		header.SetName(name)
 		typeLabel.SetText(string(currentType))
 		connStatus.SetText("")
 		setConnected(isConnected)
