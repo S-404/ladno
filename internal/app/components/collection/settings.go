@@ -32,6 +32,7 @@ type SettingsView struct {
 	SetDirty         func(dirty bool)
 	SetConnectStatus func(text string)
 	SetConnected     func(connected bool)
+	FocusName        func()
 }
 
 func NewSettingsView(cb SettingsCallbacks) *SettingsView {
@@ -225,6 +226,7 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 		}
 	}
 	v.SetDirty = header.SetDirty
+	v.FocusName = header.FocusName
 	v.SetConnectStatus = func(text string) { connStatus.SetText(text) }
 	v.SetConnected = func(ok bool) {
 		setConnected(ok)

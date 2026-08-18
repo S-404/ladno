@@ -214,6 +214,10 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		header.SetName(sel.Name)
 		applying = false
 		header.SetDirty(drafts.IsRequestDirty(sel.ItemID))
+		if sel.FocusName {
+			sel.FocusName = false
+			fyne.Do(header.FocusName)
+		}
 	}))
 
 	drafts.AddDirtyListener(func() {

@@ -23,4 +23,6 @@ type Selection struct {
 	Nats           *NatsConnection
 	Kafka          *KafkaConnection
 	Request        *ItemRequest
+	// FocusName — после выбора сразу открыть редактирование имени (новая запись).
+	FocusName bool
 }

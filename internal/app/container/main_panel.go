@@ -354,36 +354,61 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			colSettings.Set(sel.Name, sel.Auth, sel.Nats, sel.Kafka, sel.CollectionType, connected)
 			colSettings.SetDirty(drafts.IsCollectionDirty(sel.CollectionID))
 			show(1)
+			if sel.FocusName {
+				sel.FocusName = false
+				fyne.Do(colSettings.FocusName)
+			}
 		case entity.SelectionFolder:
 			folderSettings.Set(sel.Name, sel.Auth)
 			folderSettings.SetDirty(drafts.IsFolderDirty(sel.ItemID))
 			show(2)
+			if sel.FocusName {
+				sel.FocusName = false
+				fyne.Do(folderSettings.FocusName)
+			}
 		case entity.SelectionRequest:
 			d, _ := drafts.GetRequestDraft(sel.ItemID)
 			dirty := drafts.IsRequestDirty(sel.ItemID)
+			focusName := sel.FocusName
+			if focusName {
+				sel.FocusName = false
+			}
 			switch constants.NormalizeCollectionType(sel.CollectionType) {
 			case constants.CollectionTypeGRPC:
 				grpcPanel.Set(d.Request.Grpc, d.Name, d.Request.Auth)
 				grpcPanel.SetDirty(dirty)
 				show(4)
+				if focusName {
+					fyne.Do(grpcPanel.FocusName)
+				}
 			case constants.CollectionTypeWS:
 				wsPanel.Set(d.Request.Ws, d.Name, d.Request.Auth)
 				wsPanel.SetDirty(dirty)
 				show(5)
+				if focusName {
+					fyne.Do(wsPanel.FocusName)
+				}
 			case constants.CollectionTypeNATS:
 				natsCollectionID = sel.CollectionID
 				natsPanel.Set(d.Request.Nats, d.Name, natsStore.IsSubscribed(sel.CollectionID, sel.ItemID))
 				natsPanel.SetDirty(dirty)
 				refreshNatsMessages()
 				show(6)
+				if focusName {
+					fyne.Do(natsPanel.FocusName)
+				}
 			case constants.CollectionTypeKafka:
 				kafkaCollectionID = sel.CollectionID
 				kafkaPanel.Set(d.Request.Kafka, d.Name, kafkaStore.IsConsuming(sel.CollectionID, sel.ItemID))
 				kafkaPanel.SetDirty(dirty)
 				refreshKafkaMessages()
 				show(7)
+				if focusName {
+					fyne.Do(kafkaPanel.FocusName)
+				}
 			default:
 				show(3)
+				// REST focuses from RestContainer listener
 			}
 		default:
 			show(0)

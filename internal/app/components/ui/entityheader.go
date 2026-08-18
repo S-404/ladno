@@ -9,11 +9,12 @@ import (
 
 // EntityHeader — [иконка типа] [имя] [сохранить].
 type EntityHeader struct {
-	Object   fyne.CanvasObject
-	SetDirty func(dirty bool)
-	SetName  func(name string)
-	GetName  func() string
-	SetIcon  func(res fyne.Resource)
+	Object    fyne.CanvasObject
+	SetDirty  func(dirty bool)
+	SetName   func(name string)
+	GetName   func() string
+	SetIcon   func(res fyne.Resource)
+	FocusName func()
 }
 
 func NewEntityHeader(icon fyne.Resource, placeholder string, onNameChange func(string), onSave func()) *EntityHeader {
@@ -41,8 +42,9 @@ func NewEntityHeader(icon fyne.Resource, placeholder string, onNameChange func(s
 			}
 			saveBtn.Refresh()
 		},
-		SetName: nameField.Set,
-		GetName: nameField.Get,
+		SetName:   nameField.Set,
+		GetName:   nameField.Get,
+		FocusName: nameField.FocusEdit,
 		SetIcon: func(res fyne.Resource) {
 			iconW.SetResource(res)
 		},
@@ -75,8 +77,9 @@ func NewTitledEntityHeader(title string, onSave func()) *EntityHeader {
 			}
 			saveBtn.Refresh()
 		},
-		SetName: func(string) {},
-		GetName: func() string { return "" },
-		SetIcon: func(fyne.Resource) {},
+		SetName:   func(string) {},
+		GetName:   func() string { return "" },
+		FocusName: func() {},
+		SetIcon:   func(fyne.Resource) {},
 	}
 }

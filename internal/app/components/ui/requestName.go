@@ -13,9 +13,10 @@ import (
 // EditableName — имя как лейбл; по клику становится обычным инпутом.
 // Клик в любом месте кроме инпута завершает редактирование.
 type EditableName struct {
-	Object fyne.CanvasObject // поле без подписи "Name"
-	Set    func(name string)
-	Get    func() string
+	Object    fyne.CanvasObject // поле без подписи "Name"
+	Set       func(name string)
+	Get       func() string
+	FocusEdit func() // открыть инпут и выделить текст (для новой записи)
 }
 
 func NewEditableName(placeholder string, onChange func(name string)) *EditableName {
@@ -148,6 +149,19 @@ func NewEditableName(placeholder string, onChange func(name string)) *EditableNa
 				return entry.Text
 			}
 			return name
+		},
+		FocusEdit: func() {
+			startEdit()
+			if !editing {
+				fyne.Do(func() {
+					startEdit()
+					if editing {
+						entry.TypedShortcut(&fyne.ShortcutSelectAll{})
+					}
+				})
+				return
+			}
+			entry.TypedShortcut(&fyne.ShortcutSelectAll{})
 		},
 	}
 }

@@ -10,10 +10,11 @@ import (
 
 type FolderView struct {
 	fyne.CanvasObject
-	Set      func(name string, auth entity.Auth)
-	Get      func() (name string, auth entity.Auth)
-	Save     func()
-	SetDirty func(dirty bool)
+	Set       func(name string, auth entity.Auth)
+	Get       func() (name string, auth entity.Auth)
+	Save      func()
+	SetDirty  func(dirty bool)
+	FocusName func()
 }
 
 func NewFolderView(onChange func(name string, auth entity.Auth), onSave func(name string, auth entity.Auth)) *FolderView {
@@ -64,5 +65,6 @@ func NewFolderView(onChange func(name string, auth entity.Auth), onSave func(nam
 		}
 	}
 	v.SetDirty = header.SetDirty
+	v.FocusName = header.FocusName
 	return v
 }

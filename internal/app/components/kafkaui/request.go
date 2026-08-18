@@ -19,6 +19,7 @@ type RequestView struct {
 	SetDirty         func(dirty bool)
 	Messages         *MessagesView
 	Topic            func() string
+	FocusName        func()
 }
 
 func NewRequestView(
@@ -127,6 +128,7 @@ func NewRequestView(
 	v := &RequestView{CanvasObject: split, Messages: messages, Topic: func() string { return topic.Text() }}
 	v.Get = getReq
 	v.SetDirty = header.SetDirty
+	v.FocusName = header.FocusName
 	v.SetRunning = func(running bool) {
 		if running {
 			produceBtn.Disable()

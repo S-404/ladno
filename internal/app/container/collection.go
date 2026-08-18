@@ -33,7 +33,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 
 	drafts := app.Store.Draft
 
-	selectCollection := func(col entity.Collection) {
+	selectCollection := func(col entity.Collection, focusName bool) {
 		col.Type = constants.NormalizeCollectionType(col.Type)
 		d := drafts.EnsureCollectionDraft(col)
 		var nats *entity.NatsConnection
@@ -54,9 +54,10 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 			Auth:           d.Auth,
 			Nats:           nats,
 			Kafka:          kafka,
+			FocusName:      focusName,
 		})
 	}
-	selectFolder := func(col entity.Collection, item entity.CollectionItem, path []string) {
+	selectFolder := func(col entity.Collection, item entity.CollectionItem, path []string, focusName bool) {
 		col.Type = constants.NormalizeCollectionType(col.Type)
 		d := drafts.EnsureFolderDraft(col.Id, item.Id, item.Name, item.Auth)
 		selStore.SetSelection(entity.Selection{
@@ -67,9 +68,10 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 			Path:           path,
 			Name:           d.Name,
 			Auth:           d.Auth,
+			FocusName:      focusName,
 		})
 	}
-	selectRequest := func(col entity.Collection, item entity.CollectionItem, path []string) {
+	selectRequest := func(col entity.Collection, item entity.CollectionItem, path []string, focusName bool) {
 		col.Type = constants.NormalizeCollectionType(col.Type)
 		d := drafts.EnsureRequestDraft(col.Id, item.Id, item.Name, item.Request)
 		req := d.Request
@@ -82,6 +84,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 			Name:           d.Name,
 			Auth:           req.Auth,
 			Request:        &req,
+			FocusName:      focusName,
 		})
 		if col.Type == constants.CollectionTypeREST {
 			restStore.SetDraft(restDraftFromRequestDraft(d))
@@ -104,7 +107,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 			}
 			for i := range ws.Collections {
 				if ws.Collections[i].Id == id {
-					selectCollection(ws.Collections[i])
+					selectCollection(ws.Collections[i], true)
 					return
 				}
 			}
@@ -136,7 +139,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 				if item == nil {
 					return
 				}
-				selectRequest(col, *item, path)
+				selectRequest(col, *item, path, true)
 				return
 			}
 		})
@@ -167,7 +170,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 				if item == nil {
 					return
 				}
-				selectFolder(col, *item, path)
+				selectFolder(col, *item, path, true)
 				return
 			}
 		})
@@ -175,9 +178,13 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 
 	tree = collection.NewTree(
 		collection.SelectHandler{
-			OnCollection: selectCollection,
-			OnFolder:     selectFolder,
-			OnRequest:    selectRequest,
+			OnCollection: func(col entity.Collection) { selectCollection(col, false) },
+			OnFolder: func(col entity.Collection, item entity.CollectionItem, path []string) {
+				selectFolder(col, item, path, false)
+			},
+			OnRequest: func(col entity.Collection, item entity.CollectionItem, path []string) {
+				selectRequest(col, item, path, false)
+			},
 		},
 		collection.ContextHandler{
 			OnCollection: func(col entity.Collection, pos fyne.Position) {
@@ -240,7 +247,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 								if dup == nil {
 									return
 								}
-								selectRequest(c, *dup, newPath)
+								selectRequest(c, *dup, newPath, true)
 								return
 							}
 						})

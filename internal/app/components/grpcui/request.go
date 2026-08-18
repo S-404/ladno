@@ -11,8 +11,9 @@ import (
 
 type RequestView struct {
 	fyne.CanvasObject
-	Set      func(req *entity.GrpcRequest, name string, auth entity.Auth)
-	SetDirty func(dirty bool)
+	Set       func(req *entity.GrpcRequest, name string, auth entity.Auth)
+	SetDirty  func(dirty bool)
+	FocusName func()
 }
 
 func NewRequestView(onChange func(name string, req entity.GrpcRequest, auth entity.Auth), onSave func()) *RequestView {
@@ -107,5 +108,6 @@ func NewRequestView(onChange func(name string, req entity.GrpcRequest, auth enti
 		applying = false
 	}
 	v.SetDirty = header.SetDirty
+	v.FocusName = header.FocusName
 	return v
 }
