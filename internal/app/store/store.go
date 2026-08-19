@@ -5,6 +5,7 @@ import (
 )
 
 type Store struct {
+	Cookie    *CookieStore
 	Draft     *DraftStore
 	Env       *EnvStore
 	Kafka     *KafkaStore
@@ -22,13 +23,15 @@ func NewStore(svc *service.Service) *Store {
 	logStore := NewLogStore(settingsStore)
 	wsStore := NewWorkspaceStore(svc.Workspace)
 	selStore := NewSelectionStore(wsStore)
+	cookieStore := NewCookieStore()
 	return &Store{
+		Cookie:    cookieStore,
 		Draft:     NewDraftStore(wsStore, selStore, envStore),
 		Env:       envStore,
 		Kafka:     NewKafkaStore(svc.Kafka, envStore, logStore, wsStore, settingsStore),
 		Log:       logStore,
 		Nats:      NewNatsStore(svc.Nats, envStore, logStore, wsStore, settingsStore),
-		Rest:      NewRestStore(svc.Rest, envStore, logStore),
+		Rest:      NewRestStore(svc.Rest, envStore, logStore, cookieStore),
 		Selection: selStore,
 		Settings:  settingsStore,
 		Workspace: wsStore,

@@ -1,10 +1,14 @@
 package container
 
 import (
+	"fmt"
+	"strings"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/widget"
 	"github.com/s-404/ladno/internal/app/components/rest"
 	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity"
@@ -17,6 +21,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 	selStore := app.Store.Selection
 	drafts := app.Store.Draft
 	envStore := app.Store.Env
+	cookieStore := app.Store.Cookie
 	requestURL := binding.NewString()
 	_ = requestURL.Set("")
 
@@ -144,7 +149,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		}
 		resolved := resolveRESTAuth(app, sel.CollectionID, sel.ItemID, authPanel.Get())
 		auto := entity.AuthGeneratedHeaders(resolved)
-		rows := make([]ui.KVRow, 0, len(auto))
+		rows := make([]ui.KVRow, 0, len(auto)+1)
 		for _, h := range auto {
 			rows = append(rows, ui.KVRow{
 				Enabled: true,
@@ -153,12 +158,68 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 				Secret:  true,
 			})
 		}
+		if cookieStore != nil && !ui.KVRowsHaveKey(headers, "Cookie") {
+			urlVal, _ := requestURL.Get()
+			if cv := cookieStore.CookieHeaderForURL(urlVal); cv != "" {
+				rows = append(rows, ui.KVRow{
+					Enabled: true,
+					Key:     "Cookie",
+					Value:   cv,
+					Secret:  false,
+				})
+			}
+		}
 		headersView.SetAuto(rows)
 	}
 
 	requestURL.AddListener(binding.NewDataListener(func() {
 		flushDraft(true)
 	}))
+
+	cookieJar := rest.NewCookieJarView(
+		app.Window,
+		func() []entity.Cookie { return cookieStore.List() },
+		func() []string { return cookieStore.Domains() },
+		func(c entity.Cookie) { cookieStore.Delete(c.Name, c.Domain, c.Path) },
+		func() { cookieStore.Clear() },
+		func(c entity.Cookie) {
+			cookieStore.Update(c)
+			refreshAutoHeaders()
+		},
+		func(prev, next entity.Cookie) {
+			cookieStore.Replace(prev, next)
+			refreshAutoHeaders()
+		},
+		func(domain string) { cookieStore.AddDomain(domain) },
+		func(domain string) { cookieStore.DeleteDomain(domain) },
+		func(domain string) {
+			name := uniqueCookieName(cookieStore.List(), domain, "cookie")
+			cookieStore.Add(entity.Cookie{
+				Name:     name,
+				Value:    "",
+				Domain:   domain,
+				Path:     "/",
+				HostOnly: true,
+			})
+		},
+	)
+	cookiesDlg := ui.NewModal("Cookies", "Close", cookieJar.Object, app.Window)
+	cookieStore.AddListener(func() {
+		fyne.Do(func() {
+			cookieJar.Refresh()
+			refreshAutoHeaders()
+		})
+	})
+
+	cookiesLink := widget.NewHyperlink("Cookies", nil)
+	cookiesLink.OnTapped = func() {
+		cookieJar.Refresh()
+		if win := app.Window; win != nil {
+			sz := win.Canvas().Size()
+			cookiesDlg.Resize(fyne.NewSize(sz.Width*0.8, sz.Height*0.8))
+		}
+		cookiesDlg.Show()
+	}
 
 	requestTabs := container.NewAppTabs(
 		container.NewTabItem("Params", paramsView.Object),
@@ -173,10 +234,16 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		}
 	}
 
+	tabsWithCookies := container.NewBorder(
+		nil, nil, nil,
+		container.NewBorder(container.NewPadded(cookiesLink), nil, nil, nil, nil),
+		requestTabs,
+	)
+
 	request := container.NewBorder(
 		container.NewVBox(header.Object, requestInput.Object),
 		nil, nil, nil,
-		container.NewStack(requestTabs),
+		container.NewStack(tabsWithCookies),
 	)
 
 	split := container.NewVSplit(
@@ -296,4 +363,22 @@ func variablesToKVRows(vars []entity.Variable) []ui.KVRow {
 		rows = append(rows, ui.KVRow{Enabled: true, Key: v.Key, Value: v.Value})
 	}
 	return rows
+}
+
+func uniqueCookieName(existing []entity.Cookie, domain, base string) string {
+	used := map[string]bool{}
+	for _, c := range existing {
+		if strings.EqualFold(c.Domain, domain) && c.Path == "/" {
+			used[c.Name] = true
+		}
+	}
+	if !used[base] {
+		return base
+	}
+	for i := 2; ; i++ {
+		name := fmt.Sprintf("%s_%d", base, i)
+		if !used[name] {
+			return name
+		}
+	}
 }

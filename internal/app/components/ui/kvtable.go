@@ -687,3 +687,13 @@ func KeyConflicts(key string, keys []string) bool {
 	}
 	return false
 }
+
+// KVRowsHaveKey reports whether any row has the given header key.
+func KVRowsHaveKey(rows []KVRow, key string) bool {
+	for _, r := range rows {
+		if strings.EqualFold(strings.TrimSpace(r.Key), strings.TrimSpace(key)) {
+			return true
+		}
+	}
+	return false
+}

@@ -25,6 +25,12 @@ type restLog interface {
 	Append(entry *entity.LogEntry)
 }
 
+// restCookies is the cookie jar surface RestStore needs.
+type restCookies interface {
+	AbsorbResponse(requestURL string, headers map[string][]string)
+	CookieHeaderForURL(rawURL string) string
+}
+
 type RestStore struct {
 	Draft       binding.Untyped
 	Response    binding.Untyped
@@ -32,9 +38,10 @@ type RestStore struct {
 	restService restService
 	envStore    restEnvVars
 	logStore    restLog
+	cookies     restCookies
 }
 
-func NewRestStore(svc restService, envStore restEnvVars, logStore restLog) *RestStore {
+func NewRestStore(svc restService, envStore restEnvVars, logStore restLog, cookies restCookies) *RestStore {
 	return &RestStore{
 		Draft:       binding.NewUntyped(),
 		Response:    binding.NewUntyped(),
@@ -42,6 +49,7 @@ func NewRestStore(svc restService, envStore restEnvVars, logStore restLog) *Rest
 		restService: svc,
 		envStore:    envStore,
 		logStore:    logStore,
+		cookies:     cookies,
 	}
 }
 
@@ -85,6 +93,9 @@ func (s *RestStore) Send(req entity.RestRequest) {
 
 	s.restService.Send(req, func(resp *entity.RestResponse) {
 		fyne.Do(func() {
+			if resp != nil && s.cookies != nil && resp.Headers != nil {
+				s.cookies.AbsorbResponse(resp.URL, resp.Headers)
+			}
 			_ = s.Response.Set(resp)
 			_ = s.IsSending.Set(false)
 			s.logRest(resp)
@@ -98,7 +109,21 @@ func (s *RestStore) prepareRequest(req entity.RestRequest) entity.RestRequest {
 		req = applyEnvVars(req, vars)
 		req.Auth = applyEnvToAuth(req.Auth, vars)
 	}
-	return entity.ApplyAuth(req, req.Auth)
+	req = entity.ApplyAuth(req, req.Auth)
+	req = s.applyCookies(req)
+	return req
+}
+
+func (s *RestStore) applyCookies(req entity.RestRequest) entity.RestRequest {
+	if s.cookies == nil || entity.HasHeaderKey(req.Headers, "Cookie") {
+		return req
+	}
+	val := s.cookies.CookieHeaderForURL(req.URL)
+	if val == "" {
+		return req
+	}
+	req.Headers = append(req.Headers, entity.Variable{Key: "Cookie", Value: val})
+	return req
 }
 
 func applyEnvToAuth(auth entity.Auth, vars map[string]string) entity.Auth {

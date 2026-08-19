@@ -18,6 +18,7 @@ type ResponseView struct {
 	metaLabel    *widget.Label
 	bodyEntry    *widget.Entry
 	headersEntry *widget.Entry
+	cookiesEntry *widget.Entry
 }
 
 func NewResponseView() *ResponseView {
@@ -26,6 +27,7 @@ func NewResponseView() *ResponseView {
 		metaLabel:    widget.NewLabel(""),
 		bodyEntry:    widget.NewMultiLineEntry(),
 		headersEntry: widget.NewMultiLineEntry(),
+		cookiesEntry: widget.NewMultiLineEntry(),
 	}
 	v.statusLabel.TextStyle = fyne.TextStyle{Bold: true}
 	v.bodyEntry.TextStyle = fyne.TextStyle{Monospace: true}
@@ -34,10 +36,14 @@ func NewResponseView() *ResponseView {
 	v.headersEntry.TextStyle = fyne.TextStyle{Monospace: true}
 	v.headersEntry.Wrapping = fyne.TextWrapOff
 	v.headersEntry.SetPlaceHolder("Response headers")
+	v.cookiesEntry.TextStyle = fyne.TextStyle{Monospace: true}
+	v.cookiesEntry.Wrapping = fyne.TextWrapOff
+	v.cookiesEntry.SetPlaceHolder("No Set-Cookie in response")
 
 	tabs := container.NewAppTabs(
 		container.NewTabItem("Body", container.NewScroll(v.bodyEntry)),
 		container.NewTabItem("Headers", container.NewScroll(v.headersEntry)),
+		container.NewTabItem("Cookies", container.NewScroll(v.cookiesEntry)),
 	)
 
 	header := container.NewHBox(v.statusLabel, v.metaLabel)
@@ -55,6 +61,7 @@ func (v *ResponseView) SetLoading() {
 	v.metaLabel.SetText("")
 	v.bodyEntry.SetText("")
 	v.headersEntry.SetText("")
+	v.cookiesEntry.SetText("")
 }
 
 func (v *ResponseView) SetIdle() {
@@ -72,6 +79,7 @@ func (v *ResponseView) SetResponse(resp *entity.RestResponse) {
 		v.metaLabel.SetText(formatDuration(resp.Duration))
 		v.bodyEntry.SetText(resp.Error)
 		v.headersEntry.SetText("")
+		v.cookiesEntry.SetText("")
 		return
 	}
 
@@ -83,6 +91,7 @@ func (v *ResponseView) SetResponse(resp *entity.RestResponse) {
 	v.metaLabel.SetText(meta)
 	v.bodyEntry.SetText(resp.Body)
 	v.headersEntry.SetText(formatHeaders(resp.Headers))
+	v.cookiesEntry.SetText(formatResponseCookies(resp.URL, resp.Headers))
 }
 
 func statusText(status string) string {
@@ -121,6 +130,41 @@ func formatHeaders(headers map[string][]string) string {
 			}
 			b.WriteByte('\n')
 		}
+	}
+	return b.String()
+}
+
+func formatResponseCookies(requestURL string, headers map[string][]string) string {
+	cookies := entity.ParseSetCookieHeaders(requestURL, headers)
+	if len(cookies) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i, c := range cookies {
+		if i > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(c.Name)
+		b.WriteString("=")
+		b.WriteString(c.Value)
+		b.WriteString("\n  Domain: ")
+		b.WriteString(c.Domain)
+		if c.HostOnly {
+			b.WriteString(" (host only)")
+		}
+		b.WriteString("\n  Path: ")
+		b.WriteString(c.Path)
+		if c.Secure {
+			b.WriteString("\n  Secure")
+		}
+		if c.HTTPOnly {
+			b.WriteString("\n  HttpOnly")
+		}
+		if !c.Expires.IsZero() {
+			b.WriteString("\n  Expires: ")
+			b.WriteString(c.Expires.Local().Format(time.RFC1123))
+		}
+		b.WriteByte('\n')
 	}
 	return b.String()
 }
