@@ -102,6 +102,43 @@ func TestDraftRequestSaveAndDirty(t *testing.T) {
 	}
 }
 
+func TestDraftNatsRequestDirty(t *testing.T) {
+	ws := &entity.Workspace{
+		Id: "ws",
+		Collections: []entity.Collection{{
+			Id:   "c1",
+			Type: constants.CollectionTypeNATS,
+			Name: "nats",
+			Items: []entity.CollectionItem{{
+				Id:   "r1",
+				Name: "pub",
+				Request: &entity.ItemRequest{
+					Nats: &entity.NatsRequest{Subject: "demo", Payload: "{}"},
+				},
+			}},
+		}},
+	}
+	mem := &memWS{ws: ws}
+	d := NewDraftStore(mem, newDraftTestSelection(mem), &memEnv{})
+
+	draft := d.EnsureRequestDraft("c1", "r1", "pub", ws.Collections[0].Items[0].Request)
+	draft.Request.Nats = &entity.NatsRequest{Subject: "demo.events", Payload: `{"ok":true}`}
+	d.PutRequestDraft("r1", draft, true)
+	if !d.IsRequestDirty("r1") {
+		t.Fatal("nats edit should mark dirty")
+	}
+	if !d.SaveRequest("c1", "r1") {
+		t.Fatal("save failed")
+	}
+	if d.IsRequestDirty("r1") {
+		t.Fatal("dirty after save")
+	}
+	got := mem.ws.Collections[0].Items[0].Request.Nats
+	if got == nil || got.Subject != "demo.events" || got.Payload != `{"ok":true}` {
+		t.Fatalf("nats not persisted: %+v", got)
+	}
+}
+
 func TestDraftEnvSave(t *testing.T) {
 	mem := &memWS{}
 	sel := newDraftTestSelection(mem)

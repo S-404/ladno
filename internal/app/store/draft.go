@@ -502,7 +502,41 @@ func itemRequestEqual(a, b entity.ItemRequest) bool {
 	return variablesEqual(a.Header, b.Header) &&
 		variablesEqual(a.FormData, b.FormData) &&
 		variablesEqual(a.Url.Variable, b.Url.Variable) &&
-		authEqual(a.Auth, b.Auth)
+		authEqual(a.Auth, b.Auth) &&
+		grpcRequestEqual(a.Grpc, b.Grpc) &&
+		wsRequestEqual(a.Ws, b.Ws) &&
+		natsRequestEqual(a.Nats, b.Nats) &&
+		kafkaRequestEqual(a.Kafka, b.Kafka)
+}
+
+func grpcRequestEqual(a, b *entity.GrpcRequest) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Target == b.Target && a.Method == b.Method && a.Message == b.Message &&
+		variablesEqual(a.Metadata, b.Metadata)
+}
+
+func wsRequestEqual(a, b *entity.WsRequest) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.URL == b.URL && a.Message == b.Message && variablesEqual(a.Headers, b.Headers)
+}
+
+func natsRequestEqual(a, b *entity.NatsRequest) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Subject == b.Subject && a.Payload == b.Payload && variablesEqual(a.Headers, b.Headers)
+}
+
+func kafkaRequestEqual(a, b *entity.KafkaRequest) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.Topic == b.Topic && a.Key == b.Key && a.Payload == b.Payload &&
+		variablesEqual(a.Headers, b.Headers)
 }
 
 func authEqual(a, b entity.Auth) bool {
