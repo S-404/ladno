@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/s-404/ladno/internal/app/components/ui"
@@ -62,18 +63,19 @@ type DirtyResolver struct {
 type Tree struct {
 	widget.BaseWidget
 
-	mu        sync.RWMutex
-	childIDs  map[string][]string
-	nodes     map[string]treeNode
-	cols      map[string]entity.Collection
-	connected map[string]bool
-	source    []entity.Collection
-	filter    string
-	handler   SelectHandler
-	context   ContextHandler
-	reorder   ReorderHandler
-	dirty     DirtyResolver
-	tree      *widget.Tree
+	mu         sync.RWMutex
+	childIDs   map[string][]string
+	nodes      map[string]treeNode
+	cols       map[string]entity.Collection
+	connected  map[string]bool
+	subscribed map[string]bool // "collectionID/itemID" for active NATS subscriptions
+	source     []entity.Collection
+	filter     string
+	handler    SelectHandler
+	context    ContextHandler
+	reorder    ReorderHandler
+	dirty      DirtyResolver
+	tree       *widget.Tree
 
 	rowsByUID map[string]*treeRow
 
@@ -93,20 +95,22 @@ type Tree struct {
 
 var colorConnected = color.NRGBA{R: 0x34, G: 0xA8, B: 0x53, A: 0xFF}
 var colorDirty = color.NRGBA{R: 0xFF, G: 0x98, B: 0x00, A: 0xFF}
+var colorSubscribed = color.NRGBA{R: 0x9E, G: 0x9E, B: 0x9E, A: 0xFF}
 var colorInsert = color.NRGBA{R: 0x1E, G: 0x88, B: 0xE5, A: 0xFF}
 
 const dragThreshold = float32(6)
 
 func NewTree(handler SelectHandler, context ContextHandler, reorder ReorderHandler) *Tree {
 	ct := &Tree{
-		childIDs:  map[string][]string{"": {}},
-		nodes:     map[string]treeNode{},
-		cols:      map[string]entity.Collection{},
-		connected: map[string]bool{},
-		rowsByUID: map[string]*treeRow{},
-		handler:   handler,
-		context:   context,
-		reorder:   reorder,
+		childIDs:   map[string][]string{"": {}},
+		nodes:      map[string]treeNode{},
+		cols:       map[string]entity.Collection{},
+		connected:  map[string]bool{},
+		subscribed: map[string]bool{},
+		rowsByUID:  map[string]*treeRow{},
+		handler:    handler,
+		context:    context,
+		reorder:    reorder,
 	}
 	ct.ExtendBaseWidget(ct)
 
@@ -135,6 +139,10 @@ func NewTree(handler SelectHandler, context ContextHandler, reorder ReorderHandl
 			ct.mu.RLock()
 			n := ct.nodes[uid]
 			connected := ct.connected[n.collectionID]
+			subscribed := false
+			if n.kind == nodeRequest {
+				subscribed = ct.subscribed[n.collectionID+"/"+n.item.Id]
+			}
 			filterOn := ct.filter != ""
 			dragSource := ct.dragSourceUID
 			dropUID := ct.dropLineUID
@@ -165,6 +173,14 @@ func NewTree(handler SelectHandler, context ContextHandler, reorder ReorderHandl
 			if ct.dirty.ResolveLabel != nil {
 				label = ct.dirty.ResolveLabel(n.collectionID, itemID, isCol, isFolder, n.label)
 			}
+			if isCol {
+				row.typeLabel.TextStyle = fyne.TextStyle{Italic: true}
+				row.typeLabel.SetText(string(constants.NormalizeCollectionType(n.colType)))
+				row.typeLabel.Show()
+			} else {
+				row.typeLabel.SetText("")
+				row.typeLabel.Hide()
+			}
 			row.label.SetText(label)
 			row.SetDraggingSource(uid != "" && uid == dragSource)
 			if uid != "" && uid == dropInto {
@@ -184,14 +200,23 @@ func NewTree(handler SelectHandler, context ContextHandler, reorder ReorderHandl
 				row.status.FillColor = colorDirty
 				row.status.StrokeColor = colorDirty
 				row.status.Show()
+				row.dot.Show()
 			} else if n.kind == nodeCollection && connected {
 				row.status.FillColor = colorConnected
 				row.status.StrokeColor = colorConnected
 				row.status.Show()
+				row.dot.Show()
+			} else if n.kind == nodeRequest && subscribed {
+				row.status.FillColor = colorSubscribed
+				row.status.StrokeColor = colorSubscribed
+				row.status.Show()
+				row.dot.Show()
 			} else {
 				row.status.Hide()
+				row.dot.Hide()
 			}
 			row.status.Refresh()
+			row.dot.Refresh()
 		},
 	)
 
@@ -280,11 +305,13 @@ func (ct *Tree) beginDrag(uid string) {
 	ct.clearDropLocked()
 	label := n.label
 	kind := n.kind
+	colType := n.colType
 	ct.mu.Unlock()
 
 	res := theme.DocumentIcon()
 	if kind == nodeCollection {
 		res = theme.ListIcon()
+		label = string(constants.NormalizeCollectionType(colType)) + " " + label
 	} else if kind == nodeFolder {
 		res = theme.FolderIcon()
 	}
@@ -877,6 +904,17 @@ func (ct *Tree) SetConnected(ids map[string]bool) {
 	ct.tree.Refresh()
 }
 
+func (ct *Tree) SetSubscribed(ids map[string]bool) {
+	ct.mu.Lock()
+	if ids == nil {
+		ct.subscribed = map[string]bool{}
+	} else {
+		ct.subscribed = ids
+	}
+	ct.mu.Unlock()
+	ct.tree.Refresh()
+}
+
 func (ct *Tree) SetFilter(query string) {
 	ct.mu.Lock()
 	ct.filter = strings.TrimSpace(query)
@@ -926,7 +964,7 @@ func (ct *Tree) rebuild() {
 		childIDs[colUID] = []string{}
 		nodes[colUID] = treeNode{
 			kind:         nodeCollection,
-			label:        fmt.Sprintf("%s · %s", col.Name, col.Type),
+			label:        col.Name,
 			collectionID: col.Id,
 			colType:      col.Type,
 			item: entity.CollectionItem{
@@ -1111,6 +1149,7 @@ type treeRow struct {
 	dragAccum      float32
 
 	icon       *widget.Icon
+	typeLabel  *widget.Label
 	status     *canvas.Circle
 	dot        *ui.MinSizeBox
 	label      *widget.Label
@@ -1132,12 +1171,17 @@ const (
 
 func newTreeRow(ct *Tree) *treeRow {
 	icon := widget.NewIcon(theme.DocumentIcon())
+	typeLabel := widget.NewLabel("")
+	typeLabel.Importance = widget.LowImportance
+	typeLabel.TextStyle = fyne.TextStyle{Italic: true}
 	status := canvas.NewCircle(color.Transparent)
 	status.Hide()
 	dot := ui.NewMinSizeBox(fyne.NewSize(8, 8), status)
+	dot.Hide()
 	label := widget.NewLabel("")
 	label.Truncation = fyne.TextTruncateEllipsis
-	left := container.NewHBox(icon, container.NewCenter(dot))
+	iconType := container.New(layout.NewCustomPaddedHBoxLayout(2), icon, typeLabel)
+	left := container.NewHBox(iconType, container.NewCenter(dot))
 	body := container.NewBorder(nil, nil, left, nil, label)
 
 	topLine := canvas.NewRectangle(color.Transparent)
@@ -1155,6 +1199,7 @@ func newTreeRow(ct *Tree) *treeRow {
 	r := &treeRow{
 		ct:         ct,
 		icon:       icon,
+		typeLabel:  typeLabel,
 		status:     status,
 		dot:        dot,
 		label:      label,
@@ -1183,12 +1228,16 @@ func (r *treeRow) SetReorderEnabled(on bool) {
 }
 
 func (r *treeRow) SetDraggingSource(on bool) {
+	importance := widget.MediumImportance
+	typeImportance := widget.LowImportance
 	if on {
-		r.label.Importance = widget.LowImportance
-	} else {
-		r.label.Importance = widget.MediumImportance
+		importance = widget.LowImportance
+		typeImportance = widget.LowImportance
 	}
+	r.label.Importance = importance
+	r.typeLabel.Importance = typeImportance
 	r.label.Refresh()
+	r.typeLabel.Refresh()
 }
 
 func (r *treeRow) SetDropIndicator(where dropIndicator) {

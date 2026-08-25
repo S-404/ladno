@@ -295,6 +295,19 @@ func (s *NatsStore) ConnectedIDs() map[string]bool {
 	return out
 }
 
+// SubscribedItemKeys returns "collectionID/itemID" for active subscriptions.
+func (s *NatsStore) SubscribedItemKeys() map[string]bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]bool, len(s.subs))
+	for key, active := range s.subs {
+		if active != nil && active.sub != nil && active.sub.IsValid() {
+			out[key.collectionID+"/"+key.itemID] = true
+		}
+	}
+	return out
+}
+
 func (s *NatsStore) AddConnectionListener(fn func()) {
 	if fn == nil {
 		return
@@ -469,12 +482,13 @@ func (s *NatsStore) IsSubscribed(collectionID, itemID string) bool {
 
 func (s *NatsStore) Unsubscribe(collectionID, itemID string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	key := natsSubKey{collectionID: collectionID, itemID: itemID}
 	if active, ok := s.subs[key]; ok && active != nil && active.sub != nil {
 		_ = active.sub.Unsubscribe()
 		delete(s.subs, key)
 	}
+	s.mu.Unlock()
+	s.notifyConnectionChange()
 }
 
 func (s *NatsStore) Run(collectionID, itemID string, method constants.NatsMethod, req entity.NatsRequest, event entity.Event, onDone func(err error, scriptErr string)) {
@@ -651,6 +665,7 @@ func (s *NatsStore) runSubscribe(collectionID, itemID string, nc *nats.Conn, sub
 	s.mu.Lock()
 	s.subs[key] = &natsActiveSub{sub: sub, pattern: subject}
 	s.mu.Unlock()
+	s.notifyConnectionChange()
 
 	if onDone != nil {
 		onDone(nil)

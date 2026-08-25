@@ -320,6 +320,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 			}
 		}
 		tree.SetConnected(ids)
+		tree.SetSubscribed(natsStore.SubscribedItemKeys())
 	}
 	natsStore.AddConnectionListener(func() {
 		fyne.Do(refreshConnected)
