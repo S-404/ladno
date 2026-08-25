@@ -1,6 +1,8 @@
 package container
 
 import (
+	"strings"
+
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/data/binding"
@@ -9,6 +11,7 @@ import (
 	"github.com/s-404/ladno/internal/app/components/grpcui"
 	"github.com/s-404/ladno/internal/app/components/kafkaui"
 	"github.com/s-404/ladno/internal/app/components/natsui"
+	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/components/wsui"
 	"github.com/s-404/ladno/internal/app/entity"
 	"github.com/s-404/ladno/internal/app/entity/constants"
@@ -20,6 +23,7 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 	drafts := app.Store.Draft
 	natsStore := app.Store.Nats
 	kafkaStore := app.Store.Kafka
+	envStore := app.Store.Env
 
 	empty := container.NewCenter(widget.NewLabel("Select a collection or request"))
 
@@ -183,18 +187,27 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 	)
 	natsStore.AddMessageListener(func() { fyne.Do(refreshNatsMessages) })
 
+	var syncNatsScriptDot func()
+	var markNatsScriptResult func(scriptErr string)
+
 	natsPanel = natsui.NewRequestView(
-		func(method constants.NatsMethod, req entity.NatsRequest) {
+		func(method constants.NatsMethod, req entity.NatsRequest, event entity.Event) {
 			sel := currentSelection(selStore.GetSelection())
 			if sel == nil || sel.Kind != entity.SelectionRequest {
 				return
 			}
 			natsCollectionID = sel.CollectionID
+			if method == constants.NatsMethodRequest {
+				syncNatsScriptDot()
+			}
 			natsPanel.SetRunning(true)
-			natsStore.Run(sel.CollectionID, sel.ItemID, method, req, func(err error) {
+			natsStore.Run(sel.CollectionID, sel.ItemID, method, req, event, func(err error, scriptErr string) {
 				natsPanel.SetRunning(false)
 				if method == constants.NatsMethodSubscribe && err == nil {
 					natsPanel.SetSubActive(true)
+				}
+				if method == constants.NatsMethodRequest {
+					markNatsScriptResult(scriptErr)
 				}
 				refreshNatsMessages()
 			})
@@ -207,11 +220,13 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			natsStore.Unsubscribe(sel.CollectionID, sel.ItemID)
 			natsPanel.SetSubActive(false)
 		},
-		func(name string, req entity.NatsRequest) {
+		func(name string, req entity.NatsRequest, event entity.Event) {
 			putRequestDraft(func(d *entity.RequestDraft) {
 				d.Name = name
 				d.Request.Nats = &req
+				d.Request.Event = event
 			})
+			syncNatsScriptDot()
 		},
 		func() {
 			sel := currentSelection(selStore.GetSelection())
@@ -221,6 +236,46 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		},
 		natsMessagesView,
 	)
+
+	hasNatsScripts := func() bool {
+		if natsPanel == nil || natsPanel.GetEvent == nil {
+			return false
+		}
+		ev := natsPanel.GetEvent()
+		return len(ev.PreRequest) > 0 || len(ev.PostRequest) > 0
+	}
+	syncNatsScriptDot = func() {
+		if natsPanel == nil || natsPanel.SetScriptIcon == nil {
+			return
+		}
+		if hasNatsScripts() {
+			natsPanel.SetScriptIcon(ui.DotGray)
+		} else {
+			natsPanel.SetScriptIcon(nil)
+		}
+	}
+	markNatsScriptResult = func(scriptErr string) {
+		if natsPanel == nil {
+			return
+		}
+		if natsPanel.SetScriptError != nil {
+			natsPanel.SetScriptError(scriptErr)
+		}
+		if !hasNatsScripts() {
+			natsPanel.SetScriptIcon(nil)
+			return
+		}
+		if strings.TrimSpace(scriptErr) != "" {
+			natsPanel.SetScriptIcon(ui.DotRed)
+			return
+		}
+		natsPanel.SetScriptIcon(ui.DotGreen)
+	}
+	refreshNatsScriptEnvKeys := func() {
+		if natsPanel != nil && natsPanel.SetEnvKeys != nil {
+			natsPanel.SetEnvKeys(envStore.ActiveEnvKeys())
+		}
+	}
 
 	var kafkaPanel *kafkaui.RequestView
 	var kafkaCollectionID string
@@ -284,6 +339,10 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 	app.Store.Env.GetActiveID().AddListener(binding.NewDataListener(func() {
 		refreshNatsMessages()
 		refreshKafkaMessages()
+		refreshNatsScriptEnvKeys()
+	}))
+	(*envStore.GetItems()).AddListener(binding.NewDataListener(func() {
+		refreshNatsScriptEnvKeys()
 	}))
 
 	panels := []fyne.CanvasObject{
@@ -388,8 +447,10 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 				}
 			case constants.CollectionTypeNATS:
 				natsCollectionID = sel.CollectionID
-				natsPanel.Set(d.Request.Nats, d.Name, natsStore.IsSubscribed(sel.CollectionID, sel.ItemID))
+				natsPanel.Set(d.Request.Nats, d.Name, natsStore.IsSubscribed(sel.CollectionID, sel.ItemID), d.Request.Event)
 				natsPanel.SetDirty(dirty)
+				refreshNatsScriptEnvKeys()
+				syncNatsScriptDot()
 				refreshNatsMessages()
 				show(6)
 				if focusName {

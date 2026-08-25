@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/s-404/ladno/internal/app/components/rest"
+	"github.com/s-404/ladno/internal/app/components/scripttab"
 	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity"
 	"github.com/s-404/ladno/internal/app/entity/constants"
@@ -34,7 +35,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 	var bodyView *rest.RequestBodyView
 	var headersView *rest.RequestHeadersView
 	var previewView *rest.PreviewView
-	var scriptView *rest.ScriptView
+	var scriptView *scripttab.ScriptView
 	var scriptTab *container.TabItem
 	var requestTabs *container.AppTabs
 	var authPanel *ui.AuthPanel
@@ -152,7 +153,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 	previewView = rest.NewPreviewView(func(showSecrets bool) string {
 		return restStore.Preview(preparedReq(), showSecrets)
 	})
-	scriptView = rest.NewScriptView(func(entity.Event) {
+	scriptView = scripttab.NewScriptView(func(entity.Event) {
 		flushDraft(true)
 		syncScriptTabDot()
 	})

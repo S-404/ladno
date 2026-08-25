@@ -47,9 +47,11 @@ type natsService interface {
 	Subscribe(nc *nats.Conn, subject string, handler nats.MsgHandler) (*nats.Subscription, error)
 }
 
-// natsEnvVars is the env lookup NatsStore needs.
+// natsEnvVars is the env lookup/mutation NatsStore needs.
 type natsEnvVars interface {
 	ActiveVariables() map[string]string
+	UpsertActiveVar(key, value string) bool
+	ClearActiveVar(key string) bool
 }
 
 // natsLog is the log append surface NatsStore needs.
@@ -475,17 +477,36 @@ func (s *NatsStore) Unsubscribe(collectionID, itemID string) {
 	}
 }
 
-func (s *NatsStore) Run(collectionID, itemID string, method constants.NatsMethod, req entity.NatsRequest, onDone func(err error)) {
-	req = applyNatsRequestEnv(req, s.envStore.ActiveVariables())
+func (s *NatsStore) Run(collectionID, itemID string, method constants.NatsMethod, req entity.NatsRequest, event entity.Event, onDone func(err error, scriptErr string)) {
 	method = constants.NormalizeNatsMethod(method)
+
+	var scriptErr error
+	if method == constants.NatsMethodRequest && len(event.PreRequest) > 0 {
+		if err := ApplyPreRequest(event.PreRequest, s.envStore); err != nil {
+			scriptErr = err
+		}
+	}
+
+	req = applyNatsRequestEnv(req, s.envStore.ActiveVariables())
 
 	s.mu.Lock()
 	nc := s.conns[collectionID]
 	connected := nc != nil && nc.IsConnected()
 	s.mu.Unlock()
 
+	finish := func(err error) {
+		msg := ""
+		if scriptErr != nil {
+			msg = scriptErr.Error()
+			s.logScriptError(msg)
+		}
+		if onDone != nil {
+			onDone(err, msg)
+		}
+	}
+
 	if connected {
-		s.runConnected(collectionID, itemID, method, req, nc, onDone)
+		s.runConnected(collectionID, itemID, method, req, event, &scriptErr, nc, finish)
 		return
 	}
 
@@ -493,18 +514,13 @@ func (s *NatsStore) Run(collectionID, itemID string, method constants.NatsMethod
 	if !ok {
 		err := fmt.Errorf("not connected and no NATS collection settings")
 		s.logNatsError(req.Subject, err.Error())
-		if onDone != nil {
-			onDone(err)
-		}
+		finish(err)
 		return
 	}
 
 	s.Connect(collectionID, colName, conn, func(ok bool, status string) {
 		if !ok {
-			err := fmt.Errorf("%s", status)
-			if onDone != nil {
-				onDone(err)
-			}
+			finish(fmt.Errorf("%s", status))
 			return
 		}
 		s.mu.Lock()
@@ -513,12 +529,10 @@ func (s *NatsStore) Run(collectionID, itemID string, method constants.NatsMethod
 		if nc == nil || !nc.IsConnected() {
 			err := fmt.Errorf("connect succeeded but connection missing")
 			s.logNatsError(req.Subject, err.Error())
-			if onDone != nil {
-				onDone(err)
-			}
+			finish(err)
 			return
 		}
-		s.runConnected(collectionID, itemID, method, req, nc, onDone)
+		s.runConnected(collectionID, itemID, method, req, event, &scriptErr, nc, finish)
 	})
 }
 
@@ -547,11 +561,26 @@ func (s *NatsStore) runConnected(
 	collectionID, itemID string,
 	method constants.NatsMethod,
 	req entity.NatsRequest,
+	event entity.Event,
+	scriptErr *error,
 	nc *nats.Conn,
 	onDone func(err error),
 ) {
 	headers := variablesToNatsHeader(req.Headers)
 	payload := []byte(req.Payload)
+
+	applyPost := func(body string) {
+		if method != constants.NatsMethodRequest || len(event.PostRequest) == 0 {
+			return
+		}
+		if err := ApplyPostRequest(body, event.PostRequest, s.envStore); err != nil {
+			if scriptErr != nil && *scriptErr == nil {
+				*scriptErr = err
+			} else if scriptErr != nil && *scriptErr != nil {
+				*scriptErr = fmt.Errorf("%w; %v", *scriptErr, err)
+			}
+		}
+	}
 
 	switch method {
 	case constants.NatsMethodSubscribe:
@@ -571,6 +600,7 @@ func (s *NatsStore) runConnected(
 				}
 				s.AppendMessage(collectionID, req.Subject, string(msg.Data))
 				s.logNatsInbound(msg.Subject, string(msg.Data), msg.Header, "request", dur)
+				applyPost(string(msg.Data))
 				if onDone != nil {
 					onDone(nil)
 				}
@@ -726,6 +756,18 @@ func (s *NatsStore) logNatsError(subject, errMsg string) {
 		Kind:    "nats",
 		Message: subject + ": " + errMsg,
 		Detail:  fmt.Sprintf("── NATS ERROR ──\nSubject: %s\nError: %s\n", subject, errMsg),
+		IsError: true,
+	})
+}
+
+func (s *NatsStore) logScriptError(errMsg string) {
+	if s.logStore == nil || errMsg == "" {
+		return
+	}
+	s.logStore.Append(&entity.LogEntry{
+		Kind:    "script",
+		Message: "Script error: " + errMsg,
+		Detail:  errMsg,
 		IsError: true,
 	})
 }
