@@ -43,19 +43,6 @@ func StatusColor(statusCode int, isError bool) color.Color {
 	}
 }
 
-func MessageColor(entry *entity.LogEntry) color.Color {
-	if entry == nil {
-		return colorBright
-	}
-	if entry.IsError {
-		return colorStatusErr
-	}
-	if entry.Highlight {
-		return colorNatsIn
-	}
-	return colorBright
-}
-
 func FormatStatusLabel(statusCode int, isError bool, highlight bool) string {
 	if highlight {
 		return "IN"

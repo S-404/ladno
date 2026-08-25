@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity"
+	"github.com/s-404/ladno/internal/app/utils"
 )
 
 type ResponseView struct {
@@ -89,7 +90,7 @@ func (v *ResponseView) SetResponse(resp *entity.RestResponse) {
 		meta += " · " + resp.Error
 	}
 	v.metaLabel.SetText(meta)
-	v.bodyEntry.SetText(resp.Body)
+	v.bodyEntry.SetText(utils.PrettyBody(resp.Body, utils.HeaderContentType(resp.Headers)))
 	v.headersEntry.SetText(formatHeaders(resp.Headers))
 	v.cookiesEntry.SetText(formatResponseCookies(resp.URL, resp.Headers))
 }

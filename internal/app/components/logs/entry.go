@@ -33,6 +33,14 @@ func (e *ExpandableEntry) CreateRenderer() fyne.WidgetRenderer {
 	return widget.NewSimpleRenderer(e.root)
 }
 
+// MinSize ignores content width so long lines wrap inside the logs pane
+// instead of expanding VScroll horizontally.
+func (e *ExpandableEntry) MinSize() fyne.Size {
+	s := e.BaseWidget.MinSize()
+	s.Width = 1
+	return s
+}
+
 func (e *ExpandableEntry) SetExpanded(v bool) {
 	if e.expanded == v {
 		return
@@ -78,10 +86,13 @@ func (e *ExpandableEntry) rebuild() {
 	kindTxt.TextStyle = fyne.TextStyle{Monospace: true}
 	kindTxt.TextSize = theme.TextSize()
 
-	msg := canvas.NewText(e.entry.Message, MessageColor(e.entry))
+	msg := widget.NewLabel(e.entry.Message)
 	msg.TextStyle = fyne.TextStyle{Monospace: true}
-	msg.TextSize = theme.TextSize()
-	if e.entry.Highlight {
+	msg.Wrapping = fyne.TextWrapBreak
+	if e.entry.IsError {
+		msg.Importance = widget.DangerImportance
+	} else if e.entry.Highlight {
+		msg.Importance = widget.HighImportance
 		msg.TextStyle.Bold = true
 	}
 	header := container.NewBorder(

@@ -6,6 +6,7 @@ import (
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 	"github.com/s-404/ladno/internal/app/components/logs"
+	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity/shared"
 	"github.com/s-404/ladno/internal/app/store"
 )
@@ -86,5 +87,5 @@ func LogsContainer(app *shared.App) fyne.CanvasObject {
 		nil,
 	)
 
-	return container.NewBorder(header, nil, nil, nil, scroll)
+	return ui.NewPanelBackground(container.NewBorder(header, nil, nil, nil, scroll))
 }

@@ -430,7 +430,7 @@ func (s *NatsStore) MessagesText(collectionID, subjectPattern string, all bool) 
 		if m.Data == "" {
 			return "[" + ts + "]"
 		}
-		return "[" + ts + "] " + m.Data
+		return "[" + ts + "] " + utils.PrettyBody(m.Data, "")
 	}
 	if !all {
 		return format(matched[len(matched)-1])

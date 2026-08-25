@@ -255,7 +255,7 @@ func (s *KafkaStore) MessagesText(collectionID, topic, filter string, showAll bo
 			b.WriteString(m.Key)
 			b.WriteByte('\n')
 		}
-		b.WriteString(m.Value)
+		b.WriteString(utils.PrettyBody(m.Value, ""))
 	}
 	return b.String()
 }
