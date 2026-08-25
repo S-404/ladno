@@ -52,8 +52,6 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 	brokersEntry := ui.NewEnvInput()
 	brokersEntry.SetPlaceHolder("{{kafkaBrokers}} or localhost:9092")
 
-	envHint := widget.NewLabel("Supports {{var}} from the active environment.")
-	envHint.TextStyle = fyne.TextStyle{Italic: true}
 	connStatus := widget.NewLabel("")
 	connStatus.TextStyle = fyne.TextStyle{Italic: true}
 
@@ -146,7 +144,6 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 							widget.NewFormItem("Port", portEntry),
 							widget.NewFormItem("Token", tokenEntry),
 						),
-						envHint,
 						connBtn,
 						connStatus,
 					)),
@@ -160,7 +157,6 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 							widget.NewFormItem("Type", typeLabel),
 							widget.NewFormItem("Brokers", brokersEntry),
 						),
-						envHint,
 						connBtn,
 						connStatus,
 					)),

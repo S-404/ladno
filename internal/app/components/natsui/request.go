@@ -77,10 +77,6 @@ func NewRequestView(
 	subject.OnChanged(func(string) { notify() })
 	payload.OnChanged(func(string) { notify() })
 
-	envHint := widget.NewLabel("Subject, headers and payload support {{var}} from the active environment. Scripts run only on Request.")
-	envHint.Wrapping = fyne.TextWrapWord
-	envHint.TextStyle = fyne.TextStyle{Italic: true}
-
 	publishBtn := widget.NewButton("Publish", func() {
 		if onRun != nil {
 			onRun(constants.NatsMethodPublish, getReq(), entity.Event{})
@@ -135,7 +131,6 @@ func NewRequestView(
 		container.NewVBox(
 			header.Object,
 			widget.NewForm(widget.NewFormItem("Subject", subject)),
-			envHint,
 		),
 		actions, nil, nil, requestTabs,
 	)

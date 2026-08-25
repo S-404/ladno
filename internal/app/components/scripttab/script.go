@@ -59,14 +59,6 @@ func NewScriptView(onChange func(entity.Event)) *ScriptView {
 		onChange(scriptToEvent(preRows, postRows))
 	}
 
-	preHint := widget.NewLabel("Before send: set or clear values in the active environment.")
-	preHint.Wrapping = fyne.TextWrapWord
-	preHint.TextStyle = fyne.TextStyle{Italic: true}
-
-	postHint := widget.NewLabel("After response: write body values into the active environment (or clear a key). Path uses dots and optional chaining, e.g. data.token or user?.profile?.id")
-	postHint.Wrapping = fyne.TextWrapWord
-	postHint.TextStyle = fyne.TextStyle{Italic: true}
-
 	newActionSelect := func(current string, onPick func(string)) *widget.Select {
 		sel := widget.NewSelect([]string{actionSetLabel, actionClearLabel}, func(v string) {
 			if applying || rebuilding {
@@ -230,13 +222,11 @@ func NewScriptView(onChange func(entity.Event)) *ScriptView {
 	postBox = container.NewVBox()
 
 	prePanel := container.NewBorder(
-		preHint,
-		nil, nil, nil,
+		nil, nil, nil, nil,
 		container.NewVScroll(preBox),
 	)
 	postPanel := container.NewBorder(
-		postHint,
-		nil, nil, nil,
+		nil, nil, nil, nil,
 		container.NewVScroll(postBox),
 	)
 

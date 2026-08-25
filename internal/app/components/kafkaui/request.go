@@ -70,9 +70,6 @@ func NewRequestView(
 	key.OnChanged(func(string) { notify() })
 	payload.OnChanged(func(string) { notify() })
 
-	envHint := widget.NewLabel("Topic, key, headers and payload support {{var}} from the active environment.")
-	envHint.TextStyle = fyne.TextStyle{Italic: true}
-
 	produceBtn := widget.NewButton("Produce", func() {
 		if onRun != nil {
 			onRun(constants.KafkaMethodProduce, getReq())
@@ -115,7 +112,6 @@ func NewRequestView(
 			widget.NewLabel("Headers"),
 			headers,
 			widget.NewLabel("Payload"),
-			envHint,
 		),
 		actions, nil, nil, payload,
 	)
