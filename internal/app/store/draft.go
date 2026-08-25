@@ -107,6 +107,20 @@ func cloneItemRequest(req *entity.ItemRequest) entity.ItemRequest {
 		k.Headers = cloneVariables(req.Kafka.Headers)
 		out.Kafka = &k
 	}
+	out.Event = cloneEvent(req.Event)
+	return out
+}
+
+func cloneEvent(e entity.Event) entity.Event {
+	out := entity.Event{}
+	if len(e.PreRequest) > 0 {
+		out.PreRequest = make([]entity.PreRequestEnvEvent, len(e.PreRequest))
+		copy(out.PreRequest, e.PreRequest)
+	}
+	if len(e.PostRequest) > 0 {
+		out.PostRequest = make([]entity.PostRequestEnvEvent, len(e.PostRequest))
+		copy(out.PostRequest, e.PostRequest)
+	}
 	return out
 }
 
@@ -434,6 +448,57 @@ func (s *DraftStore) SaveEnv(envID string) bool {
 	return true
 }
 
+// SyncEnvVar updates an open env draft after a script write (does not mark dirty).
+func (s *DraftStore) SyncEnvVar(envID, key, value string) {
+	if envID == "" || key == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	d, ok := s.envs[envID]
+	if !ok {
+		return
+	}
+	vars := make([]entity.EnvVariable, len(d.Variables))
+	copy(vars, d.Variables)
+	found := false
+	for i := range vars {
+		if vars[i].Key == key {
+			vars[i].Value = value
+			vars[i].Enabled = true
+			found = true
+			break
+		}
+	}
+	if !found {
+		vars = append(vars, entity.EnvVariable{Key: key, Value: value, Enabled: true})
+	}
+	d.Variables = vars
+	s.envs[envID] = d
+}
+
+// RemoveEnvVar removes a key from an open env draft after a script clear.
+func (s *DraftStore) RemoveEnvVar(envID, key string) {
+	if envID == "" || key == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	d, ok := s.envs[envID]
+	if !ok {
+		return
+	}
+	vars := make([]entity.EnvVariable, 0, len(d.Variables))
+	for _, v := range d.Variables {
+		if v.Key == key {
+			continue
+		}
+		vars = append(vars, v)
+	}
+	d.Variables = vars
+	s.envs[envID] = d
+}
+
 func (s *DraftStore) IsItemDirty(itemID string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -506,7 +571,37 @@ func itemRequestEqual(a, b entity.ItemRequest) bool {
 		grpcRequestEqual(a.Grpc, b.Grpc) &&
 		wsRequestEqual(a.Ws, b.Ws) &&
 		natsRequestEqual(a.Nats, b.Nats) &&
-		kafkaRequestEqual(a.Kafka, b.Kafka)
+		kafkaRequestEqual(a.Kafka, b.Kafka) &&
+		eventEqual(a.Event, b.Event)
+}
+
+func eventEqual(a, b entity.Event) bool {
+	return preRequestEqual(a.PreRequest, b.PreRequest) && postRequestEqual(a.PostRequest, b.PostRequest)
+}
+
+func preRequestEqual(a, b []entity.PreRequestEnvEvent) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].EnvKey != b[i].EnvKey || a[i].Action != b[i].Action || a[i].Value != b[i].Value {
+			return false
+		}
+	}
+	return true
+}
+
+func postRequestEqual(a, b []entity.PostRequestEnvEvent) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].EnvKey != b[i].EnvKey || a[i].Action != b[i].Action ||
+			a[i].Value != b[i].Value || a[i].JSONPath != b[i].JSONPath {
+			return false
+		}
+	}
+	return true
 }
 
 func grpcRequestEqual(a, b *entity.GrpcRequest) bool {

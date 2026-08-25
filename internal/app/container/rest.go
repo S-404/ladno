@@ -34,6 +34,9 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 	var bodyView *rest.RequestBodyView
 	var headersView *rest.RequestHeadersView
 	var previewView *rest.PreviewView
+	var scriptView *rest.ScriptView
+	var scriptTab *container.TabItem
+	var requestTabs *container.AppTabs
 	var authPanel *ui.AuthPanel
 	var header *ui.EntityHeader
 	responseView := rest.NewResponseView()
@@ -50,6 +53,11 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 			RawBody:    body.RawText,
 			FormData:   kvRowsToVariables(body.FormRows),
 		}
+		if scriptView != nil {
+			ev := scriptView.Get()
+			req.PreRequest = ev.PreRequest
+			req.PostRequest = ev.PostRequest
+		}
 		if req.BodyMode == "" {
 			req.BodyMode = entity.RestBodyRaw
 		}
@@ -58,6 +66,10 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 
 	var preparedReq func() entity.RestRequest
 	var refreshAutoHeaders func()
+	var refreshScriptEnvKeys func()
+	var setScriptTabError func(msg string)
+	var syncScriptTabDot func()
+	var markScriptTabResult func(scriptErr string)
 	preparedReq = func() entity.RestRequest {
 		req := buildReq()
 		sel := currentSelection(selStore.GetSelection())
@@ -83,6 +95,10 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		for k, v := range rr.PathParams {
 			pathVars = append(pathVars, entity.Variable{Key: k, Value: v})
 		}
+		ev := entity.Event{}
+		if scriptView != nil {
+			ev = scriptView.Get()
+		}
 		d := entity.RequestDraft{
 			CollectionID: sel.CollectionID,
 			Name:         header.GetName(),
@@ -90,6 +106,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 				Method:   constants.RequestMethod(rr.Method),
 				Header:   rr.Headers,
 				Auth:     authPanel.Get(),
+				Event:    ev,
 				Url:      entity.RequestUrl{Raw: rr.URL, Variable: pathVars},
 				BodyMode: rr.BodyMode,
 				Body:     rr.RawBody,
@@ -104,6 +121,8 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 	}
 
 	send := func() {
+		setScriptTabError("")
+		syncScriptTabDot()
 		restStore.Send(preparedReq())
 	}
 
@@ -132,6 +151,10 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 	}, app.Window)
 	previewView = rest.NewPreviewView(func(showSecrets bool) string {
 		return restStore.Preview(preparedReq(), showSecrets)
+	})
+	scriptView = rest.NewScriptView(func(entity.Event) {
+		flushDraft(true)
+		syncScriptTabDot()
 	})
 	authPanel = ui.NewAuthPanel(ui.AuthPanelOptions{
 		AllowInherited: true,
@@ -170,6 +193,13 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 			}
 		}
 		headersView.SetAuto(rows)
+	}
+
+	refreshScriptEnvKeys = func() {
+		if scriptView == nil {
+			return
+		}
+		scriptView.SetEnvKeys(envStore.ActiveEnvKeys())
 	}
 
 	requestURL.AddListener(binding.NewDataListener(func() {
@@ -221,16 +251,63 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		cookiesDlg.Show()
 	}
 
-	requestTabs := container.NewAppTabs(
+	scriptTab = container.NewTabItem("Script", scriptView.Object)
+	requestTabs = container.NewAppTabs(
 		container.NewTabItem("Params", paramsView.Object),
 		container.NewTabItem("Headers", headersView.Object),
 		container.NewTabItem("Auth", authPanel.CanvasObject),
 		container.NewTabItem("Body", bodyView.Object),
+		scriptTab,
 		container.NewTabItem("Preview", previewView.Object),
 	)
+
+	hasScripts := func() bool {
+		if scriptView == nil {
+			return false
+		}
+		ev := scriptView.Get()
+		return len(ev.PreRequest) > 0 || len(ev.PostRequest) > 0
+	}
+	applyScriptTabIcon := func(icon fyne.Resource) {
+		scriptTab.Icon = icon
+		scriptTab.Text = "Script"
+		requestTabs.Refresh()
+	}
+	// Gray when scripts exist (pending); cleared when none.
+	syncScriptTabDot = func() {
+		if hasScripts() {
+			applyScriptTabIcon(ui.DotGray)
+		} else {
+			applyScriptTabIcon(nil)
+		}
+	}
+	setScriptTabError = func(msg string) {
+		if scriptView != nil {
+			scriptView.SetError(msg)
+		}
+	}
+	markScriptTabResult = func(scriptErr string) {
+		setScriptTabError(scriptErr)
+		if !hasScripts() {
+			applyScriptTabIcon(nil)
+			return
+		}
+		if strings.TrimSpace(scriptErr) != "" {
+			applyScriptTabIcon(ui.DotRed)
+			return
+		}
+		applyScriptTabIcon(ui.DotGreen)
+	}
+
 	requestTabs.OnSelected = func(tab *container.TabItem) {
-		if tab != nil && tab.Text == "Preview" {
+		if tab == nil {
+			return
+		}
+		switch tab.Text {
+		case "Preview":
 			previewView.Refresh()
+		case "Script":
+			refreshScriptEnvKeys()
 		}
 	}
 
@@ -270,6 +347,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 			return
 		}
 		responseView.SetResponse(resp)
+		markScriptTabResult(resp.ScriptError)
 	}))
 
 	restStore.GetDraft().AddListener(binding.NewDataListener(func() {
@@ -301,6 +379,10 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 			FormRows: variablesToKVRows(draft.FormData),
 		})
 		paramsView.SetPathParams(draft.PathParams)
+		scriptView.Set(draft.Event)
+		setScriptTabError("")
+		syncScriptTabDot()
+		refreshScriptEnvKeys()
 		applying = false
 		if requestTabs.Selected() != nil && requestTabs.Selected().Text == "Preview" {
 			previewView.Refresh()
@@ -320,6 +402,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		refreshAutoHeaders()
 		applying = false
 		header.SetDirty(drafts.IsRequestDirty(sel.ItemID))
+		refreshScriptEnvKeys()
 		if sel.FocusName {
 			sel.FocusName = false
 			fyne.Do(header.FocusName)
@@ -338,11 +421,17 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 	})
 
 	envStore.GetActiveID().AddListener(binding.NewDataListener(func() {
+		refreshScriptEnvKeys()
 		if requestTabs.Selected() != nil && requestTabs.Selected().Text == "Preview" {
 			previewView.Refresh()
 		}
 	}))
+	(*envStore.GetItems()).AddListener(binding.NewDataListener(func() {
+		refreshScriptEnvKeys()
+	}))
 
+	refreshScriptEnvKeys()
+	syncScriptTabDot()
 	return split
 }
 

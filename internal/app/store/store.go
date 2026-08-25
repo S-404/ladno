@@ -24,9 +24,11 @@ func NewStore(svc *service.Service) *Store {
 	wsStore := NewWorkspaceStore(svc.Workspace)
 	selStore := NewSelectionStore(wsStore)
 	cookieStore := NewCookieStore()
+	draftStore := NewDraftStore(wsStore, selStore, envStore)
+	envStore.SetDraftSync(draftStore)
 	return &Store{
 		Cookie:    cookieStore,
-		Draft:     NewDraftStore(wsStore, selStore, envStore),
+		Draft:     draftStore,
 		Env:       envStore,
 		Kafka:     NewKafkaStore(svc.Kafka, envStore, logStore, wsStore, settingsStore),
 		Log:       logStore,

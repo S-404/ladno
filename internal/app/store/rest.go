@@ -18,6 +18,8 @@ type restService interface {
 // restEnvVars is the env lookup RestStore needs.
 type restEnvVars interface {
 	ActiveVariables() map[string]string
+	UpsertActiveVar(key, value string) bool
+	ClearActiveVar(key string) bool
 }
 
 // restLog is the log append surface RestStore needs.
@@ -89,12 +91,31 @@ func (s *RestStore) Send(req entity.RestRequest) {
 	s.IsSending.Set(true)
 	s.Response.Set(nil)
 
+	var scriptErr error
+	if len(req.PreRequest) > 0 {
+		if err := ApplyPreRequest(req.PreRequest, s.envStore); err != nil {
+			scriptErr = err
+		}
+	}
+
 	req = s.prepareRequest(req)
 
 	s.restService.Send(req, func(resp *entity.RestResponse) {
 		fyne.Do(func() {
 			if resp != nil && s.cookies != nil && resp.Headers != nil {
 				s.cookies.AbsorbResponse(resp.URL, resp.Headers)
+			}
+			if resp != nil && len(req.PostRequest) > 0 {
+				if err := ApplyPostRequest(resp.Body, req.PostRequest, s.envStore); err != nil {
+					if scriptErr == nil {
+						scriptErr = err
+					} else {
+						scriptErr = fmt.Errorf("%w; %v", scriptErr, err)
+					}
+				}
+			}
+			if resp != nil && scriptErr != nil {
+				resp.ScriptError = scriptErr.Error()
 			}
 			_ = s.Response.Set(resp)
 			_ = s.IsSending.Set(false)
@@ -153,6 +174,14 @@ func (s *RestStore) logRest(resp *entity.RestResponse) {
 		StatusCode: statusCodeOf(resp),
 		IsError:    isRestError(resp),
 	})
+	if resp != nil && resp.ScriptError != "" {
+		s.logStore.Append(&entity.LogEntry{
+			Kind:    "script",
+			Message: "Script error: " + resp.ScriptError,
+			Detail:  resp.ScriptError,
+			IsError: true,
+		})
+	}
 }
 
 func statusCodeOf(resp *entity.RestResponse) int {

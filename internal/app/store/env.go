@@ -2,6 +2,8 @@ package store
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/data/binding"
@@ -25,6 +27,12 @@ type envSettings interface {
 	SetActiveEnvID(id string)
 }
 
+// envDraftSync keeps open env drafts in sync with script-driven env writes.
+type envDraftSync interface {
+	SyncEnvVar(envID, key, value string)
+	RemoveEnvVar(envID, key string)
+}
+
 type EnvStore struct {
 	Items      binding.UntypedList
 	Selected   binding.Untyped
@@ -32,6 +40,7 @@ type EnvStore struct {
 	IsFetching binding.Bool
 	envService envService
 	settings   envSettings
+	draftSync  envDraftSync
 }
 
 func NewEnvStore(svc envService, settings envSettings) *EnvStore {
@@ -49,6 +58,10 @@ func NewEnvStore(svc envService, settings envSettings) *EnvStore {
 		}
 	}
 	return s
+}
+
+func (s *EnvStore) SetDraftSync(sync envDraftSync) {
+	s.draftSync = sync
 }
 
 func (s *EnvStore) GetItems() *binding.UntypedList {
@@ -323,6 +336,56 @@ func (s *EnvStore) ActiveVariables() map[string]string {
 		return out
 	}
 	return nil
+}
+
+// UpsertActiveVar sets key=value on the active environment (creates key if missing) and persists.
+func (s *EnvStore) UpsertActiveVar(key, value string) bool {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return false
+	}
+	activeID, _ := s.ActiveID.Get()
+	env := s.GetEnvByID(activeID)
+	if env == nil {
+		return false
+	}
+	vars := make([]entity.EnvVariable, len(env.Variables))
+	copy(vars, env.Variables)
+	found := false
+	for i := range vars {
+		if vars[i].Key == key {
+			vars[i].Value = value
+			vars[i].Enabled = true
+			found = true
+			break
+		}
+	}
+	if !found {
+		vars = append(vars, entity.EnvVariable{Key: key, Value: value, Enabled: true})
+	}
+	if s.draftSync != nil {
+		s.draftSync.SyncEnvVar(activeID, key, value)
+	}
+	return s.PersistEnv(activeID, env.Name, vars)
+}
+
+// ClearActiveVar clears the value of key on the active environment (keeps the key) and persists.
+func (s *EnvStore) ClearActiveVar(key string) bool {
+	return s.UpsertActiveVar(key, "")
+}
+
+// ActiveEnvKeys returns enabled variable keys of the active environment.
+func (s *EnvStore) ActiveEnvKeys() []string {
+	vars := s.ActiveVariables()
+	if len(vars) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(vars))
+	for k := range vars {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func (s *EnvStore) GetItemByIndex(index int) *entity.Env {

@@ -22,6 +22,10 @@ type RestRequest struct {
 	Auth Auth
 	// SecretHeaderKeys — заголовки, добавленные auth (для редaktion в preview/логах).
 	SecretHeaderKeys []string
+	// PreRequest — скрипты до отправки (запись/очистка active env).
+	PreRequest []PreRequestEnvEvent
+	// PostRequest — скрипты после ответа (запись в active env из body).
+	PostRequest []PostRequestEnvEvent
 }
 
 // RestResponse — результат выполнения HTTP-запроса.
@@ -34,7 +38,9 @@ type RestResponse struct {
 	Body       string
 	Duration   time.Duration
 	Error      string
-	Request    *RestRequestSnapshot
+	// ScriptError — ошибка pre/postRequest (пусто если ок / скриптов нет).
+	ScriptError string
+	Request     *RestRequestSnapshot
 }
 
 // RestDraft — черновик запроса в UI.
@@ -47,4 +53,5 @@ type RestDraft struct {
 	BodyMode   RestBodyMode
 	RawBody    string
 	FormData   []Variable
+	Event      Event
 }

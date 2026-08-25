@@ -407,6 +407,7 @@ func restDraftFromRequestDraft(d entity.RequestDraft) entity.RestDraft {
 		BodyMode:   bodyMode,
 		RawBody:    req.Body,
 		FormData:   req.FormData,
+		Event:      req.Event,
 	}
 }
 

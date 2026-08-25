@@ -623,6 +623,7 @@ func cloneRequestItem(src entity.CollectionItem) entity.CollectionItem {
 		k.Headers = cloneVariables(src.Request.Kafka.Headers)
 		r.Kafka = &k
 	}
+	r.Event = cloneEvent(src.Request.Event)
 	out.Request = &r
 	return out
 }
