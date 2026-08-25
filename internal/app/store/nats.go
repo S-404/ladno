@@ -39,6 +39,12 @@ type natsTrafficEvent struct {
 	matched      bool
 }
 
+type natsOutboundNote struct {
+	collectionID string
+	subject      string
+	via          string
+}
+
 // natsService is the broker surface NatsStore needs.
 type natsService interface {
 	Connect(conn entity.NatsConnection, cb func(*nats.Conn, service.NatsConnectResult))
@@ -88,6 +94,7 @@ type NatsStore struct {
 	trafficMu             sync.Mutex
 	trafficPending        []natsTrafficEvent
 	trafficFlushScheduled bool
+	outboundPending       []natsOutboundNote
 }
 
 func NewNatsStore(
@@ -246,6 +253,10 @@ func (s *NatsStore) flushTraffic() {
 
 	matchedAny := false
 	for _, ev := range pending {
+		if via, ok := s.takeOutbound(ev.collectionID, ev.subject); ok {
+			s.logNatsOutbound(ev.subject, ev.data, ev.header, via)
+			continue
+		}
 		if ev.matched {
 			s.appendMessageLocked(ev.collectionID, ev.subject, ev.data)
 			s.logNatsInbound(ev.subject, ev.data, ev.header, "subscribe", 0)
@@ -257,6 +268,38 @@ func (s *NatsStore) flushTraffic() {
 	if matchedAny {
 		s.notifyMessageChange()
 	}
+}
+
+func (s *NatsStore) noteOutbound(collectionID, subject, via string) {
+	if collectionID == "" || subject == "" {
+		return
+	}
+	if via == "" {
+		via = "publish"
+	}
+	s.trafficMu.Lock()
+	s.outboundPending = append(s.outboundPending, natsOutboundNote{
+		collectionID: collectionID,
+		subject:      subject,
+		via:          via,
+	})
+	if len(s.outboundPending) > 64 {
+		s.outboundPending = s.outboundPending[len(s.outboundPending)-64:]
+	}
+	s.trafficMu.Unlock()
+}
+
+func (s *NatsStore) takeOutbound(collectionID, subject string) (via string, ok bool) {
+	s.trafficMu.Lock()
+	defer s.trafficMu.Unlock()
+	for i, note := range s.outboundPending {
+		if note.collectionID == collectionID && note.subject == subject {
+			via = note.via
+			s.outboundPending = append(s.outboundPending[:i], s.outboundPending[i+1:]...)
+			return via, true
+		}
+	}
+	return "", false
 }
 
 func (s *NatsStore) hasMatchingSub(collectionID, subject string) bool {
@@ -601,6 +644,7 @@ func (s *NatsStore) runConnected(
 		s.runSubscribe(collectionID, itemID, nc, req.Subject, onDone)
 	case constants.NatsMethodRequest:
 		go func() {
+			s.noteOutbound(collectionID, req.Subject, "request")
 			start := time.Now()
 			msg, err := s.natsService.Request(nc, req.Subject, headers, payload, 2*time.Second)
 			dur := time.Since(start)
@@ -613,15 +657,16 @@ func (s *NatsStore) runConnected(
 					return
 				}
 				s.AppendMessage(collectionID, req.Subject, string(msg.Data))
-				s.logNatsInbound(msg.Subject, string(msg.Data), msg.Header, "request", dur)
+				s.logNatsInbound(req.Subject, string(msg.Data), msg.Header, "reply", dur)
 				applyPost(string(msg.Data))
 				if onDone != nil {
 					onDone(nil)
 				}
 			})
 		}()
-	default: // publish — факт попадания на сервер логирует monitor (">")
+	default: // publish — исходящее ловит monitor (">") и помечается через noteOutbound
 		go func() {
+			s.noteOutbound(collectionID, req.Subject, "publish")
 			err := s.natsService.Publish(nc, req.Subject, headers, payload)
 			if err == nil {
 				_ = nc.FlushTimeout(2 * time.Second)
@@ -702,7 +747,7 @@ func (s *NatsStore) logConnect(collectionName string, res service.NatsConnectRes
 	})
 }
 
-// logNatsSubject — простая строка с subject (трафик без своей подписки).
+// logNatsSubject — прочая шина (не наша отправка и не matched subscribe).
 func (s *NatsStore) logNatsSubject(subject string) {
 	if s.logStore == nil {
 		return
@@ -712,8 +757,53 @@ func (s *NatsStore) logNatsSubject(subject string) {
 	}
 	s.logStore.Append(&entity.LogEntry{
 		Kind:    "nats",
-		Message: subject,
-		Detail:  subject + "\n",
+		Message: "· " + subject,
+		Detail:  "── NATS BUS ──\nSubject: " + subject + "\n",
+	})
+}
+
+func (s *NatsStore) logNatsOutbound(subject, data string, header nats.Header, via string) {
+	if s.logStore == nil {
+		return
+	}
+	if subject == "" {
+		subject = "(empty subject)"
+	}
+	var b strings.Builder
+	b.WriteString("── NATS OUT ──\n")
+	b.WriteString("Via: ")
+	b.WriteString(via)
+	b.WriteByte('\n')
+	b.WriteString("Subject: ")
+	b.WriteString(subject)
+	b.WriteByte('\n')
+	if len(header) > 0 {
+		b.WriteString("\nHeaders:\n")
+		for k, vals := range header {
+			for _, v := range vals {
+				b.WriteString("  ")
+				b.WriteString(k)
+				b.WriteString(": ")
+				b.WriteString(v)
+				b.WriteByte('\n')
+			}
+		}
+	}
+	if data != "" {
+		b.WriteString("\nPayload:\n")
+		b.WriteString(data)
+		b.WriteByte('\n')
+	}
+	prefix := "→ "
+	if via == "request" {
+		prefix = "→ req "
+	} else if via == "publish" {
+		prefix = "→ pub "
+	}
+	s.logStore.Append(&entity.LogEntry{
+		Kind:    "nats",
+		Message: prefix + subject,
+		Detail:  b.String(),
 	})
 }
 
@@ -752,9 +842,15 @@ func (s *NatsStore) logNatsInbound(subject, data string, header nats.Header, via
 		b.WriteString(data)
 		b.WriteByte('\n')
 	}
+	prefix := "← "
+	if via == "subscribe" {
+		prefix = "← sub "
+	} else if via == "reply" {
+		prefix = "← reply "
+	}
 	s.logStore.Append(&entity.LogEntry{
 		Kind:      "nats",
-		Message:   subject,
+		Message:   prefix + subject,
 		Detail:    b.String(),
 		Highlight: true,
 	})
