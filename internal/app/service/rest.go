@@ -7,10 +7,13 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/s-404/ladno/internal/app/entity"
+	"github.com/s-404/ladno/internal/app/entity/constants"
 )
 
 type RestService struct {
@@ -47,7 +50,7 @@ func (s *RestService) BuildSnapshot(req entity.RestRequest) (*entity.RestRequest
 		}, err
 	}
 
-	_, bodyText, contentType, err := buildBodyContent(req)
+	_, bodyPreview, contentType, err := buildBodyContent(req)
 	if err != nil {
 		return &entity.RestRequestSnapshot{
 			Method: method,
@@ -75,7 +78,7 @@ func (s *RestService) BuildSnapshot(req entity.RestRequest) (*entity.RestRequest
 		Method:           method,
 		URL:              resolvedURL,
 		Headers:          headers,
-		Body:             bodyText,
+		Body:             bodyPreview,
 		SecretHeaderKeys: append([]string{}, req.SecretHeaderKeys...),
 	}, nil
 }
@@ -83,38 +86,81 @@ func (s *RestService) BuildSnapshot(req entity.RestRequest) (*entity.RestRequest
 func (s *RestService) sendSync(req entity.RestRequest) *entity.RestResponse {
 	start := time.Now()
 	method := strings.ToUpper(req.Method)
-
-	snapshot, snapErr := s.BuildSnapshot(req)
-	if snapErr != nil {
-		url := req.URL
-		if snapshot != nil && snapshot.URL != "" {
-			url = snapshot.URL
-		}
-		return &entity.RestResponse{
-			Method:   method,
-			URL:      url,
-			Error:    snapErr.Error(),
-			Duration: time.Since(start),
-			Request:  snapshot,
-		}
+	if method == "" {
+		method = http.MethodGet
 	}
 
-	var bodyReader io.Reader
-	if snapshot.Body != "" && method != http.MethodGet && method != http.MethodHead {
-		bodyReader = strings.NewReader(snapshot.Body)
-	}
-
-	httpReq, err := http.NewRequest(snapshot.Method, snapshot.URL, bodyReader)
+	resolvedURL, err := resolveURL(req.URL, req.PathParams)
 	if err != nil {
 		return &entity.RestResponse{
-			Method:   snapshot.Method,
-			URL:      snapshot.URL,
+			Method:   method,
+			URL:      strings.TrimSpace(req.URL),
+			Error:    err.Error(),
+			Duration: time.Since(start),
+			Request: &entity.RestRequestSnapshot{
+				Method: method,
+				URL:    strings.TrimSpace(req.URL),
+				Body:   previewBody(req),
+			},
+		}
+	}
+
+	// One body build for both wire bytes and Content-Type (multipart boundary must match).
+	var bodyReader io.Reader
+	var bodyPreview, contentType string
+	if method != http.MethodGet && method != http.MethodHead {
+		bodyReader, bodyPreview, contentType, err = buildBodyContent(req)
+		if err != nil {
+			return &entity.RestResponse{
+				Method:   method,
+				URL:      resolvedURL,
+				Error:    err.Error(),
+				Duration: time.Since(start),
+				Request: &entity.RestRequestSnapshot{
+					Method: method,
+					URL:    resolvedURL,
+					Body:   previewBody(req),
+				},
+			}
+		}
+	} else {
+		bodyPreview = previewBody(req)
+	}
+
+	headers := make(map[string][]string)
+	hasContentType := false
+	for _, h := range req.Headers {
+		if h.Key == "" {
+			continue
+		}
+		headers[h.Key] = append(headers[h.Key], h.Value)
+		if strings.EqualFold(h.Key, "Content-Type") {
+			hasContentType = true
+		}
+	}
+	if contentType != "" && !hasContentType {
+		headers["Content-Type"] = []string{contentType}
+	}
+
+	snapshot := &entity.RestRequestSnapshot{
+		Method:           method,
+		URL:              resolvedURL,
+		Headers:          headers,
+		Body:             bodyPreview,
+		SecretHeaderKeys: append([]string{}, req.SecretHeaderKeys...),
+	}
+
+	httpReq, err := http.NewRequest(method, resolvedURL, bodyReader)
+	if err != nil {
+		return &entity.RestResponse{
+			Method:   method,
+			URL:      resolvedURL,
 			Error:    err.Error(),
 			Duration: time.Since(start),
 			Request:  snapshot,
 		}
 	}
-	for k, vals := range snapshot.Headers {
+	for k, vals := range headers {
 		for _, v := range vals {
 			httpReq.Header.Add(k, v)
 		}
@@ -124,8 +170,8 @@ func (s *RestService) sendSync(req entity.RestRequest) *entity.RestResponse {
 	duration := time.Since(start)
 	if err != nil {
 		return &entity.RestResponse{
-			Method:   snapshot.Method,
-			URL:      snapshot.URL,
+			Method:   method,
+			URL:      resolvedURL,
 			Error:    err.Error(),
 			Duration: duration,
 			Request:  snapshot,
@@ -136,8 +182,8 @@ func (s *RestService) sendSync(req entity.RestRequest) *entity.RestResponse {
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 10<<20)) // 10 MB
 	if err != nil {
 		return &entity.RestResponse{
-			Method:     snapshot.Method,
-			URL:        snapshot.URL,
+			Method:     method,
+			URL:        resolvedURL,
 			StatusCode: resp.StatusCode,
 			Status:     resp.Status,
 			Headers:    resp.Header,
@@ -148,8 +194,8 @@ func (s *RestService) sendSync(req entity.RestRequest) *entity.RestResponse {
 	}
 
 	return &entity.RestResponse{
-		Method:     snapshot.Method,
-		URL:        snapshot.URL,
+		Method:     method,
+		URL:        resolvedURL,
 		StatusCode: resp.StatusCode,
 		Status:     resp.Status,
 		Headers:    resp.Header,
@@ -162,17 +208,50 @@ func (s *RestService) sendSync(req entity.RestRequest) *entity.RestResponse {
 func previewBody(req entity.RestRequest) string {
 	switch req.BodyMode {
 	case entity.RestBodyFormData:
-		var parts []string
-		for _, row := range req.FormData {
-			if row.Key == "" {
-				continue
-			}
-			parts = append(parts, row.Key+"="+row.Value)
-		}
-		return strings.Join(parts, "&")
+		return formDataPreview(req.FormData)
 	default:
 		return req.RawBody
 	}
+}
+
+func formDataPreview(rows []entity.Variable) string {
+	var parts []string
+	for _, row := range rows {
+		if row.Key == "" {
+			continue
+		}
+		if constants.NormalizeFormDataType(row.Type) == constants.FormDataTypeFile {
+			path := filesystemPath(row.Value)
+			name := filepath.Base(path)
+			if name == "" || name == "." {
+				name = "(no file)"
+			}
+			meta := name
+			if path != "" {
+				if fi, err := os.Stat(path); err == nil {
+					meta = fmt.Sprintf("%s, %d bytes", name, fi.Size())
+				}
+			}
+			parts = append(parts, row.Key+"=<file:"+meta+">")
+			continue
+		}
+		parts = append(parts, row.Key+"="+row.Value)
+	}
+	return strings.Join(parts, "\n")
+}
+
+func filesystemPath(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return ""
+	}
+	if strings.HasPrefix(p, "file://") {
+		if u, err := url.Parse(p); err == nil && u.Path != "" {
+			return u.Path
+		}
+		return strings.TrimPrefix(p, "file://")
+	}
+	return p
 }
 
 func resolveURL(raw string, pathParams map[string]string) (string, error) {
@@ -265,6 +344,7 @@ func buildBody(req entity.RestRequest) (io.Reader, string, string, error) {
 }
 
 // buildBodyContent собирает тело независимо от method (для preview/snapshot).
+// Для form-data preview — человекочитаемый текст; reader — реальный multipart (в т.ч. файлы).
 func buildBodyContent(req entity.RestRequest) (io.Reader, string, string, error) {
 	switch req.BodyMode {
 	case entity.RestBodyFormData:
@@ -281,6 +361,27 @@ func buildBodyContent(req entity.RestRequest) (io.Reader, string, string, error)
 		var buf bytes.Buffer
 		w := multipart.NewWriter(&buf)
 		for _, row := range fields {
+			if constants.NormalizeFormDataType(row.Type) == constants.FormDataTypeFile {
+				path := filesystemPath(row.Value)
+				if path == "" {
+					return nil, "", "", fmt.Errorf("form-data %q: file not selected", row.Key)
+				}
+				f, err := os.Open(path)
+				if err != nil {
+					return nil, "", "", fmt.Errorf("form-data %q: open %s: %w", row.Key, path, err)
+				}
+				part, err := w.CreateFormFile(row.Key, filepath.Base(path))
+				if err != nil {
+					_ = f.Close()
+					return nil, "", "", err
+				}
+				if _, err := io.Copy(part, f); err != nil {
+					_ = f.Close()
+					return nil, "", "", fmt.Errorf("form-data %q: read %s: %w", row.Key, path, err)
+				}
+				_ = f.Close()
+				continue
+			}
 			if err := w.WriteField(row.Key, row.Value); err != nil {
 				return nil, "", "", err
 			}
@@ -289,7 +390,7 @@ func buildBodyContent(req entity.RestRequest) (io.Reader, string, string, error)
 			return nil, "", "", err
 		}
 		bodyBytes := buf.Bytes()
-		return bytes.NewReader(bodyBytes), string(bodyBytes), w.FormDataContentType(), nil
+		return bytes.NewReader(bodyBytes), formDataPreview(fields), w.FormDataContentType(), nil
 	default:
 		if req.RawBody == "" {
 			return nil, "", "", nil

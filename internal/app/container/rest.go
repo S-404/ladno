@@ -129,7 +129,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 	})
 	bodyView = rest.NewRequestBody(rest.BodyState{Mode: rest.BodyModeRaw}, func(rest.BodyState) {
 		flushDraft(true)
-	})
+	}, app.Window)
 	previewView = rest.NewPreviewView(func(showSecrets bool) string {
 		return restStore.Preview(preparedReq(), showSecrets)
 	})
@@ -352,7 +352,11 @@ func kvRowsToVariables(rows []ui.KVRow) []entity.Variable {
 		if !r.Enabled || r.Key == "" {
 			continue
 		}
-		out = append(out, entity.Variable{Key: r.Key, Value: r.Value})
+		out = append(out, entity.Variable{
+			Key:   r.Key,
+			Value: r.Value,
+			Type:  constants.NormalizeFormDataType(r.Type),
+		})
 	}
 	return out
 }
@@ -360,7 +364,12 @@ func kvRowsToVariables(rows []ui.KVRow) []entity.Variable {
 func variablesToKVRows(vars []entity.Variable) []ui.KVRow {
 	rows := make([]ui.KVRow, 0, len(vars))
 	for _, v := range vars {
-		rows = append(rows, ui.KVRow{Enabled: true, Key: v.Key, Value: v.Value})
+		rows = append(rows, ui.KVRow{
+			Enabled: true,
+			Key:     v.Key,
+			Value:   v.Value,
+			Type:    constants.NormalizeFormDataType(v.Type),
+		})
 	}
 	return rows
 }

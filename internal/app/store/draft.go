@@ -546,8 +546,8 @@ func authEqual(a, b entity.Auth) bool {
 }
 
 func variablesEqual(a, b []entity.Variable) bool {
-	am := varMap(a)
-	bm := varMap(b)
+	am := varSigMap(a)
+	bm := varSigMap(b)
 	if len(am) != len(bm) {
 		return false
 	}
@@ -559,13 +559,17 @@ func variablesEqual(a, b []entity.Variable) bool {
 	return true
 }
 
-func varMap(in []entity.Variable) map[string]string {
+func varSigMap(in []entity.Variable) map[string]string {
 	out := make(map[string]string, len(in))
 	for _, v := range in {
-		if v.Key == "" || v.Value == "" {
+		if v.Key == "" {
 			continue
 		}
-		out[v.Key] = v.Value
+		typ := constants.NormalizeFormDataType(v.Type)
+		if typ == constants.FormDataTypeText && v.Value == "" {
+			continue
+		}
+		out[v.Key] = typ + "\x00" + v.Value
 	}
 	return out
 }

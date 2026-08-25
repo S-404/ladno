@@ -2,15 +2,18 @@ package ui
 
 import (
 	"image/color"
+	"path/filepath"
 	"strings"
 	"sync"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/driver/desktop"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/s-404/ladno/internal/app/entity/constants"
 )
 
 // KVRow — одна строка таблицы
@@ -18,6 +21,8 @@ type KVRow struct {
 	Enabled bool
 	Key     string
 	Value   string
+	// Type — для form-data: "text" | "file" (пусто = text).
+	Type string
 	// Auto — auto-generated (read-only, no delete/reorder).
 	Auto bool
 	// Secret — mask value (password field).
@@ -34,6 +39,10 @@ type KVTableOptions struct {
 	KeyReadOnly   bool
 	ValueReadOnly bool
 	Reorderable   bool
+	// ShowType — колонка Type (text/file) для form-data.
+	ShowType bool
+	// Window — для file open dialog (нужен при ShowType).
+	Window fyne.Window
 }
 
 // KVTable — таблица key/value без внутреннего скролла (растёт по контенту).
@@ -65,6 +74,18 @@ func NewKVTable(initial []KVRow, onChange func(rows []KVRow)) *KVTable {
 		ShowCheck:   true,
 		ShowDelete:  true,
 		Reorderable: true,
+	})
+}
+
+// NewKVTableFormData — form-data: Key / Type / Value, с выбором файла.
+func NewKVTableFormData(initial []KVRow, onChange func(rows []KVRow), win fyne.Window) *KVTable {
+	return newKVTable(initial, onChange, KVTableOptions{
+		ShowAdd:     true,
+		ShowCheck:   true,
+		ShowDelete:  true,
+		Reorderable: true,
+		ShowType:    true,
+		Window:      win,
 	})
 }
 
@@ -161,7 +182,11 @@ func (t *KVTable) notify() {
 
 func (t *KVTable) addRow() {
 	t.mu.Lock()
-	t.rows = append(t.rows, KVRow{Enabled: true})
+	row := KVRow{Enabled: true}
+	if t.opts.ShowType {
+		row.Type = "text"
+	}
+	t.rows = append(t.rows, row)
 	t.mu.Unlock()
 	t.rebuild()
 	t.Refresh()
@@ -268,7 +293,10 @@ func (t *KVTable) makeRow(idx int) fyne.CanvasObject {
 	}
 
 	var valObj fyne.CanvasObject
-	if row.Secret || IsSecretHeaderKey(row.Key) {
+	rowType := constants.NormalizeFormDataType(row.Type)
+	if t.opts.ShowType && rowType == constants.FormDataTypeFile {
+		valObj = t.makeFileValue(idx, row)
+	} else if row.Secret || IsSecretHeaderKey(row.Key) {
 		valEntry := NewEntry()
 		valEntry.Password = true
 		valEntry.SetPlaceHolder("Value")
@@ -305,7 +333,34 @@ func (t *KVTable) makeRow(idx int) fyne.CanvasObject {
 		valObj = valEntry
 	}
 
-	center := container.NewGridWithColumns(2, keyEntry, valObj)
+	var center fyne.CanvasObject
+	if t.opts.ShowType {
+		typeSelect := widget.NewSelect([]string{constants.FormDataTypeText, constants.FormDataTypeFile}, nil)
+		typeSelect.PlaceHolder = "text"
+		typeSelect.SetSelected(rowType)
+		typeSelect.OnChanged = func(s string) {
+			next := constants.NormalizeFormDataType(s)
+			t.mu.Lock()
+			if idx >= len(t.rows) {
+				t.mu.Unlock()
+				return
+			}
+			prev := constants.NormalizeFormDataType(t.rows[idx].Type)
+			if prev == next {
+				t.mu.Unlock()
+				return
+			}
+			t.rows[idx].Type = next
+			t.rows[idx].Value = ""
+			t.mu.Unlock()
+			t.rebuild()
+			t.Refresh()
+			t.notify()
+		}
+		center = container.New(&formDataColsLayout{}, keyEntry, typeSelect, valObj)
+	} else {
+		center = container.NewGridWithColumns(2, keyEntry, valObj)
+	}
 
 	var leftParts []fyne.CanvasObject
 	if t.opts.Reorderable {
@@ -636,10 +691,68 @@ var _ fyne.Draggable = (*kvDragHandle)(nil)
 var _ desktop.Mouseable = (*kvDragHandle)(nil)
 var _ desktop.Cursorable = (*kvDragHandle)(nil)
 
+// formDataColsLayout — Key | narrow Type | Value (Type ~ width of "text"/"file").
+type formDataColsLayout struct{}
+
+const formDataTypeColWidth float32 = 72
+
+func (formDataColsLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
+	if len(objects) < 3 {
+		return
+	}
+	pad := theme.Padding()
+	typeW := formDataTypeColWidth
+	rem := size.Width - typeW - 2*pad
+	if rem < 0 {
+		rem = 0
+	}
+	keyW := rem / 2
+	valW := rem - keyW
+	objects[0].Resize(fyne.NewSize(keyW, size.Height))
+	objects[0].Move(fyne.NewPos(0, 0))
+	objects[1].Resize(fyne.NewSize(typeW, size.Height))
+	objects[1].Move(fyne.NewPos(keyW+pad, 0))
+	objects[2].Resize(fyne.NewSize(valW, size.Height))
+	objects[2].Move(fyne.NewPos(keyW+pad+typeW+pad, 0))
+}
+
+func (formDataColsLayout) MinSize(objects []fyne.CanvasObject) fyne.Size {
+	pad := theme.Padding()
+	minH := float32(0)
+	minKey, minVal := float32(40), float32(40)
+	if len(objects) > 0 && objects[0] != nil {
+		s := objects[0].MinSize()
+		minKey = s.Width
+		if s.Height > minH {
+			minH = s.Height
+		}
+	}
+	if len(objects) > 1 && objects[1] != nil {
+		s := objects[1].MinSize()
+		if s.Height > minH {
+			minH = s.Height
+		}
+	}
+	if len(objects) > 2 && objects[2] != nil {
+		s := objects[2].MinSize()
+		minVal = s.Width
+		if s.Height > minH {
+			minH = s.Height
+		}
+	}
+	return fyne.NewSize(minKey+formDataTypeColWidth+minVal+2*pad, minH)
+}
+
 func kvHeader(addBtn fyne.CanvasObject, opts KVTableOptions) fyne.CanvasObject {
 	keyLbl := widget.NewLabelWithStyle("Key", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	valueLbl := widget.NewLabelWithStyle("Value", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	center := container.NewGridWithColumns(2, keyLbl, valueLbl)
+	var center fyne.CanvasObject
+	if opts.ShowType {
+		typeLbl := widget.NewLabelWithStyle("Type", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+		center = container.New(&formDataColsLayout{}, keyLbl, typeLbl, valueLbl)
+	} else {
+		center = container.NewGridWithColumns(2, keyLbl, valueLbl)
+	}
 
 	var leftParts []fyne.CanvasObject
 	if opts.Reorderable {
@@ -667,6 +780,53 @@ func kvHeader(addBtn fyne.CanvasObject, opts KVTableOptions) fyne.CanvasObject {
 		return container.NewBorder(nil, nil, nil, right, center)
 	}
 	return container.NewBorder(nil, nil, left, right, center)
+}
+
+func (t *KVTable) makeFileValue(idx int, row KVRow) fyne.CanvasObject {
+	name := filepath.Base(row.Value)
+	if row.Value == "" {
+		name = ""
+	}
+	label := widget.NewLabel(name)
+	label.Truncation = fyne.TextTruncateEllipsis
+	if name == "" {
+		label.SetText("No file selected")
+		label.Importance = widget.LowImportance
+	}
+
+	btn := widget.NewButton("Select file", func() {
+		win := t.opts.Window
+		if win == nil {
+			return
+		}
+		fd := dialog.NewFileOpen(func(reader fyne.URIReadCloser, err error) {
+			if err != nil || reader == nil {
+				return
+			}
+			uri := reader.URI()
+			_ = reader.Close()
+			path := ""
+			if uri != nil {
+				path = uri.Path()
+				if path == "" {
+					path = strings.TrimPrefix(uri.String(), "file://")
+				}
+			}
+			t.mu.Lock()
+			if idx < len(t.rows) {
+				t.rows[idx].Value = path
+				t.rows[idx].Type = constants.FormDataTypeFile
+			}
+			t.mu.Unlock()
+			t.rebuild()
+			t.Refresh()
+			t.notify()
+		}, win)
+		fd.Show()
+		fd.Resize(fyne.NewSize(800, 600))
+	})
+	btn.Importance = widget.LowImportance
+	return container.NewBorder(nil, nil, nil, btn, label)
 }
 
 // IsSecretHeaderKey reports headers whose values should be masked in the UI/logs.

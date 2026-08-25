@@ -30,7 +30,7 @@ type RequestBodyView struct {
 
 // NewRequestBody возвращает таб Body.
 // onChange вызывается при любом изменении содержимого.
-func NewRequestBody(initial BodyState, onChange func(state BodyState)) *RequestBodyView {
+func NewRequestBody(initial BodyState, onChange func(state BodyState), win fyne.Window) *RequestBodyView {
 	state := initial
 	if state.Mode == "" {
 		state.Mode = BodyModeRaw
@@ -51,7 +51,7 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) *RequestB
 		}
 	})
 
-	formTable := ui.NewKVTable(state.FormRows, func(rows []ui.KVRow) {
+	formTable := ui.NewKVTableFormData(state.FormRows, func(rows []ui.KVRow) {
 		if applying {
 			return
 		}
@@ -59,7 +59,7 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState)) *RequestB
 		if onChange != nil {
 			onChange(state)
 		}
-	})
+	}, win)
 
 	stack := container.NewStack(rawEntry, formTable)
 
