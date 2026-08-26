@@ -190,7 +190,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 			OnCollection: func(col entity.Collection, pos fyne.Position) {
 				colUID := tree.CollectionUID(col.Id)
 				showMenu(fyne.NewMenu("",
-					fyne.NewMenuItem("Add request", func() { addRequest(col.Id, "", colUID) }),
+					fyne.NewMenuItem(constants.AddRequestMenuLabel(col.Type), func() { addRequest(col.Id, "", colUID) }),
 					fyne.NewMenuItem("Add folder", func() { addFolder(col.Id, "", colUID) }),
 					fyne.NewMenuItemSeparator(),
 					fyne.NewMenuItem("Delete", func() {
@@ -208,7 +208,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 			OnFolder: func(col entity.Collection, item entity.CollectionItem, path []string, pos fyne.Position) {
 				itemUID := tree.ItemUID(item.Id)
 				showMenu(fyne.NewMenu("",
-					fyne.NewMenuItem("Add request", func() { addRequest(col.Id, item.Id, itemUID) }),
+					fyne.NewMenuItem(constants.AddRequestMenuLabel(col.Type), func() { addRequest(col.Id, item.Id, itemUID) }),
 					fyne.NewMenuItemSeparator(),
 					fyne.NewMenuItem("Delete", func() {
 						dialog.ShowConfirm("Delete folder", "Delete \""+item.Name+"\"?", func(ok bool) {

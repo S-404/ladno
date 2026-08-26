@@ -172,8 +172,20 @@ func TestDraftEnvSave(t *testing.T) {
 }
 
 func TestCreateDefaultNames(t *testing.T) {
-	if newRequestItem(constants.CollectionTypeREST).Name != entity.DefaultNewRequestName {
+	if newRequestItem(constants.CollectionTypeREST).Name != constants.DefaultNewRequestName(constants.CollectionTypeREST) {
 		t.Fatal("request name")
+	}
+	if newRequestItem(constants.CollectionTypeNATS).Name != "New subject" {
+		t.Fatal("nats name")
+	}
+	if newRequestItem(constants.CollectionTypeKafka).Name != "New topic" {
+		t.Fatal("kafka name")
+	}
+	if newRequestItem(constants.CollectionTypeGRPC).Name != "New method" {
+		t.Fatal("grpc name")
+	}
+	if newRequestItem(constants.CollectionTypeWS).Name != "New connection" {
+		t.Fatal("ws name")
 	}
 	if newFolderItem().Name != entity.DefaultNewFolderName {
 		t.Fatal("folder name")

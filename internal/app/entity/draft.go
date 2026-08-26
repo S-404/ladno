@@ -29,7 +29,7 @@ type EnvDraft struct {
 }
 
 const (
-	DefaultNewRequestName    = "New request"
+	DefaultNewRequestName    = "New request" // REST; see constants.DefaultNewRequestName
 	DefaultNewFolderName     = "New folder"
 	DefaultNewCollectionName = "New collection"
 	DefaultNewEnvName        = "New env"

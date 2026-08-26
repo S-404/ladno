@@ -583,7 +583,7 @@ func newRequestItem(colType constants.CollectionType) entity.CollectionItem {
 	}
 	return entity.CollectionItem{
 		Id:      utils.NewID("r"),
-		Name:    entity.DefaultNewRequestName,
+		Name:    constants.DefaultNewRequestName(colType),
 		Auth:    entity.Auth{Type: constants.AuthTypeInherited},
 		Request: req,
 	}
