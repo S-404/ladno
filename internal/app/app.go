@@ -42,5 +42,5 @@ func Init(window fyne.Window) {
 	body.SetOffset(0.75)
 
 	app.Window.SetContent(container.NewBorder(header, nil, nil, nil, body))
-	appContainer.BindGlobalSaveShortcut(&app)
+	appContainer.BindGlobalSaveShortcut(&app, tabs)
 }

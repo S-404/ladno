@@ -33,7 +33,7 @@ func EnvContainer(app *shared.App) fyne.CanvasObject {
 		header.SetDirty(false)
 	})
 
-	varsTable = ui.NewKVTable(nil, func(rows []ui.KVRow) {
+	varsTable = ui.NewKVTableEnv(nil, func(rows []ui.KVRow) {
 		if applying {
 			return
 		}
@@ -156,7 +156,7 @@ func EnvContainer(app *shared.App) fyne.CanvasObject {
 			container.NewBorder(nil, nil, widget.NewLabel("Name"), nil, nameEntry),
 		),
 		nil, nil, nil,
-		varsTable,
+		container.NewVScroll(varsTable),
 	)
 	split := container.NewHSplit(
 		ui.NewMinSizeBox(fyne.NewSize(140, 80), left),
@@ -199,7 +199,7 @@ func flushEnvDraft(app *shared.App, name string, rows []ui.KVRow, markDirty bool
 func envVariablesToKVRows(vars []entity.EnvVariable) []ui.KVRow {
 	rows := make([]ui.KVRow, 0, len(vars))
 	for _, v := range vars {
-		rows = append(rows, ui.KVRow{Enabled: v.Enabled, Key: v.Key, Value: v.Value})
+		rows = append(rows, ui.KVRow{Enabled: v.Enabled, Key: v.Key, Value: v.Value, Secret: v.IsSecret})
 	}
 	return rows
 }
@@ -210,7 +210,7 @@ func kvRowsToEnvVariables(rows []ui.KVRow) []entity.EnvVariable {
 		if r.Key == "" && r.Value == "" {
 			continue
 		}
-		out = append(out, entity.EnvVariable{Key: r.Key, Value: r.Value, Enabled: r.Enabled})
+		out = append(out, entity.EnvVariable{Key: r.Key, Value: r.Value, Enabled: r.Enabled, IsSecret: r.Secret})
 	}
 	return out
 }

@@ -174,7 +174,6 @@ func NewTree(handler SelectHandler, context ContextHandler, reorder ReorderHandl
 				label = ct.dirty.ResolveLabel(n.collectionID, itemID, isCol, isFolder, n.label)
 			}
 			if isCol {
-				row.typeLabel.TextStyle = fyne.TextStyle{Italic: true}
 				row.typeLabel.SetText(string(constants.NormalizeCollectionType(n.colType)))
 				row.typeLabel.Show()
 			} else {
@@ -1172,8 +1171,6 @@ const (
 func newTreeRow(ct *Tree) *treeRow {
 	icon := widget.NewIcon(theme.DocumentIcon())
 	typeLabel := widget.NewLabel("")
-	typeLabel.Importance = widget.LowImportance
-	typeLabel.TextStyle = fyne.TextStyle{Italic: true}
 	status := canvas.NewCircle(color.Transparent)
 	status.Hide()
 	dot := ui.NewMinSizeBox(fyne.NewSize(8, 8), status)
@@ -1229,13 +1226,11 @@ func (r *treeRow) SetReorderEnabled(on bool) {
 
 func (r *treeRow) SetDraggingSource(on bool) {
 	importance := widget.MediumImportance
-	typeImportance := widget.LowImportance
 	if on {
 		importance = widget.LowImportance
-		typeImportance = widget.LowImportance
 	}
 	r.label.Importance = importance
-	r.typeLabel.Importance = typeImportance
+	r.typeLabel.Importance = importance
 	r.label.Refresh()
 	r.typeLabel.Refresh()
 }

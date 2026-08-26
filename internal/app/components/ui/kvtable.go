@@ -41,6 +41,8 @@ type KVTableOptions struct {
 	Reorderable   bool
 	// ShowType — колонка Type (text/file) для form-data.
 	ShowType bool
+	// ShowSecret — кнопка isSecret: маскирует value (для env variables).
+	ShowSecret bool
 	// Window — для file open dialog (нужен при ShowType).
 	Window fyne.Window
 }
@@ -74,6 +76,17 @@ func NewKVTable(initial []KVRow, onChange func(rows []KVRow)) *KVTable {
 		ShowCheck:   true,
 		ShowDelete:  true,
 		Reorderable: true,
+	})
+}
+
+// NewKVTableEnv — env variables: enabled + key/value + isSecret toggle.
+func NewKVTableEnv(initial []KVRow, onChange func(rows []KVRow)) *KVTable {
+	return newKVTable(initial, onChange, KVTableOptions{
+		ShowAdd:     true,
+		ShowCheck:   true,
+		ShowDelete:  true,
+		Reorderable: true,
+		ShowSecret:  true,
 	})
 }
 
@@ -279,10 +292,14 @@ func (t *KVTable) makeRow(idx int) fyne.CanvasObject {
 			}
 			prev := t.rows[idx].Key
 			prevWarn := t.rows[idx].Warn
+			prevSecret := t.rows[idx].Secret
 			t.rows[idx].Key = v
-			t.rows[idx].Secret = IsSecretHeaderKey(v)
+			if !t.opts.ShowSecret {
+				t.rows[idx].Secret = IsSecretHeaderKey(v)
+			}
 			t.rows[idx].Warn = !t.rows[idx].Auto && KeyConflicts(v, t.conflictKeys)
-			flip := IsSecretHeaderKey(prev) != IsSecretHeaderKey(v) || prevWarn != t.rows[idx].Warn
+			flip := t.rows[idx].Secret != prevSecret || prevWarn != t.rows[idx].Warn ||
+				(!t.opts.ShowSecret && IsSecretHeaderKey(prev) != IsSecretHeaderKey(v))
 			t.mu.Unlock()
 			if flip {
 				t.rebuild()
@@ -294,9 +311,13 @@ func (t *KVTable) makeRow(idx int) fyne.CanvasObject {
 
 	var valObj fyne.CanvasObject
 	rowType := constants.NormalizeFormDataType(row.Type)
+	maskValue := row.Secret
+	if !t.opts.ShowSecret {
+		maskValue = maskValue || IsSecretHeaderKey(row.Key)
+	}
 	if t.opts.ShowType && rowType == constants.FormDataTypeFile {
 		valObj = t.makeFileValue(idx, row)
-	} else if row.Secret || IsSecretHeaderKey(row.Key) {
+	} else if maskValue {
 		valEntry := NewEntry()
 		valEntry.Password = true
 		valEntry.SetPlaceHolder("Value")
@@ -397,21 +418,41 @@ func (t *KVTable) makeRow(idx int) fyne.CanvasObject {
 	}
 
 	var right fyne.CanvasObject
-	if t.opts.ShowDelete {
+	if t.opts.ShowSecret || t.opts.ShowDelete {
 		var parts []fyne.CanvasObject
 		if row.Warn && !row.Auto {
 			parts = append(parts, widget.NewIcon(theme.WarningIcon()))
 		}
-		if row.Auto {
-			parts = append(parts, widget.NewLabel(""))
-		} else {
-			parts = append(parts, widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
-				t.deleteRow(idx)
-			}))
+		if t.opts.ShowSecret && !row.Auto {
+			icon := theme.VisibilityIcon()
+			if row.Secret {
+				icon = theme.VisibilityOffIcon()
+			}
+			secretBtn := widget.NewButtonWithIcon("", icon, func() {
+				t.mu.Lock()
+				if idx < len(t.rows) {
+					t.rows[idx].Secret = !t.rows[idx].Secret
+				}
+				t.mu.Unlock()
+				t.rebuild()
+				t.Refresh()
+				t.notify()
+			})
+			secretBtn.Importance = widget.LowImportance
+			parts = append(parts, secretBtn)
+		}
+		if t.opts.ShowDelete {
+			if row.Auto {
+				parts = append(parts, widget.NewLabel(""))
+			} else {
+				parts = append(parts, widget.NewButtonWithIcon("", theme.DeleteIcon(), func() {
+					t.deleteRow(idx)
+				}))
+			}
 		}
 		if len(parts) == 1 {
 			right = parts[0]
-		} else {
+		} else if len(parts) > 1 {
 			right = container.NewHBox(parts...)
 		}
 	}

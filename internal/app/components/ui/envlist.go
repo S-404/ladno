@@ -331,7 +331,10 @@ func (l *EnvList) selectID(id string) {
 	}
 }
 
-var colorEnvDirty = color.NRGBA{R: 0xFF, G: 0x98, B: 0x00, A: 0xFF}
+var (
+	colorEnvDirty  = color.NRGBA{R: 0xFF, G: 0x98, B: 0x00, A: 0xFF}
+	colorEnvActive = color.NRGBA{R: 0x34, G: 0xA8, B: 0x53, A: 0xFF}
+)
 
 type envListRow struct {
 	widget.BaseWidget
@@ -341,9 +344,13 @@ type envListRow struct {
 
 	label      *widget.Label
 	dot        *canvas.Circle
+	hoverBG    *canvas.Rectangle
 	topLine    *canvas.Rectangle
 	bottomLine *canvas.Rectangle
 	root       *fyne.Container
+
+	selected bool
+	hovered  bool
 }
 
 func newEnvListRow(list *EnvList) *envListRow {
@@ -352,6 +359,8 @@ func newEnvListRow(list *EnvList) *envListRow {
 	dot := canvas.NewCircle(color.Transparent)
 	dot.Hide()
 	dotBox := NewMinSizeBox(fyne.NewSize(8, 8), dot)
+	hoverBG := canvas.NewRectangle(color.Transparent)
+	hoverBG.Hide()
 	topLine := canvas.NewRectangle(color.Transparent)
 	topLine.SetMinSize(fyne.NewSize(1, 2))
 	topLine.Hide()
@@ -359,11 +368,13 @@ func newEnvListRow(list *EnvList) *envListRow {
 	bottomLine.SetMinSize(fyne.NewSize(1, 2))
 	bottomLine.Hide()
 	body := container.NewBorder(nil, nil, container.NewCenter(dotBox), nil, label)
-	root := container.NewBorder(topLine, bottomLine, nil, nil, body)
+	bodyStack := container.NewStack(hoverBG, body)
+	root := container.NewBorder(topLine, bottomLine, nil, nil, bodyStack)
 	r := &envListRow{
 		list:       list,
 		label:      label,
 		dot:        dot,
+		hoverBG:    hoverBG,
 		topLine:    topLine,
 		bottomLine: bottomLine,
 		root:       root,
@@ -374,25 +385,28 @@ func newEnvListRow(list *EnvList) *envListRow {
 
 func (r *envListRow) SetItem(id, name string, selected, active, dirty bool) {
 	r.id = id
-	text := name
-	if active {
-		text = "● " + name
-	}
-	r.label.SetText(text)
+	r.selected = selected
+	r.label.SetText(name)
 	if selected {
 		r.label.Importance = widget.HighImportance
 	} else {
 		r.label.Importance = widget.MediumImportance
 	}
 	r.label.Refresh()
-	if dirty {
+	switch {
+	case dirty:
 		r.dot.FillColor = colorEnvDirty
 		r.dot.StrokeColor = colorEnvDirty
 		r.dot.Show()
-	} else {
+	case active:
+		r.dot.FillColor = colorEnvActive
+		r.dot.StrokeColor = colorEnvActive
+		r.dot.Show()
+	default:
 		r.dot.Hide()
 	}
 	r.dot.Refresh()
+	r.updateHoverBG()
 }
 
 func (r *envListRow) SetDraggingSource(on bool) {
@@ -415,6 +429,38 @@ func (r *envListRow) SetDropIndicator(where dropIndicator) {
 	}
 	r.topLine.Refresh()
 	r.bottomLine.Refresh()
+}
+
+func (r *envListRow) updateHoverBG() {
+	th := theme.Current()
+	v := fyne.CurrentApp().Settings().ThemeVariant()
+	r.hoverBG.CornerRadius = th.Size(theme.SizeNameSelectionRadius)
+	if r.selected {
+		r.hoverBG.FillColor = th.Color(theme.ColorNameSelection, v)
+		r.hoverBG.Show()
+	} else if r.hovered {
+		r.hoverBG.FillColor = th.Color(theme.ColorNameHover, v)
+		r.hoverBG.Show()
+	} else {
+		r.hoverBG.Hide()
+	}
+	r.hoverBG.Refresh()
+}
+
+func (r *envListRow) MouseIn(*desktop.MouseEvent) {
+	r.hovered = true
+	r.updateHoverBG()
+}
+
+func (r *envListRow) MouseMoved(*desktop.MouseEvent) {}
+
+func (r *envListRow) MouseOut() {
+	r.hovered = false
+	r.updateHoverBG()
+}
+
+func (r *envListRow) Cursor() desktop.Cursor {
+	return desktop.PointerCursor
 }
 
 func (r *envListRow) Tapped(_ *fyne.PointEvent) {
@@ -467,3 +513,5 @@ func (r *envListRow) MinSize() fyne.Size {
 var _ fyne.Tappable = (*envListRow)(nil)
 var _ fyne.Draggable = (*envListRow)(nil)
 var _ desktop.Mouseable = (*envListRow)(nil)
+var _ desktop.Hoverable = (*envListRow)(nil)
+var _ desktop.Cursorable = (*envListRow)(nil)
