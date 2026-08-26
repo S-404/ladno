@@ -49,7 +49,7 @@ func TestDraftRequestSaveAndDirty(t *testing.T) {
 		Id: "ws",
 		Collections: []entity.Collection{{
 			Id:   "c1",
-			Type: constants.CollectionTypeREST,
+			Type: constants.CollectionTypeHTTP,
 			Name: entity.DefaultNewCollectionName,
 			Items: []entity.CollectionItem{{
 				Id:   "r1",
@@ -172,19 +172,19 @@ func TestDraftEnvSave(t *testing.T) {
 }
 
 func TestCreateDefaultNames(t *testing.T) {
-	if newRequestItem(constants.CollectionTypeREST).Name != constants.DefaultNewRequestName(constants.CollectionTypeREST) {
+	if newRequestItem(constants.RequestKindREST).Name != constants.DefaultNewRequestName(constants.RequestKindREST) {
 		t.Fatal("request name")
 	}
-	if newRequestItem(constants.CollectionTypeNATS).Name != "New subject" {
+	if newRequestItem(constants.RequestKindNATS).Name != "New subject" {
 		t.Fatal("nats name")
 	}
-	if newRequestItem(constants.CollectionTypeKafka).Name != "New topic" {
+	if newRequestItem(constants.RequestKindKafka).Name != "New topic" {
 		t.Fatal("kafka name")
 	}
-	if newRequestItem(constants.CollectionTypeGRPC).Name != "New method" {
+	if newRequestItem(constants.RequestKindGRPC).Name != "New method" {
 		t.Fatal("grpc name")
 	}
-	if newRequestItem(constants.CollectionTypeWS).Name != "New connection" {
+	if newRequestItem(constants.RequestKindWS).Name != "New connection" {
 		t.Fatal("ws name")
 	}
 	if newFolderItem().Name != entity.DefaultNewFolderName {
@@ -193,7 +193,7 @@ func TestCreateDefaultNames(t *testing.T) {
 	ws := &entity.Workspace{Id: "ws"}
 	mem := &memWS{ws: ws}
 	sel := newDraftTestSelection(mem)
-	id, ok := sel.CreateCollection(constants.CollectionTypeREST)
+	id, ok := sel.CreateCollection(constants.CollectionTypeHTTP)
 	if !ok || id == "" {
 		t.Fatal("create collection")
 	}
@@ -210,7 +210,7 @@ func TestDirtyOnlyEditedIDs(t *testing.T) {
 		Id: "ws",
 		Collections: []entity.Collection{{
 			Id:   "c1",
-			Type: constants.CollectionTypeREST,
+			Type: constants.CollectionTypeHTTP,
 			Name: "Col",
 			Items: []entity.CollectionItem{
 				{Id: "r1", Name: "A", Request: &entity.ItemRequest{Method: constants.GET}},
@@ -256,7 +256,7 @@ func TestPutRequestDraftEquivalentNotDirty(t *testing.T) {
 		Id: "ws",
 		Collections: []entity.Collection{{
 			Id:    "c1",
-			Type:  constants.CollectionTypeREST,
+			Type:  constants.CollectionTypeHTTP,
 			Items: []entity.CollectionItem{{Id: "r1", Name: "R", Request: req}},
 		}},
 	}

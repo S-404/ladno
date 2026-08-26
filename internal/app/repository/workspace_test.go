@@ -27,7 +27,7 @@ func TestWorkspaceRepositoryPersistsCollectionsAcrossReload(t *testing.T) {
 	ws.Collections = append(ws.Collections, entity.Collection{
 		Id:   "col-persist-1",
 		Name: "API",
-		Type: constants.CollectionTypeREST,
+		Type: constants.CollectionTypeHTTP,
 		Items: []entity.CollectionItem{
 			{
 				Id:   "req-1",
@@ -78,7 +78,7 @@ func TestWorkspaceRepositoryPersistsCollectionsAcrossReload(t *testing.T) {
 	if found == nil {
 		t.Fatal("collection missing after reload")
 	}
-	if found.Name != "API" || found.Type != constants.CollectionTypeREST {
+	if found.Name != "API" || found.Type != constants.CollectionTypeHTTP {
 		t.Fatalf("unexpected collection: %+v", found)
 	}
 	if len(found.Items) != 2 {
@@ -104,7 +104,7 @@ func TestWorkspaceRepositorySaveIsIsolatedFromCaller(t *testing.T) {
 	ws.Collections = append(ws.Collections, entity.Collection{
 		Id:   "iso-1",
 		Name: "Iso",
-		Type: constants.CollectionTypeREST,
+		Type: constants.CollectionTypeHTTP,
 	})
 	if err := repo.Save(ws); err != nil {
 		t.Fatal(err)
@@ -120,6 +120,39 @@ func TestWorkspaceRepositorySaveIsIsolatedFromCaller(t *testing.T) {
 	last := stored.Collections[len(stored.Collections)-1]
 	if last.Id != "iso-1" || last.Name != "Iso" {
 		t.Fatalf("repo should keep saved collection, got %+v", last)
+	}
+}
+
+func TestWorkspaceRepositoryNormalizesLegacyHTTPTypes(t *testing.T) {
+	store, err := storage.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := NewWorkspaceRepository(store)
+	ws := repo.FindAll()[0]
+	ws.Collections = append(ws.Collections, entity.Collection{
+		Id:   "legacy-grpc",
+		Name: "Old gRPC",
+		Type: constants.CollectionTypeGRPC,
+	})
+	if err := repo.Save(ws); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded := NewWorkspaceRepository(store)
+	got := reloaded.FindById(ws.Id)
+	var found *entity.Collection
+	for i := range got.Collections {
+		if got.Collections[i].Id == "legacy-grpc" {
+			found = &got.Collections[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("legacy collection missing")
+	}
+	if found.Type != constants.CollectionTypeHTTP {
+		t.Fatalf("legacy grpc type should become http, got %q", found.Type)
 	}
 }
 

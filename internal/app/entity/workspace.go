@@ -1,6 +1,7 @@
 package entity
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/s-404/ladno/internal/app/entity/constants"
@@ -55,6 +56,45 @@ type ItemRequest struct {
 	Ws         *WsRequest              `json:"ws,omitempty"`
 	Nats       *NatsRequest            `json:"nats,omitempty"`
 	Kafka      *KafkaRequest           `json:"kafka,omitempty"`
+}
+
+func (r *ItemRequest) Kind() constants.RequestKind {
+	if r == nil {
+		return constants.RequestKindREST
+	}
+	if r.Nats != nil {
+		return constants.RequestKindNATS
+	}
+	if r.Kafka != nil {
+		return constants.RequestKindKafka
+	}
+	if r.Grpc != nil {
+		return constants.RequestKindGRPC
+	}
+	if r.Ws != nil {
+		return constants.RequestKindWS
+	}
+	return constants.RequestKindREST
+}
+
+func RequestTreeLabel(name string, req *ItemRequest) string {
+	if req == nil {
+		return name
+	}
+	switch req.Kind() {
+	case constants.RequestKindREST:
+		m := req.Method
+		if m == "" {
+			m = constants.GET
+		}
+		return fmt.Sprintf("[%s] %s", m, name)
+	case constants.RequestKindGRPC:
+		return fmt.Sprintf("[gRPC] %s", name)
+	case constants.RequestKindWS:
+		return fmt.Sprintf("[WS] %s", name)
+	default:
+		return name
+	}
 }
 
 type GrpcRequest struct {

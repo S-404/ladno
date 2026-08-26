@@ -469,7 +469,7 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 				fyne.Do(colSettings.FocusName)
 			}
 		case entity.SelectionFolder:
-			folderSettings.Set(sel.Name, sel.Auth, constants.NormalizeCollectionType(sel.CollectionType) == constants.CollectionTypeREST)
+			folderSettings.Set(sel.Name, sel.Auth, constants.IsHTTPCollection(sel.CollectionType))
 			folderSettings.SetDirty(drafts.IsFolderDirty(sel.ItemID))
 			show(2)
 			if sel.FocusName {
@@ -484,20 +484,6 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 				sel.FocusName = false
 			}
 			switch constants.NormalizeCollectionType(sel.CollectionType) {
-			case constants.CollectionTypeGRPC:
-				grpcPanel.Set(d.Request.Grpc, d.Name)
-				grpcPanel.SetDirty(dirty)
-				show(4)
-				if focusName {
-					fyne.Do(grpcPanel.FocusName)
-				}
-			case constants.CollectionTypeWS:
-				wsPanel.Set(d.Request.Ws, d.Name)
-				wsPanel.SetDirty(dirty)
-				show(5)
-				if focusName {
-					fyne.Do(wsPanel.FocusName)
-				}
 			case constants.CollectionTypeNATS:
 				natsCollectionID = sel.CollectionID
 				natsPanel.Set(d.Request.Nats, d.Name, natsStore.IsSubscribed(sel.CollectionID, sel.ItemID), d.Request.Event)
@@ -521,8 +507,25 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 					fyne.Do(kafkaPanel.FocusName)
 				}
 			default:
-				show(3)
-				// REST focuses from RestContainer listener
+				switch d.Request.Kind() {
+				case constants.RequestKindGRPC:
+					grpcPanel.Set(d.Request.Grpc, d.Name)
+					grpcPanel.SetDirty(dirty)
+					show(4)
+					if focusName {
+						fyne.Do(grpcPanel.FocusName)
+					}
+				case constants.RequestKindWS:
+					wsPanel.Set(d.Request.Ws, d.Name)
+					wsPanel.SetDirty(dirty)
+					show(5)
+					if focusName {
+						fyne.Do(wsPanel.FocusName)
+					}
+				default:
+					show(3)
+					// REST focuses from RestContainer listener
+				}
 			}
 		default:
 			show(0)

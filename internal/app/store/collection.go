@@ -289,7 +289,7 @@ func (s *SelectionStore) AddFolder(collectionID, parentItemID string) (string, [
 	return s.addItem(collectionID, parentItemID, newFolderItem())
 }
 
-func (s *SelectionStore) AddRequest(collectionID, parentItemID string) (string, []string, bool) {
+func (s *SelectionStore) AddRequest(collectionID, parentItemID string, kind constants.RequestKind) (string, []string, bool) {
 	ws := s.workspace.GetSelectedWorkspace()
 	if ws == nil {
 		return "", nil, false
@@ -298,7 +298,16 @@ func (s *SelectionStore) AddRequest(collectionID, parentItemID string) (string, 
 	if !ok {
 		return "", nil, false
 	}
-	return s.addItem(collectionID, parentItemID, newRequestItem(col.Type))
+	if constants.IsHTTPCollection(col.Type) {
+		switch kind {
+		case constants.RequestKindREST, constants.RequestKindGRPC, constants.RequestKindWS:
+		default:
+			kind = constants.RequestKindREST
+		}
+	} else {
+		kind = constants.RequestKindForCollection(col.Type)
+	}
+	return s.addItem(collectionID, parentItemID, newRequestItem(kind))
 }
 
 func (s *SelectionStore) DuplicateRequest(collectionID, itemID string) (string, []string, bool) {
@@ -565,25 +574,25 @@ func newFolderItem() entity.CollectionItem {
 	}
 }
 
-func newRequestItem(colType constants.CollectionType) entity.CollectionItem {
+func newRequestItem(kind constants.RequestKind) entity.CollectionItem {
 	req := &entity.ItemRequest{
 		Auth: entity.Auth{Type: constants.AuthTypeInherited},
 	}
-	switch constants.NormalizeCollectionType(colType) {
-	case constants.CollectionTypeGRPC:
+	switch kind {
+	case constants.RequestKindGRPC:
 		req.Grpc = &entity.GrpcRequest{}
-	case constants.CollectionTypeWS:
+	case constants.RequestKindWS:
 		req.Ws = &entity.WsRequest{}
-	case constants.CollectionTypeNATS:
+	case constants.RequestKindNATS:
 		req.Nats = &entity.NatsRequest{}
-	case constants.CollectionTypeKafka:
+	case constants.RequestKindKafka:
 		req.Kafka = &entity.KafkaRequest{}
 	default:
 		req.Method = constants.GET
 	}
 	return entity.CollectionItem{
 		Id:      utils.NewID("r"),
-		Name:    constants.DefaultNewRequestName(colType),
+		Name:    constants.DefaultNewRequestName(kind),
 		Auth:    entity.Auth{Type: constants.AuthTypeInherited},
 		Request: req,
 	}

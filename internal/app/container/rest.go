@@ -89,7 +89,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		if sel == nil || sel.Kind != entity.SelectionRequest {
 			return
 		}
-		if constants.NormalizeCollectionType(sel.CollectionType) != constants.CollectionTypeREST {
+		if !isRESTRequest(sel) {
 			return
 		}
 		rr := buildReq()
@@ -401,7 +401,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		if sel == nil || sel.Kind != entity.SelectionRequest {
 			return
 		}
-		if constants.NormalizeCollectionType(sel.CollectionType) != constants.CollectionTypeREST {
+		if !isRESTRequest(sel) {
 			return
 		}
 		applying = true
@@ -486,4 +486,14 @@ func uniqueCookieName(existing []entity.Cookie, domain, base string) string {
 			return name
 		}
 	}
+}
+
+func isRESTRequest(sel *entity.Selection) bool {
+	if sel == nil || sel.Kind != entity.SelectionRequest {
+		return false
+	}
+	if !constants.IsHTTPCollection(sel.CollectionType) {
+		return false
+	}
+	return sel.Request != nil && sel.Request.Kind() == constants.RequestKindREST
 }

@@ -16,7 +16,7 @@ func WorkspaceData() []*entity.Workspace {
 				{
 					Id:   "c-001",
 					Name: "JSONPlaceholder",
-					Type: constants.CollectionTypeREST,
+					Type: constants.CollectionTypeHTTP,
 					Auth: entity.Auth{Type: constants.AuthTypeNoAuth},
 					Items: []entity.CollectionItem{
 						{
@@ -107,7 +107,7 @@ func WorkspaceData() []*entity.Workspace {
 				{
 					Id:   "c-002",
 					Name: "Demo gRPC",
-					Type: constants.CollectionTypeGRPC,
+					Type: constants.CollectionTypeHTTP,
 					Auth: entity.Auth{Type: constants.AuthTypeNoAuth},
 					Items: []entity.CollectionItem{
 						{
@@ -129,7 +129,7 @@ func WorkspaceData() []*entity.Workspace {
 				{
 					Id:   "c-003",
 					Name: "Demo WebSocket",
-					Type: constants.CollectionTypeWS,
+					Type: constants.CollectionTypeHTTP,
 					Auth: entity.Auth{Type: constants.AuthTypeNoAuth},
 					Items: []entity.CollectionItem{
 						{

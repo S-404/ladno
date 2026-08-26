@@ -3,48 +3,72 @@ package constants
 type CollectionType string
 
 const (
-	CollectionTypeREST  CollectionType = "rest"
-	CollectionTypeGRPC  CollectionType = "grpc"
-	CollectionTypeWS    CollectionType = "ws"
+	CollectionTypeHTTP  CollectionType = "http"
 	CollectionTypeNATS  CollectionType = "nats"
 	CollectionTypeKafka CollectionType = "kafka"
+
+	// Legacy persisted values; NormalizeCollectionType maps them to HTTP.
+	CollectionTypeREST CollectionType = "rest"
+	CollectionTypeGRPC CollectionType = "grpc"
+	CollectionTypeWS   CollectionType = "ws"
 )
 
 func NormalizeCollectionType(t CollectionType) CollectionType {
 	switch t {
-	case CollectionTypeGRPC, CollectionTypeWS, CollectionTypeNATS, CollectionTypeKafka:
+	case CollectionTypeNATS, CollectionTypeKafka:
 		return t
 	default:
-		return CollectionTypeREST
+		return CollectionTypeHTTP
 	}
 }
 
-// AddRequestMenuLabel — пункт контекстного меню «добавить» по типу коллекции.
+func IsHTTPCollection(t CollectionType) bool {
+	return NormalizeCollectionType(t) == CollectionTypeHTTP
+}
+
+type RequestKind string
+
+const (
+	RequestKindREST  RequestKind = "rest"
+	RequestKindGRPC  RequestKind = "grpc"
+	RequestKindWS    RequestKind = "ws"
+	RequestKindNATS  RequestKind = "nats"
+	RequestKindKafka RequestKind = "kafka"
+)
+
+func RequestKindForCollection(t CollectionType) RequestKind {
+	switch NormalizeCollectionType(t) {
+	case CollectionTypeNATS:
+		return RequestKindNATS
+	case CollectionTypeKafka:
+		return RequestKindKafka
+	default:
+		return RequestKindREST
+	}
+}
+
+// AddRequestMenuLabel — пункт контекстного меню «добавить» для NATS/Kafka.
 func AddRequestMenuLabel(t CollectionType) string {
 	switch NormalizeCollectionType(t) {
 	case CollectionTypeNATS:
 		return "Add subject"
 	case CollectionTypeKafka:
 		return "Add topic"
-	case CollectionTypeGRPC:
-		return "Add method"
-	case CollectionTypeWS:
-		return "Add connection"
 	default:
 		return "Add request"
 	}
 }
 
-// DefaultNewRequestName — имя нового item по типу коллекции.
-func DefaultNewRequestName(t CollectionType) string {
-	switch NormalizeCollectionType(t) {
-	case CollectionTypeNATS:
+// DefaultNewRequestName — имя нового item по виду запроса.
+func DefaultNewRequestName(kind RequestKind) string {
+	switch kind {
+	case RequestKindNATS:
 		return "New subject"
-	case CollectionTypeKafka:
+	case RequestKindKafka:
 		return "New topic"
-	case CollectionTypeGRPC:
+	case RequestKindGRPC:
 		return "New method"
-	case CollectionTypeWS:
+	case RequestKindWS:
 		return "New connection"
 	default:
 		return "New request"

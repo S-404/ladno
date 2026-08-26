@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/s-404/ladno/internal/app/entity"
+	"github.com/s-404/ladno/internal/app/entity/constants"
 	"github.com/s-404/ladno/internal/app/repository/mock"
 	"github.com/s-404/ladno/internal/app/storage"
 	"github.com/s-404/ladno/internal/app/utils"
@@ -209,12 +210,24 @@ func cloneWorkspace(ws *entity.Workspace) *entity.Workspace {
 	data, err := json.Marshal(ws)
 	if err != nil {
 		cp := *ws
+		normalizeWorkspaceTypes(&cp)
 		return &cp
 	}
 	var out entity.Workspace
 	if err := json.Unmarshal(data, &out); err != nil {
 		cp := *ws
+		normalizeWorkspaceTypes(&cp)
 		return &cp
 	}
+	normalizeWorkspaceTypes(&out)
 	return &out
+}
+
+func normalizeWorkspaceTypes(ws *entity.Workspace) {
+	if ws == nil {
+		return
+	}
+	for i := range ws.Collections {
+		ws.Collections[i].Type = constants.NormalizeCollectionType(ws.Collections[i].Type)
+	}
 }

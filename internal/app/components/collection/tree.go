@@ -1,7 +1,6 @@
 package collection
 
 import (
-	"fmt"
 	"image/color"
 	"log"
 	"strings"
@@ -1080,6 +1079,17 @@ func filterItems(items []entity.CollectionItem, q string, keepAll bool) ([]entit
 				any = true
 				continue
 			}
+			if item.Request.Grpc != nil && (strings.Contains(strings.ToLower(item.Request.Grpc.Method), q) ||
+				strings.Contains(strings.ToLower(item.Request.Grpc.Target), q)) {
+				out = append(out, item)
+				any = true
+				continue
+			}
+			if item.Request.Ws != nil && strings.Contains(strings.ToLower(item.Request.Ws.URL), q) {
+				out = append(out, item)
+				any = true
+				continue
+			}
 			continue
 		}
 		// folder
@@ -1115,9 +1125,7 @@ func fillItems(
 		label := item.Name
 		if item.Request != nil {
 			kind = nodeRequest
-			if col.Type == constants.CollectionTypeREST {
-				label = fmt.Sprintf("[%s] %s", item.Request.Method, item.Name)
-			}
+			label = entity.RequestTreeLabel(item.Name, item.Request)
 		}
 
 		nodes[uid] = treeNode{

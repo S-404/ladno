@@ -1,7 +1,6 @@
 package container
 
 import (
-	"fmt"
 	"log"
 
 	"fyne.io/fyne/v2"
@@ -86,7 +85,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 			Request:        &req,
 			FocusName:      focusName,
 		})
-		if col.Type == constants.CollectionTypeREST {
+		if item.Request.Kind() == constants.RequestKindREST {
 			restStore.SetDraft(restDraftFromRequestDraft(d))
 		}
 	}
@@ -114,10 +113,10 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 		})
 	}
 
-	addRequest := func(collectionID, parentItemID, parentUID string) {
-		log.Printf("[collections] UI addRequest col=%s parentItem=%s parentUID=%s",
-			collectionID, parentItemID, parentUID)
-		itemID, path, ok := selStore.AddRequest(collectionID, parentItemID)
+	addRequest := func(collectionID, parentItemID, parentUID string, kind constants.RequestKind) {
+		log.Printf("[collections] UI addRequest col=%s parentItem=%s parentUID=%s kind=%s",
+			collectionID, parentItemID, parentUID, kind)
+		itemID, path, ok := selStore.AddRequest(collectionID, parentItemID, kind)
 		if !ok {
 			log.Printf("[collections] UI addRequest failed")
 			return
@@ -189,8 +188,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 		collection.ContextHandler{
 			OnCollection: func(col entity.Collection, pos fyne.Position) {
 				colUID := tree.CollectionUID(col.Id)
-				showMenu(fyne.NewMenu("",
-					fyne.NewMenuItem(constants.AddRequestMenuLabel(col.Type), func() { addRequest(col.Id, "", colUID) }),
+				items := append(addItemMenuItems(col, "", colUID, addRequest),
 					fyne.NewMenuItem("Add folder", func() { addFolder(col.Id, "", colUID) }),
 					fyne.NewMenuItemSeparator(),
 					fyne.NewMenuItem("Delete", func() {
@@ -203,12 +201,12 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 							selStore.DeleteCollection(col.Id)
 						}, win)
 					}),
-				), pos)
+				)
+				showMenu(fyne.NewMenu("", items...), pos)
 			},
 			OnFolder: func(col entity.Collection, item entity.CollectionItem, path []string, pos fyne.Position) {
 				itemUID := tree.ItemUID(item.Id)
-				showMenu(fyne.NewMenu("",
-					fyne.NewMenuItem(constants.AddRequestMenuLabel(col.Type), func() { addRequest(col.Id, item.Id, itemUID) }),
+				items := append(addItemMenuItems(col, item.Id, itemUID, addRequest),
 					fyne.NewMenuItemSeparator(),
 					fyne.NewMenuItem("Delete", func() {
 						dialog.ShowConfirm("Delete folder", "Delete \""+item.Name+"\"?", func(ok bool) {
@@ -217,7 +215,8 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 							}
 						}, win)
 					}),
-				), pos)
+				)
+				showMenu(fyne.NewMenu("", items...), pos)
 			},
 			OnRequest: func(col entity.Collection, item entity.CollectionItem, path []string, pos fyne.Position) {
 				parentUID := tree.CollectionUID(col.Id)
@@ -305,10 +304,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 			if !ok {
 				return fallback
 			}
-			if colType := collectionTypeByID(wsStore, collectionID); colType == constants.CollectionTypeREST {
-				return fmt.Sprintf("[%s] %s", d.Request.Method, d.Name)
-			}
-			return d.Name
+			return entity.RequestTreeLabel(d.Name, &d.Request)
 		},
 	})
 	drafts.AddDirtyListener(func() {
@@ -342,11 +338,9 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 	})
 
 	addMenu := fyne.NewMenu("",
-		fyne.NewMenuItem("REST collection", func() { createCollection(constants.CollectionTypeREST) }),
-		fyne.NewMenuItem("gRPC collection", func() { createCollection(constants.CollectionTypeGRPC) }),
+		fyne.NewMenuItem("HTTP collection", func() { createCollection(constants.CollectionTypeHTTP) }),
 		fyne.NewMenuItem("NATS collection", func() { createCollection(constants.CollectionTypeNATS) }),
 		fyne.NewMenuItem("Kafka collection", func() { createCollection(constants.CollectionTypeKafka) }),
-		fyne.NewMenuItem("WS collection", func() { createCollection(constants.CollectionTypeWS) }),
 	)
 	var addBtn *widget.Button
 	addBtn = widget.NewButtonWithIcon("Add", theme.ContentAddIcon(), func() {
@@ -425,19 +419,32 @@ func restDraftFromRequestDraft(d entity.RequestDraft) entity.RestDraft {
 	}
 }
 
-func collectionTypeByID(wsStore interface {
-	GetSelectedWorkspace() *entity.Workspace
-}, collectionID string) constants.CollectionType {
-	ws := wsStore.GetSelectedWorkspace()
-	if ws == nil {
-		return ""
-	}
-	for i := range ws.Collections {
-		if ws.Collections[i].Id == collectionID {
-			return constants.NormalizeCollectionType(ws.Collections[i].Type)
+func addItemMenuItems(
+	col entity.Collection,
+	parentItemID, parentUID string,
+	addRequest func(collectionID, parentItemID, parentUID string, kind constants.RequestKind),
+) []*fyne.MenuItem {
+	switch constants.NormalizeCollectionType(col.Type) {
+	case constants.CollectionTypeNATS, constants.CollectionTypeKafka:
+		kind := constants.RequestKindForCollection(col.Type)
+		return []*fyne.MenuItem{
+			fyne.NewMenuItem(constants.AddRequestMenuLabel(col.Type), func() {
+				addRequest(col.Id, parentItemID, parentUID, kind)
+			}),
+		}
+	default:
+		return []*fyne.MenuItem{
+			fyne.NewMenuItem("Add request", func() {
+				addRequest(col.Id, parentItemID, parentUID, constants.RequestKindREST)
+			}),
+			fyne.NewMenuItem("Add WS connection", func() {
+				addRequest(col.Id, parentItemID, parentUID, constants.RequestKindWS)
+			}),
+			fyne.NewMenuItem("Add gRPC method", func() {
+				addRequest(col.Id, parentItemID, parentUID, constants.RequestKindGRPC)
+			}),
 		}
 	}
-	return ""
 }
 
 func findCollectionItem(items []entity.CollectionItem, id string) *entity.CollectionItem {
