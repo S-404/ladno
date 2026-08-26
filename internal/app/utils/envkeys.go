@@ -88,6 +88,7 @@ func CollectItemRequestEnvKeys(req entity.ItemRequest) []string {
 	add(req.Url.Raw, req.Body)
 	appendVarKeys(&out, seen, req.Header)
 	appendVarKeys(&out, seen, req.FormData)
+	appendVarKeys(&out, seen, req.URLEncoded)
 	appendVarKeys(&out, seen, req.Url.Variable)
 	appendVarKeys(&out, seen, req.Auth.Data)
 

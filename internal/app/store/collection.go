@@ -601,6 +601,7 @@ func cloneRequestItem(src entity.CollectionItem) entity.CollectionItem {
 	r := *src.Request
 	r.Header = cloneVariables(src.Request.Header)
 	r.FormData = cloneVariables(src.Request.FormData)
+	r.URLEncoded = cloneVariables(src.Request.URLEncoded)
 	r.Auth = cloneAuth(src.Request.Auth)
 	r.Url.Variable = cloneVariables(src.Request.Url.Variable)
 	if src.Request.Grpc != nil {

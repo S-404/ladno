@@ -53,6 +53,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 			BodyMode:   entity.RestBodyMode(body.Mode),
 			RawBody:    body.RawText,
 			FormData:   kvRowsToVariables(body.FormRows),
+			URLEncoded: kvRowsToVariables(body.URLEncodedRows),
 		}
 		if scriptView != nil {
 			ev := scriptView.Get()
@@ -104,14 +105,15 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 			CollectionID: sel.CollectionID,
 			Name:         header.GetName(),
 			Request: entity.ItemRequest{
-				Method:   constants.RequestMethod(rr.Method),
-				Header:   rr.Headers,
-				Auth:     authPanel.Get(),
-				Event:    ev,
-				Url:      entity.RequestUrl{Raw: rr.URL, Variable: pathVars},
-				BodyMode: rr.BodyMode,
-				Body:     rr.RawBody,
-				FormData: rr.FormData,
+				Method:     constants.RequestMethod(rr.Method),
+				Header:     rr.Headers,
+				Auth:       authPanel.Get(),
+				Event:      ev,
+				Url:        entity.RequestUrl{Raw: rr.URL, Variable: pathVars},
+				BodyMode:   rr.BodyMode,
+				Body:       rr.RawBody,
+				FormData:   rr.FormData,
+				URLEncoded: rr.URLEncoded,
 			},
 		}
 		drafts.PutRequestDraft(sel.ItemID, d, markDirty)
@@ -371,13 +373,17 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		authPanel.Set(draft.Auth)
 		refreshAutoHeaders()
 		mode := rest.BodyModeRaw
-		if draft.BodyMode == entity.RestBodyFormData {
+		switch draft.BodyMode {
+		case entity.RestBodyFormData:
 			mode = rest.BodyModeFormData
+		case entity.RestBodyURLEncoded:
+			mode = rest.BodyModeURLEncoded
 		}
 		bodyView.Set(rest.BodyState{
-			Mode:     mode,
-			RawText:  draft.RawBody,
-			FormRows: variablesToKVRows(draft.FormData),
+			Mode:           mode,
+			RawText:        draft.RawBody,
+			FormRows:       variablesToKVRows(draft.FormData),
+			URLEncodedRows: variablesToKVRows(draft.URLEncoded),
 		})
 		paramsView.SetPathParams(draft.PathParams)
 		scriptView.Set(draft.Event)

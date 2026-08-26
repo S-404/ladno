@@ -209,9 +209,22 @@ func previewBody(req entity.RestRequest) string {
 	switch req.BodyMode {
 	case entity.RestBodyFormData:
 		return formDataPreview(req.FormData)
+	case entity.RestBodyURLEncoded:
+		return urlEncodedPreview(req.URLEncoded)
 	default:
 		return req.RawBody
 	}
+}
+
+func urlEncodedPreview(rows []entity.Variable) string {
+	var parts []string
+	for _, row := range rows {
+		if row.Key == "" {
+			continue
+		}
+		parts = append(parts, row.Key+"="+row.Value)
+	}
+	return strings.Join(parts, "\n")
 }
 
 func formDataPreview(rows []entity.Variable) string {
@@ -391,6 +404,21 @@ func buildBodyContent(req entity.RestRequest) (io.Reader, string, string, error)
 		}
 		bodyBytes := buf.Bytes()
 		return bytes.NewReader(bodyBytes), formDataPreview(fields), w.FormDataContentType(), nil
+	case entity.RestBodyURLEncoded:
+		vals := url.Values{}
+		fields := make([]entity.Variable, 0, len(req.URLEncoded))
+		for _, row := range req.URLEncoded {
+			if row.Key == "" {
+				continue
+			}
+			vals.Add(row.Key, row.Value)
+			fields = append(fields, row)
+		}
+		if len(fields) == 0 {
+			return nil, "", "", nil
+		}
+		encoded := vals.Encode()
+		return strings.NewReader(encoded), urlEncodedPreview(fields), "application/x-www-form-urlencoded", nil
 	default:
 		if req.RawBody == "" {
 			return nil, "", "", nil

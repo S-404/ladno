@@ -155,3 +155,48 @@ func TestSendFormDataFileUploadsContents(t *testing.T) {
 		t.Fatalf("raw path sent as text field: %q", gotBody)
 	}
 }
+
+func TestBuildBodyContentURLEncoded(t *testing.T) {
+	s := NewRestService()
+	snap, err := s.BuildSnapshot(entity.RestRequest{
+		Method:   http.MethodPost,
+		URL:      "http://example.com",
+		BodyMode: entity.RestBodyURLEncoded,
+		URLEncoded: []entity.Variable{
+			{Key: "a", Value: "1"},
+			{Key: "b", Value: "hello world"},
+			{Key: "", Value: "skip"},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ct := snap.Headers["Content-Type"]
+	if len(ct) == 0 || ct[0] != "application/x-www-form-urlencoded" {
+		t.Fatalf("want urlencoded Content-Type, got %v", ct)
+	}
+	if snap.Body != "a=1\nb=hello world" {
+		t.Fatalf("preview body: %q", snap.Body)
+	}
+}
+
+func TestBuildBodyContentEmptyURLEncoded(t *testing.T) {
+	s := NewRestService()
+	snap, err := s.BuildSnapshot(entity.RestRequest{
+		Method:     http.MethodPost,
+		URL:        "http://example.com",
+		BodyMode:   entity.RestBodyURLEncoded,
+		URLEncoded: []entity.Variable{{Key: "", Value: "x"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snap.Body != "" {
+		t.Fatalf("empty urlencoded should have empty body, got %q", snap.Body)
+	}
+	for k := range snap.Headers {
+		if strings.EqualFold(k, "Content-Type") {
+			t.Fatalf("Content-Type should be omitted for empty urlencoded, got %v", snap.Headers[k])
+		}
+	}
+}

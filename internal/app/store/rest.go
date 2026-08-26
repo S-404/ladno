@@ -260,5 +260,17 @@ func applyEnvVars(req entity.RestRequest, vars map[string]string) entity.RestReq
 		req.FormData = form
 	}
 
+	if len(req.URLEncoded) > 0 {
+		encoded := make([]entity.Variable, len(req.URLEncoded))
+		for i, f := range req.URLEncoded {
+			encoded[i] = entity.Variable{
+				Key:   utils.SubstituteEnvVars(f.Key, vars),
+				Value: utils.SubstituteEnvVars(f.Value, vars),
+				Type:  f.Type,
+			}
+		}
+		req.URLEncoded = encoded
+	}
+
 	return req
 }

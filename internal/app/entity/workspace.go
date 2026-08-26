@@ -42,18 +42,19 @@ type CollectionItem struct {
 }
 
 type ItemRequest struct {
-	Method   constants.RequestMethod `json:"method"`
-	Header   []Variable              `json:"header"`
-	Auth     Auth                    `json:"auth"`
-	Event    Event                   `json:"event"`
-	Url      RequestUrl              `json:"url"`
-	BodyMode RestBodyMode            `json:"bodyMode,omitempty"`
-	Body     string                  `json:"body,omitempty"`
-	FormData []Variable              `json:"formData,omitempty"`
-	Grpc     *GrpcRequest            `json:"grpc,omitempty"`
-	Ws       *WsRequest              `json:"ws,omitempty"`
-	Nats     *NatsRequest            `json:"nats,omitempty"`
-	Kafka    *KafkaRequest           `json:"kafka,omitempty"`
+	Method     constants.RequestMethod `json:"method"`
+	Header     []Variable              `json:"header"`
+	Auth       Auth                    `json:"auth"`
+	Event      Event                   `json:"event"`
+	Url        RequestUrl              `json:"url"`
+	BodyMode   RestBodyMode            `json:"bodyMode,omitempty"`
+	Body       string                  `json:"body,omitempty"`
+	FormData   []Variable              `json:"formData,omitempty"`
+	URLEncoded []Variable              `json:"urlencoded,omitempty"`
+	Grpc       *GrpcRequest            `json:"grpc,omitempty"`
+	Ws         *WsRequest              `json:"ws,omitempty"`
+	Nats       *NatsRequest            `json:"nats,omitempty"`
+	Kafka      *KafkaRequest           `json:"kafka,omitempty"`
 }
 
 type GrpcRequest struct {

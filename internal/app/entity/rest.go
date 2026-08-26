@@ -5,8 +5,9 @@ import "time"
 type RestBodyMode string
 
 const (
-	RestBodyRaw      RestBodyMode = "raw"
-	RestBodyFormData RestBodyMode = "form-data"
+	RestBodyRaw        RestBodyMode = "raw"
+	RestBodyFormData   RestBodyMode = "form-data"
+	RestBodyURLEncoded RestBodyMode = "x-www-form-urlencoded"
 )
 
 // RestRequest — снимок запроса для отправки.
@@ -18,6 +19,7 @@ type RestRequest struct {
 	BodyMode   RestBodyMode
 	RawBody    string
 	FormData   []Variable
+	URLEncoded []Variable
 	// Auth — уже resolved (без Inherited); применяется после env-подстановки.
 	Auth Auth
 	// SecretHeaderKeys — заголовки, добавленные auth (для редaktion в preview/логах).
@@ -53,5 +55,6 @@ type RestDraft struct {
 	BodyMode   RestBodyMode
 	RawBody    string
 	FormData   []Variable
+	URLEncoded []Variable
 	Event      Event
 }

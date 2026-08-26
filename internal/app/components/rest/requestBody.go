@@ -11,15 +11,17 @@ import (
 type BodyMode string
 
 const (
-	BodyModeRaw      BodyMode = "raw"
-	BodyModeFormData BodyMode = "form-data"
+	BodyModeRaw        BodyMode = "raw"
+	BodyModeFormData   BodyMode = "form-data"
+	BodyModeURLEncoded BodyMode = "x-www-form-urlencoded"
 )
 
 // BodyState хранит состояние таба Body
 type BodyState struct {
-	Mode     BodyMode
-	RawText  string
-	FormRows []ui.KVRow
+	Mode           BodyMode
+	RawText        string
+	FormRows       []ui.KVRow
+	URLEncodedRows []ui.KVRow
 }
 
 type RequestBodyView struct {
@@ -61,19 +63,32 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState), win fyne.
 		}
 	}, win)
 
-	stack := container.NewStack(rawEntry, formTable)
+	urlencodedTable := ui.NewKVTable(state.URLEncodedRows, func(rows []ui.KVRow) {
+		if applying {
+			return
+		}
+		state.URLEncodedRows = rows
+		if onChange != nil {
+			onChange(state)
+		}
+	})
+
+	stack := container.NewStack(rawEntry, formTable, urlencodedTable)
 
 	var modeSelect *widget.Select
 
 	applyMode := func(mode BodyMode, notify bool) {
 		state.Mode = mode
+		rawEntry.Hide()
+		formTable.Hide()
+		urlencodedTable.Hide()
 		switch mode {
-		case BodyModeRaw:
-			formTable.Hide()
-			rawEntry.Show()
 		case BodyModeFormData:
-			rawEntry.Hide()
 			formTable.Show()
+		case BodyModeURLEncoded:
+			urlencodedTable.Show()
+		default:
+			rawEntry.Show()
 		}
 		stack.Refresh()
 		if notify && onChange != nil {
@@ -83,7 +98,7 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState), win fyne.
 
 	applyMode(state.Mode, false)
 
-	modes := []string{string(BodyModeRaw), string(BodyModeFormData)}
+	modes := []string{string(BodyModeRaw), string(BodyModeFormData), string(BodyModeURLEncoded)}
 	modeSelect = widget.NewSelect(modes, func(s string) {
 		if applying {
 			return
@@ -102,6 +117,7 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState), win fyne.
 		Get: func() BodyState {
 			state.RawText = rawEntry.Text()
 			state.FormRows = formTable.GetRows()
+			state.URLEncodedRows = urlencodedTable.GetRows()
 			return state
 		},
 		Set: func(next BodyState) {
@@ -112,6 +128,7 @@ func NewRequestBody(initial BodyState, onChange func(state BodyState), win fyne.
 			state = next
 			rawEntry.SetText(state.RawText)
 			formTable.SetRows(state.FormRows)
+			urlencodedTable.SetRows(state.URLEncodedRows)
 			modeSelect.SetSelected(string(state.Mode))
 			applyMode(state.Mode, false)
 			applying = false

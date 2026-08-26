@@ -85,6 +85,7 @@ func cloneItemRequest(req *entity.ItemRequest) entity.ItemRequest {
 	out := *req
 	out.Header = cloneVariables(req.Header)
 	out.FormData = cloneVariables(req.FormData)
+	out.URLEncoded = cloneVariables(req.URLEncoded)
 	out.Auth = cloneAuth(req.Auth)
 	out.Url.Variable = cloneVariables(req.Url.Variable)
 	if req.Grpc != nil {
@@ -566,6 +567,7 @@ func itemRequestEqual(a, b entity.ItemRequest) bool {
 	}
 	return variablesEqual(a.Header, b.Header) &&
 		variablesEqual(a.FormData, b.FormData) &&
+		variablesEqual(a.URLEncoded, b.URLEncoded) &&
 		variablesEqual(a.Url.Variable, b.Url.Variable) &&
 		authEqual(a.Auth, b.Auth) &&
 		grpcRequestEqual(a.Grpc, b.Grpc) &&
