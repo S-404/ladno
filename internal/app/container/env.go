@@ -62,6 +62,26 @@ func EnvContainer(app *shared.App) (fyne.CanvasObject, func(keys []string)) {
 		},
 	)
 	envList.SetDirtyCheck(drafts.IsEnvDirty)
+	envList.SetContextHandler(func(id string, pos fyne.Position) {
+		env := selectedEnv(envStore)
+		if env == nil || env.Id != id {
+			return
+		}
+		name := env.Name
+		menu := fyne.NewMenu("",
+			fyne.NewMenuItem("Clone", func() {
+				envStore.CloneSelected()
+			}),
+			fyne.NewMenuItem("Delete", func() {
+				dialog.ShowConfirm("Delete environment", "Delete \""+name+"\"?", func(ok bool) {
+					if ok {
+						envStore.DeleteSelected()
+					}
+				}, app.Window)
+			}),
+		)
+		widget.ShowPopUpMenuAtPosition(menu, app.Window.Canvas(), pos)
+	})
 
 	syncList = func() {
 		raw, err := (*items).Get()

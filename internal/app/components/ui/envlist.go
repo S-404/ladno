@@ -28,6 +28,7 @@ type EnvList struct {
 	selectedID string
 	onSelect   func(id string)
 	onReorder  func(id string, toIndex int)
+	onContext  func(id string, pos fyne.Position)
 	isDirty    func(id string) bool
 
 	rowsByID map[string]*envListRow
@@ -99,6 +100,12 @@ func (l *EnvList) SetDirtyCheck(fn func(id string) bool) {
 	l.isDirty = fn
 	l.mu.Unlock()
 	l.refreshIndicators()
+}
+
+func (l *EnvList) SetContextHandler(fn func(id string, pos fyne.Position)) {
+	l.mu.Lock()
+	l.onContext = fn
+	l.mu.Unlock()
 }
 
 func (l *EnvList) rebuild() {
@@ -472,6 +479,19 @@ func (r *envListRow) Tapped(_ *fyne.PointEvent) {
 	}
 }
 
+func (r *envListRow) TappedSecondary(e *fyne.PointEvent) {
+	if r.list == nil || r.id == "" || e == nil {
+		return
+	}
+	r.list.selectID(r.id)
+	r.list.mu.Lock()
+	cb := r.list.onContext
+	r.list.mu.Unlock()
+	if cb != nil {
+		cb(r.id, e.AbsolutePosition)
+	}
+}
+
 func (r *envListRow) MouseDown(e *desktop.MouseEvent) {
 	if e.Button != desktop.MouseButtonPrimary || r.id == "" {
 		return
@@ -511,6 +531,7 @@ func (r *envListRow) MinSize() fyne.Size {
 }
 
 var _ fyne.Tappable = (*envListRow)(nil)
+var _ fyne.SecondaryTappable = (*envListRow)(nil)
 var _ fyne.Draggable = (*envListRow)(nil)
 var _ desktop.Mouseable = (*envListRow)(nil)
 var _ desktop.Hoverable = (*envListRow)(nil)
