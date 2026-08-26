@@ -213,18 +213,6 @@ func NewAuthPanel(opts AuthPanelOptions) *AuthPanel {
 		} else {
 			tokenPrefix.SetText(constants.AuthDefaultTokenPrefix)
 		}
-		// Legacy JWT used free-form Data rows; pick token-like values.
-		if token.Text == "" && t == constants.AuthTypeBearer {
-			for _, d := range auth.Data {
-				if d.Key == "token" || d.Key == "Authorization" || d.Key == "jwt" {
-					token.SetText(d.Value)
-					break
-				}
-			}
-			if token.Text == "" && len(auth.Data) == 1 {
-				token.SetText(auth.Data[0].Value)
-			}
-		}
 		apiKey.SetText(entity.AuthVar(auth.Data, constants.AuthDataKey))
 		apiValue.SetText(entity.AuthVar(auth.Data, constants.AuthDataValue))
 		if entity.AuthVar(auth.Data, constants.AuthDataAddTo) == constants.AuthAddToBody {

@@ -646,7 +646,6 @@ func cloneAuth(a entity.Auth) entity.Auth {
 	if out.Type == "" {
 		out.Type = constants.AuthTypeNoAuth
 	}
-	// Legacy Token auth without prefix → default Bearer (stable drafts / UI).
 	if out.Type == constants.AuthTypeBearer {
 		hasPrefix := false
 		for _, v := range out.Data {

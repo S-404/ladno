@@ -123,7 +123,7 @@ func TestRelocateHTTPMixedKindsBetweenCollections(t *testing.T) {
 			},
 			{
 				Id:    "c-http-2",
-				Type:  constants.CollectionTypeREST, // legacy persisted type
+				Type:  constants.CollectionTypeHTTP,
 				Items: []entity.CollectionItem{},
 			},
 			{

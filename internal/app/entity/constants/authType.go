@@ -8,9 +8,6 @@ const (
 	AuthTypeBasic     AuthType = "Basic"
 	AuthTypeBearer    AuthType = "Bearer"
 	AuthTypeAPIKey    AuthType = "ApiKey"
-
-	// Legacy alias kept for older workspaces (mapped to Bearer in UI/resolve).
-	AuthTypeJWT AuthType = "JWT"
 )
 
 // Auth data keys stored in entity.Auth.Data.
@@ -35,8 +32,6 @@ func NormalizeAuthType(t AuthType) AuthType {
 	switch t {
 	case AuthTypeInherited, AuthTypeNoAuth, AuthTypeBasic, AuthTypeBearer, AuthTypeAPIKey:
 		return t
-	case AuthTypeJWT:
-		return AuthTypeBearer
 	case "":
 		return AuthTypeNoAuth
 	default:

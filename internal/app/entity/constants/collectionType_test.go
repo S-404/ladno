@@ -8,9 +8,6 @@ func TestNormalizeCollectionType(t *testing.T) {
 		want CollectionType
 	}{
 		{CollectionTypeHTTP, CollectionTypeHTTP},
-		{CollectionTypeREST, CollectionTypeHTTP},
-		{CollectionTypeGRPC, CollectionTypeHTTP},
-		{CollectionTypeWS, CollectionTypeHTTP},
 		{"", CollectionTypeHTTP},
 		{CollectionTypeNATS, CollectionTypeNATS},
 		{CollectionTypeKafka, CollectionTypeKafka},
@@ -20,10 +17,7 @@ func TestNormalizeCollectionType(t *testing.T) {
 			t.Errorf("NormalizeCollectionType(%q)=%q want %q", tc.in, got, tc.want)
 		}
 	}
-	if !IsHTTPCollection(CollectionTypeREST) || !IsHTTPCollection(CollectionTypeGRPC) || !IsHTTPCollection(CollectionTypeWS) {
-		t.Fatal("legacy types should be HTTP collections")
-	}
-	if IsHTTPCollection(CollectionTypeNATS) || IsHTTPCollection(CollectionTypeKafka) {
-		t.Fatal("nats/kafka should not be HTTP collections")
+	if !IsHTTPCollection(CollectionTypeHTTP) || IsHTTPCollection(CollectionTypeNATS) || IsHTTPCollection(CollectionTypeKafka) {
+		t.Fatal("IsHTTPCollection")
 	}
 }

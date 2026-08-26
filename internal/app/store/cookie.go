@@ -49,21 +49,6 @@ func (s *CookieStore) load() {
 	}
 	now := time.Now().UTC()
 
-	// Legacy format: bare []Cookie
-	var legacy []entity.Cookie
-	if err := json.Unmarshal([]byte(raw), &legacy); err == nil && (len(legacy) > 0 || raw == "[]") {
-		out := make([]entity.Cookie, 0, len(legacy))
-		for _, c := range legacy {
-			if c.Name == "" || c.Expired(now) {
-				continue
-			}
-			out = append(out, c)
-		}
-		s.cookies = out
-		s.domains = domainsFromCookies(out)
-		return
-	}
-
 	var data cookieJarData
 	if err := json.Unmarshal([]byte(raw), &data); err != nil {
 		return

@@ -6,11 +6,6 @@ const (
 	CollectionTypeHTTP  CollectionType = "http"
 	CollectionTypeNATS  CollectionType = "nats"
 	CollectionTypeKafka CollectionType = "kafka"
-
-	// Legacy persisted values; NormalizeCollectionType maps them to HTTP.
-	CollectionTypeREST CollectionType = "rest"
-	CollectionTypeGRPC CollectionType = "grpc"
-	CollectionTypeWS   CollectionType = "ws"
 )
 
 func NormalizeCollectionType(t CollectionType) CollectionType {

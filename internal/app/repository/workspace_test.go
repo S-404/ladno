@@ -123,39 +123,6 @@ func TestWorkspaceRepositorySaveIsIsolatedFromCaller(t *testing.T) {
 	}
 }
 
-func TestWorkspaceRepositoryNormalizesLegacyHTTPTypes(t *testing.T) {
-	store, err := storage.Open(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	repo := NewWorkspaceRepository(store)
-	ws := repo.FindAll()[0]
-	ws.Collections = append(ws.Collections, entity.Collection{
-		Id:   "legacy-grpc",
-		Name: "Old gRPC",
-		Type: constants.CollectionTypeGRPC,
-	})
-	if err := repo.Save(ws); err != nil {
-		t.Fatal(err)
-	}
-
-	reloaded := NewWorkspaceRepository(store)
-	got := reloaded.FindById(ws.Id)
-	var found *entity.Collection
-	for i := range got.Collections {
-		if got.Collections[i].Id == "legacy-grpc" {
-			found = &got.Collections[i]
-			break
-		}
-	}
-	if found == nil {
-		t.Fatal("legacy collection missing")
-	}
-	if found.Type != constants.CollectionTypeHTTP {
-		t.Fatalf("legacy grpc type should become http, got %q", found.Type)
-	}
-}
-
 func TestWorkspaceRepositorySeedOnlyWhenMissing(t *testing.T) {
 	dir := t.TempDir()
 	store, err := storage.Open(dir)
