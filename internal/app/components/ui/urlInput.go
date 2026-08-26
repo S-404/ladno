@@ -223,10 +223,10 @@ func isParamChar(c byte) bool {
 }
 
 // tokenColor returns color for token type
-func tokenColor(kind tokenKind) color.Color {
+func tokenColor(kind tokenKind, text string) color.Color {
 	switch kind {
 	case tokenVariable:
-		return EnvVarColor // оранжевый  {{var}}
+		return envVarTokenColor(text)
 	case tokenPathParam:
 		return color.NRGBA{R: 86, G: 182, B: 255, A: 255} // голубой    :param
 	case tokenQueryKey:
@@ -260,7 +260,7 @@ func (h *highlightDisplay) SetText(raw string) {
 	objects := make([]fyne.CanvasObject, 0, len(tokens))
 
 	for _, t := range tokens {
-		txt := canvas.NewText(t.text, tokenColor(t.kind))
+		txt := canvas.NewText(t.text, tokenColor(t.kind, t.text))
 		txt.TextStyle = fyne.TextStyle{Monospace: true}
 		txt.TextSize = theme.TextSize()
 		objects = append(objects, txt)
@@ -371,13 +371,14 @@ func (u *UrlInput) Tapped(_ *fyne.PointEvent) {
 }
 
 func (u *UrlInput) CreateRenderer() fyne.WidgetRenderer {
+	registerEnvHighlight(u)
 	displayLayer := container.NewStack(
 		u.bg,
 		u.border,
 		container.NewPadded(u.display),
 	)
 	stack := container.NewStack(displayLayer, u.entry)
-	return widget.NewSimpleRenderer(stack)
+	return &urlInputRenderer{input: u, stack: stack, objects: []fyne.CanvasObject{stack}}
 }
 
 func (u *UrlInput) MinSize() fyne.Size {
@@ -402,4 +403,31 @@ func (u *UrlInput) Refresh() {
 		u.display.Show()
 		u.display.Refresh()
 	}
+}
+
+type urlInputRenderer struct {
+	input   *UrlInput
+	stack   *fyne.Container
+	objects []fyne.CanvasObject
+}
+
+func (r *urlInputRenderer) Destroy() {
+	unregisterEnvHighlight(r.input)
+}
+
+func (r *urlInputRenderer) Layout(size fyne.Size) {
+	r.stack.Resize(size)
+	r.stack.Move(fyne.NewPos(0, 0))
+}
+
+func (r *urlInputRenderer) MinSize() fyne.Size {
+	return r.input.MinSize()
+}
+
+func (r *urlInputRenderer) Objects() []fyne.CanvasObject {
+	return r.objects
+}
+
+func (r *urlInputRenderer) Refresh() {
+	r.stack.Refresh()
 }

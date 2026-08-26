@@ -11,8 +11,11 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-// EnvVarColor — цвет вставок {{var}} (как в URL input).
+// EnvVarColor — цвет известных вставок {{var}}.
 var EnvVarColor = color.NRGBA{R: 255, G: 165, B: 0, A: 255}
+
+// EnvVarMissingColor — {{var}} которого нет в active env.
+var EnvVarMissingColor = color.NRGBA{R: 0xEA, G: 0x43, B: 0x35, A: 0xFF}
 
 type envToken struct {
 	text     string
@@ -55,6 +58,21 @@ func parseEnvTokens(raw string) []envToken {
 	return tokens
 }
 
+func envTokenKey(tokenText string) string {
+	if len(tokenText) < 4 {
+		return ""
+	}
+	return strings.TrimSpace(tokenText[2 : len(tokenText)-2])
+}
+
+func envVarTokenColor(tokenText string) color.Color {
+	key := envTokenKey(tokenText)
+	if key != "" && !IsKnownEnvKey(key) {
+		return EnvVarMissingColor
+	}
+	return EnvVarColor
+}
+
 type envHighlightDisplay struct {
 	widget.BaseWidget
 	box       *fyne.Container
@@ -87,7 +105,7 @@ func (h *envHighlightDisplay) SetText(raw string) {
 		for _, t := range tokens {
 			c := fg
 			if t.variable {
-				c = EnvVarColor
+				c = envVarTokenColor(t.text)
 			}
 			txt := canvas.NewText(t.text, c)
 			txt.TextStyle = style
@@ -144,8 +162,9 @@ func (e *envFocusEntry) TypedShortcut(s fyne.Shortcut) {
 type EnvInput struct {
 	widget.BaseWidget
 
-	focused   bool
-	multiline bool
+	focused    bool
+	multiline  bool
+	usedAccent bool
 
 	entry   *envFocusEntry
 	display *envHighlightDisplay
@@ -232,6 +251,15 @@ func (e *EnvInput) Enable() {
 	e.entry.Enable()
 }
 
+// SetUsedAccent marks the field as used by the selected request (orange border).
+func (e *EnvInput) SetUsedAccent(on bool) {
+	if e.usedAccent == on {
+		return
+	}
+	e.usedAccent = on
+	e.Refresh()
+}
+
 func (e *EnvInput) Tapped(_ *fyne.PointEvent) {
 	if e.entry.Disabled() {
 		return
@@ -246,6 +274,7 @@ func (e *EnvInput) Tapped(_ *fyne.PointEvent) {
 }
 
 func (e *EnvInput) CreateRenderer() fyne.WidgetRenderer {
+	registerEnvHighlight(e)
 	displayLayer := container.NewStack(e.bg, e.border, container.NewPadded(e.scroll))
 	stack := container.NewStack(displayLayer, e.entry)
 	return &envInputRenderer{input: e, stack: stack, objects: []fyne.CanvasObject{stack}}
@@ -268,7 +297,9 @@ type envInputRenderer struct {
 	objects []fyne.CanvasObject
 }
 
-func (r *envInputRenderer) Destroy() {}
+func (r *envInputRenderer) Destroy() {
+	unregisterEnvHighlight(r.input)
+}
 
 func (r *envInputRenderer) Layout(size fyne.Size) {
 	r.stack.Resize(size)
@@ -290,7 +321,13 @@ func (r *envInputRenderer) Refresh() {
 func (e *EnvInput) Refresh() {
 	e.BaseWidget.Refresh()
 	e.bg.FillColor = theme.Color(theme.ColorNameInputBackground)
-	e.border.StrokeColor = theme.Color(theme.ColorNameInputBorder)
+	if e.usedAccent && !e.focused {
+		e.border.StrokeColor = EnvVarColor
+		e.border.StrokeWidth = theme.InputBorderSize() + 1
+	} else {
+		e.border.StrokeColor = theme.Color(theme.ColorNameInputBorder)
+		e.border.StrokeWidth = theme.InputBorderSize()
+	}
 
 	if e.focused {
 		e.display.Hide()

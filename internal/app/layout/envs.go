@@ -6,6 +6,6 @@ import (
 	"github.com/s-404/ladno/internal/app/entity/shared"
 )
 
-func EnvsLayout(app *shared.App) fyne.CanvasObject {
+func EnvsLayout(app *shared.App) (fyne.CanvasObject, func(keys []string)) {
 	return appContainer.EnvContainer(app)
 }

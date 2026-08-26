@@ -12,7 +12,7 @@ import (
 	"github.com/s-404/ladno/internal/app/entity/shared"
 )
 
-func EnvContainer(app *shared.App) fyne.CanvasObject {
+func EnvContainer(app *shared.App) (fyne.CanvasObject, func(keys []string)) {
 	envStore := app.Store.Env
 	drafts := app.Store.Draft
 	items := envStore.GetItems()
@@ -164,7 +164,7 @@ func EnvContainer(app *shared.App) fyne.CanvasObject {
 	)
 	split.SetOffset(0.28)
 	envStore.FetchList()
-	return split
+	return split, varsTable.SetUsedKeys
 }
 
 func selectedEnv(envStore interface {

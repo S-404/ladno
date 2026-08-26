@@ -57,6 +57,7 @@ type KVTable struct {
 	opts     KVTableOptions
 	// conflictKeys — keys that conflict with auto-generated (case-insensitive).
 	conflictKeys []string
+	usedKeys     map[string]struct{}
 
 	root       *fyne.Container
 	rowsBox    *fyne.Container
@@ -182,6 +183,33 @@ func (t *KVTable) SetConflictKeys(keys []string) {
 	}
 }
 
+// SetUsedKeys highlights rows whose Key is referenced as {{key}} in the selected request.
+func (t *KVTable) SetUsedKeys(keys []string) {
+	next := make(map[string]struct{}, len(keys))
+	for _, k := range keys {
+		if k == "" {
+			continue
+		}
+		next[k] = struct{}{}
+	}
+	t.mu.Lock()
+	changed := len(next) != len(t.usedKeys)
+	if !changed {
+		for k := range next {
+			if _, ok := t.usedKeys[k]; !ok {
+				changed = true
+				break
+			}
+		}
+	}
+	t.usedKeys = next
+	t.mu.Unlock()
+	if changed {
+		t.rebuild()
+		t.Refresh()
+	}
+}
+
 func (t *KVTable) notify() {
 	if t.onChange == nil {
 		return
@@ -276,37 +304,72 @@ func (t *KVTable) rebuild() {
 func (t *KVTable) makeRow(idx int) fyne.CanvasObject {
 	t.mu.Lock()
 	row := t.rows[idx]
+	_, used := t.usedKeys[row.Key]
 	t.mu.Unlock()
 
-	keyEntry := NewEnvInput()
-	keyEntry.SetPlaceHolder("Key")
-	keyEntry.SetText(row.Key)
-	if t.opts.KeyReadOnly || row.Auto {
-		keyEntry.Disable()
-	} else {
-		keyEntry.OnChanged(func(v string) {
-			t.mu.Lock()
-			if idx >= len(t.rows) {
+	var keyObj fyne.CanvasObject
+	if t.opts.ShowSecret {
+		keyEntry := NewEntry()
+		keyEntry.SetPlaceHolder("Key")
+		keyEntry.SetText(row.Key)
+		if t.opts.KeyReadOnly || row.Auto {
+			keyEntry.Disable()
+		} else {
+			keyEntry.OnChanged = func(v string) {
+				t.mu.Lock()
+				if idx >= len(t.rows) {
+					t.mu.Unlock()
+					return
+				}
+				old := t.rows[idx].Key
+				t.rows[idx].Key = v
+				_, wasUsed := t.usedKeys[old]
+				_, nowUsed := t.usedKeys[v]
 				t.mu.Unlock()
-				return
+				if wasUsed != nowUsed {
+					t.rebuild()
+					t.Refresh()
+				}
+				t.notify()
 			}
-			prev := t.rows[idx].Key
-			prevWarn := t.rows[idx].Warn
-			prevSecret := t.rows[idx].Secret
-			t.rows[idx].Key = v
-			if !t.opts.ShowSecret {
+		}
+		keyObj = keyEntry
+		if used && row.Key != "" {
+			keyObj = withUsedAccent(keyEntry)
+		}
+	} else {
+		keyEntry := NewEnvInput()
+		keyEntry.SetPlaceHolder("Key")
+		keyEntry.SetText(row.Key)
+		if used && row.Key != "" {
+			keyEntry.SetUsedAccent(true)
+		}
+		if t.opts.KeyReadOnly || row.Auto {
+			keyEntry.Disable()
+		} else {
+			keyEntry.OnChanged(func(v string) {
+				t.mu.Lock()
+				if idx >= len(t.rows) {
+					t.mu.Unlock()
+					return
+				}
+				prev := t.rows[idx].Key
+				prevWarn := t.rows[idx].Warn
+				prevSecret := t.rows[idx].Secret
+				t.rows[idx].Key = v
 				t.rows[idx].Secret = IsSecretHeaderKey(v)
-			}
-			t.rows[idx].Warn = !t.rows[idx].Auto && KeyConflicts(v, t.conflictKeys)
-			flip := t.rows[idx].Secret != prevSecret || prevWarn != t.rows[idx].Warn ||
-				(!t.opts.ShowSecret && IsSecretHeaderKey(prev) != IsSecretHeaderKey(v))
-			t.mu.Unlock()
-			if flip {
-				t.rebuild()
-				t.Refresh()
-			}
-			t.notify()
-		})
+				t.rows[idx].Warn = !t.rows[idx].Auto && KeyConflicts(v, t.conflictKeys)
+				flip := t.rows[idx].Secret != prevSecret || prevWarn != t.rows[idx].Warn ||
+					IsSecretHeaderKey(prev) != IsSecretHeaderKey(v)
+				t.mu.Unlock()
+				if flip {
+					t.rebuild()
+					t.Refresh()
+				}
+				t.notify()
+			})
+		}
+		keyObj = keyEntry
 	}
 
 	var valObj fyne.CanvasObject
@@ -317,9 +380,9 @@ func (t *KVTable) makeRow(idx int) fyne.CanvasObject {
 	}
 	if t.opts.ShowType && rowType == constants.FormDataTypeFile {
 		valObj = t.makeFileValue(idx, row)
-	} else if maskValue {
+	} else if maskValue || t.opts.ShowSecret {
 		valEntry := NewEntry()
-		valEntry.Password = true
+		valEntry.Password = maskValue
 		valEntry.SetPlaceHolder("Value")
 		valEntry.SetText(row.Value)
 		if t.opts.ValueReadOnly || row.Auto {
@@ -378,9 +441,9 @@ func (t *KVTable) makeRow(idx int) fyne.CanvasObject {
 			t.Refresh()
 			t.notify()
 		}
-		center = container.New(&formDataColsLayout{}, keyEntry, typeSelect, valObj)
+		center = container.New(&formDataColsLayout{}, keyObj, typeSelect, valObj)
 	} else {
-		center = container.NewGridWithColumns(2, keyEntry, valObj)
+		center = container.NewGridWithColumns(2, keyObj, valObj)
 	}
 
 	var leftParts []fyne.CanvasObject
@@ -868,6 +931,14 @@ func (t *KVTable) makeFileValue(idx int, row KVRow) fyne.CanvasObject {
 	})
 	btn.Importance = widget.LowImportance
 	return container.NewBorder(nil, nil, nil, btn, label)
+}
+
+func withUsedAccent(content fyne.CanvasObject) fyne.CanvasObject {
+	accent := canvas.NewRectangle(color.Transparent)
+	accent.StrokeColor = EnvVarColor
+	accent.StrokeWidth = theme.InputBorderSize() + 1
+	accent.CornerRadius = theme.InputRadiusSize()
+	return container.NewStack(accent, content)
 }
 
 // IsSecretHeaderKey reports headers whose values should be masked in the UI/logs.

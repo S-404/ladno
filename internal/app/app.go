@@ -25,9 +25,10 @@ func Init(window fyne.Window) {
 		Window: window,
 	}
 
+	envs, setEnvUsedKeys := layout.EnvsLayout(&app)
 	tabs := container.NewAppTabs(
 		container.NewTabItemWithIcon("collections", theme.HomeIcon(), layout.CollectionsLayout(&app)),
-		container.NewTabItemWithIcon("envs", theme.StorageIcon(), layout.EnvsLayout(&app)),
+		container.NewTabItemWithIcon("envs", theme.StorageIcon(), envs),
 		container.NewTabItemWithIcon("settings", theme.SettingsIcon(), layout.SettingsLayout(&app)),
 	)
 	tabs.SetTabLocation(container.TabLocationLeading)
@@ -43,4 +44,5 @@ func Init(window fyne.Window) {
 
 	app.Window.SetContent(container.NewBorder(header, nil, nil, nil, body))
 	appContainer.BindGlobalSaveShortcut(&app, tabs)
+	appContainer.BindEnvHighlights(&app, tabs, setEnvUsedKeys)
 }
