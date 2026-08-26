@@ -290,6 +290,7 @@ func newUrlEntry(value binding.String, onFocusLost func()) *urlEntry {
 	e.ExtendBaseWidget(e)
 	e.Bind(value)
 	e.TextStyle = fyne.TextStyle{Monospace: true}
+	e.Scroll = fyne.ScrollHorizontalOnly
 	return e
 }
 
@@ -327,6 +328,7 @@ type UrlInput struct {
 
 	entry   *urlEntry
 	display *highlightDisplay
+	scroll  *container.Scroll
 	bg      *canvas.Rectangle
 	border  *canvas.Rectangle
 }
@@ -341,6 +343,7 @@ func NewUrlInput(value binding.String) *UrlInput {
 	})
 
 	u.display = newHighlightDisplay()
+	u.scroll = container.NewHScroll(u.display)
 
 	u.bg = canvas.NewRectangle(theme.Color(theme.ColorNameInputBackground))
 	u.bg.CornerRadius = theme.InputRadiusSize()
@@ -375,7 +378,7 @@ func (u *UrlInput) CreateRenderer() fyne.WidgetRenderer {
 	displayLayer := container.NewStack(
 		u.bg,
 		u.border,
-		container.NewPadded(u.display),
+		container.NewPadded(u.scroll),
 	)
 	stack := container.NewStack(displayLayer, u.entry)
 	return &urlInputRenderer{input: u, stack: stack, objects: []fyne.CanvasObject{stack}}
@@ -390,6 +393,7 @@ func (u *UrlInput) Refresh() {
 
 	if u.focused {
 		u.display.Hide()
+		u.scroll.Hide()
 		u.bg.Hide()
 		u.border.Hide()
 		u.entry.Show()
@@ -400,7 +404,9 @@ func (u *UrlInput) Refresh() {
 		u.display.SetText(raw)
 		u.bg.Show()
 		u.border.Show()
+		u.scroll.Show()
 		u.display.Show()
+		u.scroll.Refresh()
 		u.display.Refresh()
 	}
 }

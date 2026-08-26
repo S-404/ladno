@@ -116,7 +116,7 @@ func NewRequestView(
 
 	headersPanel := container.NewBorder(
 		nil, nil, nil, nil,
-		container.NewVScroll(container.NewVBox(headers)),
+		ui.NewListVScroll(container.NewVBox(headers)),
 	)
 	payloadPanel := container.NewBorder(nil, nil, nil, nil, payload)
 	scriptTab = container.NewTabItem("Script", scriptView.Object)

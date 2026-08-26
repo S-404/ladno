@@ -333,9 +333,9 @@ func (t *KVTable) makeRow(idx int) fyne.CanvasObject {
 				t.notify()
 			}
 		}
-		keyObj = keyEntry
+		keyObj = ListWheelField(keyEntry)
 		if used && row.Key != "" {
-			keyObj = withUsedAccent(keyEntry)
+			keyObj = withUsedAccent(keyObj)
 		}
 	} else {
 		keyEntry := NewEnvInput()
@@ -369,7 +369,7 @@ func (t *KVTable) makeRow(idx int) fyne.CanvasObject {
 				t.notify()
 			})
 		}
-		keyObj = keyEntry
+		keyObj = ListWheelField(keyEntry)
 	}
 
 	var valObj fyne.CanvasObject
@@ -397,7 +397,7 @@ func (t *KVTable) makeRow(idx int) fyne.CanvasObject {
 				t.notify()
 			}
 		}
-		valObj = valEntry
+		valObj = ListWheelField(valEntry)
 	} else {
 		valEntry := NewEnvInput()
 		valEntry.SetPlaceHolder("Value")
@@ -414,7 +414,7 @@ func (t *KVTable) makeRow(idx int) fyne.CanvasObject {
 				t.notify()
 			})
 		}
-		valObj = valEntry
+		valObj = ListWheelField(valEntry)
 	}
 
 	var center fyne.CanvasObject
@@ -669,10 +669,16 @@ func (t *KVTable) refreshDropIndicators() {
 }
 
 func (t *KVTable) MinSize() fyne.Size {
+	s := fyne.NewSize(120, 32)
 	if t.root != nil {
-		return t.root.MinSize()
+		s = t.root.MinSize()
 	}
-	return fyne.NewSize(120, 32)
+	// VScroll sizes content to max(min, viewport); keep width from exploding.
+	const maxW float32 = 200
+	if s.Width > maxW {
+		s.Width = maxW
+	}
+	return s
 }
 
 type kvDragRow struct {

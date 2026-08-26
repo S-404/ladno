@@ -50,7 +50,7 @@ func NewRequestParams(requestURL binding.String) *RequestParamsView {
 	)
 
 	content := container.NewVBox(pathSection, querySection)
-	scroll := container.NewVScroll(content)
+	scroll := ui.NewListVScroll(content)
 
 	updatePathVisibility := func(names []string) {
 		if len(names) == 0 {

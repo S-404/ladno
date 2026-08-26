@@ -191,6 +191,8 @@ func newEnvInput(multiline bool) *EnvInput {
 	if multiline {
 		e.entry.MultiLine = true
 		e.entry.Wrapping = fyne.TextWrapOff
+	} else {
+		e.entry.Scroll = fyne.ScrollHorizontalOnly
 	}
 	e.entry.onFocusLost = func() {
 		e.focused = false
@@ -210,7 +212,6 @@ func newEnvInput(multiline bool) *EnvInput {
 	if multiline {
 		e.scroll = container.NewScroll(e.display)
 	} else {
-		// Clip long values inside the input frame (canvas.Text does not clip).
 		e.scroll = container.NewHScroll(e.display)
 	}
 
@@ -331,7 +332,9 @@ func (e *EnvInput) Refresh() {
 
 	if e.focused {
 		e.display.Hide()
-		e.scroll.Hide()
+		if e.scroll != nil {
+			e.scroll.Hide()
+		}
 		e.bg.Hide()
 		e.border.Hide()
 		e.entry.Show()
@@ -343,8 +346,10 @@ func (e *EnvInput) Refresh() {
 	e.display.SetText(e.entry.Text)
 	e.bg.Show()
 	e.border.Show()
-	e.scroll.Show()
+	if e.scroll != nil {
+		e.scroll.Show()
+		e.scroll.Refresh()
+	}
 	e.display.Show()
 	e.display.Refresh()
-	e.scroll.Refresh()
 }

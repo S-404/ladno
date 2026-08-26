@@ -176,7 +176,7 @@ func EnvContainer(app *shared.App) (fyne.CanvasObject, func(keys []string)) {
 			container.NewBorder(nil, nil, widget.NewLabel("Name"), nil, nameEntry),
 		),
 		nil, nil, nil,
-		container.NewVScroll(varsTable),
+		ui.NewListVScroll(varsTable),
 	)
 	split := container.NewHSplit(
 		ui.NewMinSizeBox(fyne.NewSize(140, 80), left),

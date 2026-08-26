@@ -78,16 +78,16 @@ func NewAuthPanel(opts AuthPanelOptions) *AuthPanel {
 	apiAddTo.SetSelected("Header")
 
 	basicForm := widget.NewForm(
-		widget.NewFormItem("Username", username),
-		widget.NewFormItem("Password", password),
+		widget.NewFormItem("Username", ListWheelField(username)),
+		widget.NewFormItem("Password", ListWheelField(password)),
 	)
 	bearerForm := widget.NewForm(
-		widget.NewFormItem("Prefix", tokenPrefix),
-		widget.NewFormItem("Token", token),
+		widget.NewFormItem("Prefix", ListWheelField(tokenPrefix)),
+		widget.NewFormItem("Token", ListWheelField(token)),
 	)
 	apiForm := widget.NewForm(
-		widget.NewFormItem("Key", apiKey),
-		widget.NewFormItem("Value", apiValue),
+		widget.NewFormItem("Key", ListWheelField(apiKey)),
+		widget.NewFormItem("Value", ListWheelField(apiValue)),
 		widget.NewFormItem("Add to", apiAddTo),
 	)
 	inheritedHint := widget.NewLabel("Uses auth from the parent folder or collection.")
@@ -183,7 +183,7 @@ func NewAuthPanel(opts AuthPanelOptions) *AuthPanel {
 		widget.NewForm(widget.NewFormItem("Type", authSelect)),
 		details,
 	)
-	root := container.NewPadded(container.NewVScroll(form))
+	root := container.NewPadded(NewListVScroll(form))
 
 	p := &AuthPanel{CanvasObject: root}
 	p.Set = func(auth entity.Auth) {

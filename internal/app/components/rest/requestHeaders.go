@@ -109,7 +109,7 @@ func NewRequestHeaders(initial []ui.KVRow, onChange func(rows []ui.KVRow)) *Requ
 	showCheck.Checked = true
 
 	content := container.NewVBox(showCheck, warnHint, table)
-	scroll := container.NewVScroll(content)
+	scroll := ui.NewListVScroll(content)
 	rebuild()
 
 	v := &RequestHeadersView{Object: scroll}

@@ -42,6 +42,8 @@ type Entry struct {
 func NewEntry() *Entry {
 	e := &Entry{}
 	e.ExtendBaseWidget(e)
+	// Horizontal scroll keeps long text reachable without expanding the layout.
+	e.Scroll = fyne.ScrollHorizontalOnly
 	return e
 }
 
