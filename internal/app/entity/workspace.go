@@ -90,9 +90,13 @@ type KafkaRequest struct {
 	Payload string     `json:"payload"`
 }
 
-// KafkaConnection — подключение на уровне Kafka-коллекции (brokers).
+// KafkaConnection — подключение на уровне Kafka-коллекции.
 type KafkaConnection struct {
-	Brokers string `json:"brokers"` // "localhost:9092" or comma-separated
+	Brokers  string `json:"brokers"`        // "localhost:9092" or comma-separated
+	SASL     string `json:"sasl,omitempty"` // "", "PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512"
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+	TLS      bool   `json:"tls,omitempty"`
 }
 
 type RequestUrl struct {

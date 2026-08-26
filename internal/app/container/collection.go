@@ -259,6 +259,9 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 								if col.Type == constants.CollectionTypeNATS {
 									natsStore.Unsubscribe(col.Id, item.Id)
 								}
+								if col.Type == constants.CollectionTypeKafka {
+									kafkaStore.StopConsume(col.Id, item.Id)
+								}
 								selStore.DeleteItem(col.Id, item.Id)
 							}
 						}, win)
@@ -320,7 +323,16 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 			}
 		}
 		tree.SetConnected(ids)
-		tree.SetSubscribed(natsStore.SubscribedItemKeys())
+		subIDs := natsStore.SubscribedItemKeys()
+		for id, ok := range kafkaStore.ConsumingItemKeys() {
+			if ok {
+				if subIDs == nil {
+					subIDs = map[string]bool{}
+				}
+				subIDs[id] = true
+			}
+		}
+		tree.SetSubscribed(subIDs)
 	}
 	natsStore.AddConnectionListener(func() {
 		fyne.Do(refreshConnected)

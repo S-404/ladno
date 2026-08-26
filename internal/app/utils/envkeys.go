@@ -130,7 +130,7 @@ func CollectCollectionEnvKeys(nats *entity.NatsConnection, kafka *entity.KafkaCo
 		add(nats.Host, nats.Port, nats.Token)
 	}
 	if kafka != nil {
-		add(kafka.Brokers)
+		add(kafka.Brokers, kafka.Username, kafka.Password)
 	}
 	appendVarKeys(&out, seen, auth.Data)
 	return out

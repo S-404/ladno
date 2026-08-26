@@ -165,6 +165,7 @@ type EnvInput struct {
 	focused    bool
 	multiline  bool
 	usedAccent bool
+	password   bool
 
 	entry   *envFocusEntry
 	display *envHighlightDisplay
@@ -226,8 +227,27 @@ func (e *EnvInput) Text() string {
 func (e *EnvInput) SetText(s string) {
 	e.entry.SetText(s)
 	if !e.focused {
-		e.display.SetText(s)
+		e.display.SetText(e.displayText())
 	}
+}
+
+func (e *EnvInput) SetPassword(on bool) {
+	e.password = on
+	e.entry.Password = on
+	if !e.focused {
+		e.display.SetText(e.displayText())
+	}
+}
+
+func (e *EnvInput) displayText() string {
+	if !e.password {
+		return e.entry.Text
+	}
+	n := len([]rune(e.entry.Text))
+	if n == 0 {
+		return ""
+	}
+	return strings.Repeat("•", n)
 }
 
 func (e *EnvInput) SetPlaceHolder(s string) {
@@ -343,7 +363,7 @@ func (e *EnvInput) Refresh() {
 	}
 
 	e.entry.Hide()
-	e.display.SetText(e.entry.Text)
+	e.display.SetText(e.displayText())
 	e.bg.Show()
 	e.border.Show()
 	if e.scroll != nil {

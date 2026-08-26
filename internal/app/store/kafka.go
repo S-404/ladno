@@ -30,12 +30,14 @@ type KafkaMessage struct {
 	Topic     string
 	Key       string
 	Value     string
+	Headers   []entity.Variable
 	Partition int
 	Offset    int64
 	Time      time.Time
 }
 
 type kafkaConnState struct {
+	conn    entity.KafkaConnection
 	brokers []string
 	display string
 }
@@ -43,13 +45,15 @@ type kafkaConnState struct {
 // kafkaService is the broker surface KafkaStore needs.
 type kafkaService interface {
 	Dial(conn entity.KafkaConnection, cb func(brokers []string, res service.KafkaConnectResult))
-	Produce(brokers []string, topic, key string, headers []kafka.Header, payload []byte) error
-	Consume(ctx context.Context, brokers []string, topic, groupID string, handler func(service.KafkaInbound)) error
+	Produce(conn entity.KafkaConnection, topic, key string, headers []kafka.Header, payload []byte) error
+	Consume(ctx context.Context, conn entity.KafkaConnection, topic, groupID string, handler func(service.KafkaInbound)) error
 }
 
-// kafkaEnvVars is the env lookup KafkaStore needs.
+// kafkaEnvVars is the env lookup/mutation KafkaStore needs.
 type kafkaEnvVars interface {
 	ActiveVariables() map[string]string
+	UpsertActiveVar(key, value string) bool
+	ClearActiveVar(key string) bool
 }
 
 // kafkaLog is the log append surface KafkaStore needs.
@@ -144,6 +148,7 @@ func (s *KafkaStore) Connect(collectionID, collectionName string, conn entity.Ka
 			s.mu.Lock()
 			s.clearCollectionLocked(collectionID)
 			s.conns[collectionID] = &kafkaConnState{
+				conn:    conn,
 				brokers: brokers,
 				display: res.Brokers,
 			}
@@ -170,6 +175,19 @@ func (s *KafkaStore) ConnectedIDs() map[string]bool {
 	out := make(map[string]bool, len(s.conns))
 	for id := range s.conns {
 		out[id] = true
+	}
+	return out
+}
+
+// ConsumingItemKeys returns "collectionID/itemID" for active consume sessions.
+func (s *KafkaStore) ConsumingItemKeys() map[string]bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]bool, len(s.subs))
+	for key, active := range s.subs {
+		if active != nil && active.cancel != nil {
+			out[key.collectionID+"/"+key.itemID] = true
+		}
 	}
 	return out
 }
@@ -227,7 +245,7 @@ func (s *KafkaStore) MessagesText(collectionID, topic, filter string, showAll bo
 	list := append([]KafkaMessage(nil), s.messages[collectionID]...)
 	s.mu.Unlock()
 
-	topic = strings.TrimSpace(topic)
+	topic = strings.TrimSpace(s.resolveEnvString(topic))
 	filter = strings.ToLower(strings.TrimSpace(filter))
 	matched := make([]KafkaMessage, 0, len(list))
 	for _, m := range list {
@@ -255,6 +273,16 @@ func (s *KafkaStore) MessagesText(collectionID, topic, filter string, showAll bo
 			b.WriteString(m.Key)
 			b.WriteByte('\n')
 		}
+		if len(m.Headers) > 0 {
+			b.WriteString("headers:\n")
+			for _, h := range m.Headers {
+				b.WriteString("  ")
+				b.WriteString(h.Key)
+				b.WriteString(": ")
+				b.WriteString(h.Value)
+				b.WriteByte('\n')
+			}
+		}
 		b.WriteString(utils.PrettyBody(m.Value, ""))
 	}
 	return b.String()
@@ -269,6 +297,11 @@ func kafkaMessageMatchesFilter(m KafkaMessage, filter string) bool {
 	}
 	if strings.Contains(strings.ToLower(m.Value), filter) {
 		return true
+	}
+	for _, h := range m.Headers {
+		if strings.Contains(strings.ToLower(h.Key), filter) || strings.Contains(strings.ToLower(h.Value), filter) {
+			return true
+		}
 	}
 	return false
 }
@@ -351,29 +384,52 @@ func (s *KafkaStore) IsConsuming(collectionID, itemID string) bool {
 
 func (s *KafkaStore) StopConsume(collectionID, itemID string) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	key := kafkaSubKey{collectionID: collectionID, itemID: itemID}
+	_, existed := s.subs[key]
 	if active, ok := s.subs[key]; ok && active != nil && active.cancel != nil {
 		active.cancel()
 	}
 	delete(s.subs, key)
+	s.mu.Unlock()
+	if existed {
+		s.notifyConnectionChange()
+	}
 }
 
-func (s *KafkaStore) Run(collectionID, itemID string, method constants.KafkaMethod, req entity.KafkaRequest, onDone func(err error)) {
-	req = applyKafkaRequestEnv(req, s.envStore.ActiveVariables())
+func (s *KafkaStore) Run(collectionID, itemID string, method constants.KafkaMethod, req entity.KafkaRequest, event entity.Event, onDone func(err error, scriptErr string)) {
 	method = constants.NormalizeKafkaMethod(method)
+
+	var scriptErr error
+	if method == constants.KafkaMethodProduce && len(event.PreRequest) > 0 {
+		if err := ApplyPreRequest(event.PreRequest, s.envStore); err != nil {
+			scriptErr = err
+		}
+	}
+
+	req = applyKafkaRequestEnv(req, s.envStore.ActiveVariables())
 
 	s.mu.Lock()
 	st := s.conns[collectionID]
 	connected := st != nil && len(st.brokers) > 0
-	var brokers []string
+	var conn entity.KafkaConnection
 	if connected {
-		brokers = append([]string{}, st.brokers...)
+		conn = st.conn
 	}
 	s.mu.Unlock()
 
+	finish := func(err error) {
+		msg := ""
+		if scriptErr != nil {
+			msg = scriptErr.Error()
+			s.logScriptError(msg)
+		}
+		if onDone != nil {
+			onDone(err, msg)
+		}
+	}
+
 	if connected {
-		s.runConnected(collectionID, itemID, method, req, brokers, onDone)
+		s.runConnected(collectionID, itemID, method, req, event, &scriptErr, conn, finish)
 		return
 	}
 
@@ -381,35 +437,28 @@ func (s *KafkaStore) Run(collectionID, itemID string, method constants.KafkaMeth
 	if !ok {
 		err := fmt.Errorf("not connected and no Kafka collection settings")
 		s.logKafkaError(req.Topic, err.Error())
-		if onDone != nil {
-			onDone(err)
-		}
+		finish(err)
 		return
 	}
 	s.Connect(collectionID, colName, conn, func(ok bool, status string) {
 		if !ok {
-			err := fmt.Errorf("%s", status)
-			if onDone != nil {
-				onDone(err)
-			}
+			finish(fmt.Errorf("%s", status))
 			return
 		}
 		s.mu.Lock()
 		st := s.conns[collectionID]
-		var brokers []string
+		var conn entity.KafkaConnection
 		if st != nil {
-			brokers = append([]string{}, st.brokers...)
+			conn = st.conn
 		}
 		s.mu.Unlock()
-		if len(brokers) == 0 {
+		if st == nil || len(st.brokers) == 0 {
 			err := fmt.Errorf("connect succeeded but brokers missing")
 			s.logKafkaError(req.Topic, err.Error())
-			if onDone != nil {
-				onDone(err)
-			}
+			finish(err)
 			return
 		}
-		s.runConnected(collectionID, itemID, method, req, brokers, onDone)
+		s.runConnected(collectionID, itemID, method, req, event, &scriptErr, conn, finish)
 	})
 }
 
@@ -434,16 +483,30 @@ func (s *KafkaStore) runConnected(
 	collectionID, itemID string,
 	method constants.KafkaMethod,
 	req entity.KafkaRequest,
-	brokers []string,
+	event entity.Event,
+	scriptErr *error,
+	conn entity.KafkaConnection,
 	onDone func(err error),
 ) {
 	headers := variablesToKafkaHeaders(req.Headers)
+	applyPost := func(body string) {
+		if method != constants.KafkaMethodProduce || len(event.PostRequest) == 0 {
+			return
+		}
+		if err := ApplyPostRequest(body, event.PostRequest, s.envStore); err != nil {
+			if scriptErr != nil && *scriptErr == nil {
+				*scriptErr = err
+			} else if scriptErr != nil && *scriptErr != nil {
+				*scriptErr = fmt.Errorf("%w; %v", *scriptErr, err)
+			}
+		}
+	}
 	switch method {
 	case constants.KafkaMethodConsume:
-		s.runConsume(collectionID, itemID, brokers, req.Topic, onDone)
+		s.runConsume(collectionID, itemID, conn, req.Topic, onDone)
 	default:
 		go func() {
-			err := s.kafkaService.Produce(brokers, req.Topic, req.Key, headers, []byte(req.Payload))
+			err := s.kafkaService.Produce(conn, req.Topic, req.Key, headers, []byte(req.Payload))
 			fyne.Do(func() {
 				if err != nil {
 					s.logKafkaError(req.Topic, err.Error())
@@ -453,12 +516,14 @@ func (s *KafkaStore) runConnected(
 					return
 				}
 				s.AppendMessage(collectionID, KafkaMessage{
-					Topic: req.Topic,
-					Key:   req.Key,
-					Value: req.Payload,
-					Time:  time.Now(),
+					Topic:   req.Topic,
+					Key:     req.Key,
+					Value:   req.Payload,
+					Headers: req.Headers,
+					Time:    time.Now(),
 				})
 				s.logKafkaProduce(req.Topic, req.Key, req.Payload)
+				applyPost(req.Payload)
 				if onDone != nil {
 					onDone(nil)
 				}
@@ -467,7 +532,7 @@ func (s *KafkaStore) runConnected(
 	}
 }
 
-func (s *KafkaStore) runConsume(collectionID, itemID string, brokers []string, topic string, onDone func(err error)) {
+func (s *KafkaStore) runConsume(collectionID, itemID string, conn entity.KafkaConnection, topic string, onDone func(err error)) {
 	topic = strings.TrimSpace(topic)
 	if topic == "" {
 		err := fmt.Errorf("topic required")
@@ -486,14 +551,16 @@ func (s *KafkaStore) runConsume(collectionID, itemID string, brokers []string, t
 	ctx, cancel := context.WithCancel(context.Background())
 	s.subs[key] = &kafkaActiveConsume{cancel: cancel, topic: topic}
 	s.mu.Unlock()
+	s.notifyConnectionChange()
 
 	groupID := fmt.Sprintf("ladno-%s-%s", collectionID, itemID)
 	go func() {
-		err := s.kafkaService.Consume(ctx, brokers, topic, groupID, func(in service.KafkaInbound) {
+		err := s.kafkaService.Consume(ctx, conn, topic, groupID, func(in service.KafkaInbound) {
 			s.AppendMessage(collectionID, KafkaMessage{
 				Topic:     in.Topic,
 				Key:       in.Key,
 				Value:     in.Value,
+				Headers:   kafkaHeadersToVariables(in.Headers),
 				Partition: in.Partition,
 				Offset:    in.Offset,
 				Time:      in.Time,
@@ -501,19 +568,25 @@ func (s *KafkaStore) runConsume(collectionID, itemID string, brokers []string, t
 			s.logKafkaInbound(in)
 		})
 		fyne.Do(func() {
+			cleared := false
 			s.mu.Lock()
 			if cur, ok := s.subs[key]; ok && cur != nil && cur.cancel != nil {
 				// Only clear if this consume session is still current.
 				select {
 				case <-ctx.Done():
 					delete(s.subs, key)
+					cleared = true
 				default:
 					if err != nil {
 						delete(s.subs, key)
+						cleared = true
 					}
 				}
 			}
 			s.mu.Unlock()
+			if cleared {
+				s.notifyConnectionChange()
+			}
 			if err != nil && ctx.Err() == nil {
 				s.logKafkaError(topic, err.Error())
 			}
@@ -605,8 +678,44 @@ func (s *KafkaStore) logKafkaError(topic, errMsg string) {
 	})
 }
 
+func (s *KafkaStore) logScriptError(errMsg string) {
+	if s.logStore == nil || errMsg == "" {
+		return
+	}
+	s.logStore.Append(&entity.LogEntry{
+		Kind:    "script",
+		Message: "Script error: " + errMsg,
+		Detail:  errMsg,
+		IsError: true,
+	})
+}
+
+func (s *KafkaStore) resolveEnvString(input string) string {
+	if s.envStore == nil || input == "" {
+		return input
+	}
+	return utils.SubstituteEnvVars(input, s.envStore.ActiveVariables())
+}
+
+func kafkaHeadersToVariables(hs []kafka.Header) []entity.Variable {
+	if len(hs) == 0 {
+		return nil
+	}
+	out := make([]entity.Variable, 0, len(hs))
+	for _, h := range hs {
+		if h.Key == "" {
+			continue
+		}
+		out = append(out, entity.Variable{Key: h.Key, Value: string(h.Value), Type: "string"})
+	}
+	return out
+}
+
 func applyKafkaEnv(conn entity.KafkaConnection, vars map[string]string) entity.KafkaConnection {
 	conn.Brokers = utils.SubstituteEnvVars(conn.Brokers, vars)
+	conn.SASL = constants.NormalizeKafkaSASL(utils.SubstituteEnvVars(conn.SASL, vars))
+	conn.Username = utils.SubstituteEnvVars(conn.Username, vars)
+	conn.Password = utils.SubstituteEnvVars(conn.Password, vars)
 	return conn
 }
 

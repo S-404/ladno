@@ -51,6 +51,15 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 	tokenEntry.SetPlaceHolder("{{natsToken}}")
 	brokersEntry := ui.NewEnvInput()
 	brokersEntry.SetPlaceHolder("{{kafkaBrokers}} or localhost:9092")
+	saslSelect := widget.NewSelect([]string{"none", constants.KafkaSASLPlain, constants.KafkaSASLSCRAM256, constants.KafkaSASLSCRAM512}, nil)
+	saslSelect.PlaceHolder = "none"
+	usernameEntry := ui.NewEnvInput()
+	usernameEntry.SetPlaceHolder("{{kafkaUser}}")
+	usernameEntry.SetPassword(true)
+	passwordEntry := ui.NewEnvInput()
+	passwordEntry.SetPlaceHolder("{{kafkaPassword}}")
+	passwordEntry.SetPassword(true)
+	tlsCheck := widget.NewCheck("Enable TLS", nil)
 
 	connStatus := widget.NewLabel("")
 	connStatus.TextStyle = fyne.TextStyle{Italic: true}
@@ -84,7 +93,17 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 			}
 			out.Auth = entity.Auth{Type: constants.AuthTypeNoAuth}
 		case constants.CollectionTypeKafka:
-			out.Kafka = &entity.KafkaConnection{Brokers: brokersEntry.Text()}
+			sasl := saslSelect.Selected
+			if sasl == "none" {
+				sasl = ""
+			}
+			out.Kafka = &entity.KafkaConnection{
+				Brokers:  brokersEntry.Text(),
+				SASL:     constants.NormalizeKafkaSASL(sasl),
+				Username: usernameEntry.Text(),
+				Password: passwordEntry.Text(),
+				TLS:      tlsCheck.Checked,
+			}
 			out.Auth = entity.Auth{Type: constants.AuthTypeNoAuth}
 		default:
 			if authPanel != nil {
@@ -103,6 +122,10 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 	portEntry.OnChanged(func(string) { notify() })
 	tokenEntry.OnChanged(func(string) { notify() })
 	brokersEntry.OnChanged(func(string) { notify() })
+	saslSelect.OnChanged = func(string) { notify() }
+	usernameEntry.OnChanged(func(string) { notify() })
+	passwordEntry.OnChanged(func(string) { notify() })
+	tlsCheck.OnChanged = func(bool) { notify() }
 
 	connBtn := widget.NewButton("Connect", nil)
 	applyConnBtn := func() {
@@ -156,6 +179,10 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 						widget.NewForm(
 							widget.NewFormItem("Type", typeLabel),
 							widget.NewFormItem("Brokers", brokersEntry),
+							widget.NewFormItem("SASL", saslSelect),
+							widget.NewFormItem("Username", usernameEntry),
+							widget.NewFormItem("Password", passwordEntry),
+							widget.NewFormItem("TLS", tlsCheck),
 						),
 						connBtn,
 						connStatus,
@@ -209,6 +236,15 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 				kafka = &entity.KafkaConnection{}
 			}
 			brokersEntry.SetText(kafka.Brokers)
+			sasl := constants.NormalizeKafkaSASL(kafka.SASL)
+			if sasl == "" {
+				saslSelect.SetSelected("none")
+			} else {
+				saslSelect.SetSelected(sasl)
+			}
+			usernameEntry.SetText(kafka.Username)
+			passwordEntry.SetText(kafka.Password)
+			tlsCheck.SetChecked(kafka.TLS)
 		default:
 			authPanel.Set(auth)
 		}

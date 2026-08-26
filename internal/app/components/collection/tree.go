@@ -1075,6 +1075,11 @@ func filterItems(items []entity.CollectionItem, q string, keepAll bool) ([]entit
 				any = true
 				continue
 			}
+			if item.Request.Kafka != nil && strings.Contains(strings.ToLower(item.Request.Kafka.Topic), q) {
+				out = append(out, item)
+				any = true
+				continue
+			}
 			continue
 		}
 		// folder
