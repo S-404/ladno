@@ -42,7 +42,20 @@ type Entry struct {
 func NewEntry() *Entry {
 	e := &Entry{}
 	e.ExtendBaseWidget(e)
+	// Let parent VScroll receive wheel events when hovering the field.
+	e.Scroll = fyne.ScrollNone
 	return e
+}
+
+// MinSize caps width: with ScrollNone Fyne reports full text width, which
+// expands parent VScroll content past the pane.
+func (e *Entry) MinSize() fyne.Size {
+	s := e.Entry.MinSize()
+	const maxW float32 = 160
+	if s.Width > maxW {
+		s.Width = maxW
+	}
+	return s
 }
 
 func (e *Entry) TypedShortcut(s fyne.Shortcut) {

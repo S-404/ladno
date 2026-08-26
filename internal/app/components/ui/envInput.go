@@ -191,6 +191,9 @@ func newEnvInput(multiline bool) *EnvInput {
 	if multiline {
 		e.entry.MultiLine = true
 		e.entry.Wrapping = fyne.TextWrapOff
+	} else {
+		// Single-line: do not capture wheel — parent KV/list VScroll should scroll.
+		e.entry.Scroll = fyne.ScrollNone
 	}
 	e.entry.onFocusLost = func() {
 		e.focused = false
@@ -209,9 +212,6 @@ func newEnvInput(multiline bool) *EnvInput {
 
 	if multiline {
 		e.scroll = container.NewScroll(e.display)
-	} else {
-		// Clip long values inside the input frame (canvas.Text does not clip).
-		e.scroll = container.NewHScroll(e.display)
 	}
 
 	e.entry.Hide()
@@ -275,7 +275,12 @@ func (e *EnvInput) Tapped(_ *fyne.PointEvent) {
 
 func (e *EnvInput) CreateRenderer() fyne.WidgetRenderer {
 	registerEnvHighlight(e)
-	displayLayer := container.NewStack(e.bg, e.border, container.NewPadded(e.scroll))
+	var displayLayer fyne.CanvasObject
+	if e.multiline && e.scroll != nil {
+		displayLayer = container.NewStack(e.bg, e.border, container.NewPadded(e.scroll))
+	} else {
+		displayLayer = container.NewStack(e.bg, e.border, container.NewPadded(e.display))
+	}
 	stack := container.NewStack(displayLayer, e.entry)
 	return &envInputRenderer{input: e, stack: stack, objects: []fyne.CanvasObject{stack}}
 }
@@ -331,7 +336,9 @@ func (e *EnvInput) Refresh() {
 
 	if e.focused {
 		e.display.Hide()
-		e.scroll.Hide()
+		if e.scroll != nil {
+			e.scroll.Hide()
+		}
 		e.bg.Hide()
 		e.border.Hide()
 		e.entry.Show()
@@ -343,8 +350,10 @@ func (e *EnvInput) Refresh() {
 	e.display.SetText(e.entry.Text)
 	e.bg.Show()
 	e.border.Show()
-	e.scroll.Show()
+	if e.scroll != nil {
+		e.scroll.Show()
+		e.scroll.Refresh()
+	}
 	e.display.Show()
 	e.display.Refresh()
-	e.scroll.Refresh()
 }

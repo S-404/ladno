@@ -669,10 +669,16 @@ func (t *KVTable) refreshDropIndicators() {
 }
 
 func (t *KVTable) MinSize() fyne.Size {
+	s := fyne.NewSize(120, 32)
 	if t.root != nil {
-		return t.root.MinSize()
+		s = t.root.MinSize()
 	}
-	return fyne.NewSize(120, 32)
+	// VScroll sizes content to max(min, viewport); keep width from exploding.
+	const maxW float32 = 200
+	if s.Width > maxW {
+		s.Width = maxW
+	}
+	return s
 }
 
 type kvDragRow struct {
