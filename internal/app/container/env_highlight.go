@@ -52,9 +52,20 @@ func BindEnvHighlights(app *shared.App, tabs *container.AppTabs, onUsedKeys func
 			if prev != nil {
 				prev(tab)
 			}
+			if tab != nil && tab.Text == "envs" {
+				selectActiveEnv(app)
+			}
 			fyne.Do(refreshUsed)
 		}
 	}
+}
+
+func selectActiveEnv(app *shared.App) {
+	activeID, _ := app.Store.Env.GetActiveID().Get()
+	if activeID == "" {
+		return
+	}
+	app.Store.Env.Select(activeID)
 }
 
 func activeEnvListedKeys(app *shared.App) []string {
