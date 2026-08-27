@@ -16,6 +16,7 @@ type Store struct {
 	Settings  *SettingsStore
 	Workspace *WorkspaceStore
 	Ws        *WsStore
+	SocketIO  *SocketIOStore
 }
 
 func NewStore(svc *service.Service) *Store {
@@ -39,5 +40,6 @@ func NewStore(svc *service.Service) *Store {
 		Settings:  settingsStore,
 		Workspace: wsStore,
 		Ws:        NewWsStore(svc.Ws, envStore, logStore, wsStore, settingsStore),
+		SocketIO:  NewSocketIOStore(svc.SocketIO, envStore, logStore, wsStore, settingsStore),
 	}
 }

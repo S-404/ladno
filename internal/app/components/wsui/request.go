@@ -20,7 +20,6 @@ type RequestView struct {
 	Get           func() entity.WsRequest
 	SetConnecting func(connecting bool)
 	SetConnected  func(connected bool)
-	SetStatus     func(status string)
 	SetDirty      func(dirty bool)
 	Messages      *MessagesView
 	FocusName     func()
@@ -40,10 +39,6 @@ func NewRequestView(
 	var header *ui.EntityHeader
 	var connectBtn *widget.Button
 	var sendBtn *widget.Button
-
-	statusLabel := widget.NewLabel("")
-	statusLabel.TextStyle = fyne.TextStyle{Italic: true}
-	statusLabel.Hide()
 
 	requestURL := binding.NewString()
 	_ = requestURL.Set("")
@@ -70,7 +65,7 @@ func NewRequestView(
 	header = ui.NewEntityHeader(theme.DocumentIcon(), "Request name", func(string) { notify() }, onSave)
 
 	headersView = rest.NewRequestHeaders(nil, func([]ui.KVRow) { notify() })
-	paramsView = rest.NewRequestParams(requestURL, notify)
+	paramsView = rest.NewRequestQueryParams(requestURL)
 
 	getReq = func() entity.WsRequest {
 		urlVal, _ := requestURL.Get()
@@ -82,16 +77,10 @@ func NewRequestView(
 			}
 			vars = append(vars, entity.Variable{Key: r.Key, Value: r.Value, Type: "string"})
 		}
-		path := paramsView.GetPathParams()
-		pathVars := make([]entity.Variable, 0, len(path))
-		for k, v := range path {
-			pathVars = append(pathVars, entity.Variable{Key: k, Value: v, Type: "string"})
-		}
 		return entity.WsRequest{
-			URL:        urlVal,
-			PathParams: pathVars,
-			Headers:    vars,
-			Message:    message.Text(),
+			URL:     urlVal,
+			Headers: vars,
+			Message: message.Text(),
 		}
 	}
 
@@ -178,7 +167,7 @@ func NewRequestView(
 
 	urlRow := container.NewBorder(nil, nil, nil, connectBtn, urlInput)
 	requestPanel := container.NewBorder(
-		container.NewVBox(header.Object, urlRow, statusLabel),
+		container.NewVBox(header.Object, urlRow),
 		nil, nil, nil,
 		requestTabs,
 	)
@@ -192,15 +181,6 @@ func NewRequestView(
 	v.Get = getReq
 	v.SetDirty = header.SetDirty
 	v.FocusName = header.FocusName
-	v.SetStatus = func(status string) {
-		statusLabel.SetText(status)
-		if strings.TrimSpace(status) == "" {
-			statusLabel.Hide()
-		} else {
-			statusLabel.Show()
-		}
-		statusLabel.Refresh()
-	}
 	v.SetConnecting = func(on bool) {
 		connecting = on
 		applyConnectBtn()
@@ -223,7 +203,6 @@ func NewRequestView(
 			_ = requestURL.Set("")
 			message.SetText("")
 			headersView.SetManual(nil)
-			paramsView.SetPathParams(nil)
 		} else {
 			_ = requestURL.Set(req.URL)
 			message.SetText(req.Message)
@@ -232,23 +211,11 @@ func NewRequestView(
 				rows = append(rows, ui.KVRow{Enabled: true, Key: h.Key, Value: h.Value})
 			}
 			headersView.SetManual(rows)
-			path := map[string]string{}
-			for _, p := range req.PathParams {
-				if p.Key != "" {
-					path[p.Key] = p.Value
-				}
-			}
-			paramsView.SetPathParams(path)
 		}
 		refreshAutoHeaders()
 		applying = false
 		v.SetConnecting(false)
 		v.SetConnected(isConnected)
-		if isConnected {
-			v.SetStatus("Connected")
-		} else {
-			v.SetStatus("")
-		}
 	}
 	applying = false
 	return v

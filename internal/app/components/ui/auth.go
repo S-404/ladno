@@ -11,7 +11,13 @@ import (
 type AuthPanelOptions struct {
 	// AllowInherited включает тип Inherited (для folder/request).
 	AllowInherited bool
-	OnChange       func(auth entity.Auth)
+	// DisableBasic hides Basic Auth (Socket.IO).
+	DisableBasic bool
+	// AllowJSON adds a JSON type (Socket.IO CONNECT packet).
+	AllowJSON bool
+	// APIKeyHeaderOnly hides "Add to body" and always uses a header.
+	APIKeyHeaderOnly bool
+	OnChange         func(auth entity.Auth)
 }
 
 type AuthPanel struct {
@@ -28,9 +34,16 @@ type authTypeOption struct {
 func NewAuthPanel(opts AuthPanelOptions) *AuthPanel {
 	typeOpts := []authTypeOption{
 		{constants.AuthTypeNoAuth, "No Auth"},
-		{constants.AuthTypeBasic, "Basic Auth"},
-		{constants.AuthTypeBearer, "Token"},
-		{constants.AuthTypeAPIKey, "API Key"},
+	}
+	if !opts.DisableBasic {
+		typeOpts = append(typeOpts, authTypeOption{constants.AuthTypeBasic, "Basic Auth"})
+	}
+	typeOpts = append(typeOpts,
+		authTypeOption{constants.AuthTypeBearer, "Token"},
+		authTypeOption{constants.AuthTypeAPIKey, "API Key"},
+	)
+	if opts.AllowJSON {
+		typeOpts = append(typeOpts, authTypeOption{constants.AuthTypeJSON, "JSON"})
 	}
 	if opts.AllowInherited {
 		typeOpts = append([]authTypeOption{{constants.AuthTypeInherited, "Inherited"}}, typeOpts...)
@@ -69,13 +82,21 @@ func NewAuthPanel(opts AuthPanelOptions) *AuthPanel {
 	tokenPrefix.SetText(constants.AuthDefaultTokenPrefix)
 
 	apiKey := NewEntry()
-	apiKey.SetPlaceHolder("Key (header/body name)")
+	if opts.APIKeyHeaderOnly {
+		apiKey.SetPlaceHolder("Header name")
+	} else {
+		apiKey.SetPlaceHolder("Key (header/body name)")
+	}
 	apiValue := NewEntry()
 	apiValue.SetPlaceHolder("Value")
 	apiValue.Password = true
 	apiAddTo := widget.NewRadioGroup([]string{"Header", "Body"}, nil)
 	apiAddTo.Horizontal = true
 	apiAddTo.SetSelected("Header")
+
+	jsonBody := NewEnvMultiLineInput()
+	jsonBody.SetPlaceHolder(`{"token":"..."}`)
+	jsonBody.SetMinRowsVisible(6)
 
 	basicForm := widget.NewForm(
 		widget.NewFormItem("Username", ListWheelField(username)),
@@ -85,23 +106,30 @@ func NewAuthPanel(opts AuthPanelOptions) *AuthPanel {
 		widget.NewFormItem("Prefix", ListWheelField(tokenPrefix)),
 		widget.NewFormItem("Token", ListWheelField(token)),
 	)
-	apiForm := widget.NewForm(
+	apiItems := []*widget.FormItem{
 		widget.NewFormItem("Key", ListWheelField(apiKey)),
 		widget.NewFormItem("Value", ListWheelField(apiValue)),
-		widget.NewFormItem("Add to", apiAddTo),
-	)
+	}
+	if !opts.APIKeyHeaderOnly {
+		apiItems = append(apiItems, widget.NewFormItem("Add to", apiAddTo))
+	}
+	apiForm := widget.NewForm(apiItems...)
+	jsonHint := widget.NewLabel("Sent in the Socket.IO CONNECT packet.")
+	jsonHint.TextStyle = fyne.TextStyle{Italic: true}
+	jsonForm := container.NewVBox(jsonHint, jsonBody)
 	inheritedHint := widget.NewLabel("Uses auth from the parent folder or collection.")
 	inheritedHint.TextStyle = fyne.TextStyle{Italic: true}
 	noAuthHint := widget.NewLabel("No authentication headers or body fields are added.")
 	noAuthHint.TextStyle = fyne.TextStyle{Italic: true}
 
-	details := container.NewStack(inheritedHint, noAuthHint, basicForm, bearerForm, apiForm)
+	details := container.NewStack(inheritedHint, noAuthHint, basicForm, bearerForm, apiForm, jsonForm)
 	showDetails := func(t constants.AuthType) {
 		inheritedHint.Hide()
 		noAuthHint.Hide()
 		basicForm.Hide()
 		bearerForm.Hide()
 		apiForm.Hide()
+		jsonForm.Hide()
 		switch constants.NormalizeAuthType(t) {
 		case constants.AuthTypeInherited:
 			inheritedHint.Show()
@@ -111,6 +139,8 @@ func NewAuthPanel(opts AuthPanelOptions) *AuthPanel {
 			bearerForm.Show()
 		case constants.AuthTypeAPIKey:
 			apiForm.Show()
+		case constants.AuthTypeJSON:
+			jsonForm.Show()
 		default:
 			noAuthHint.Show()
 		}
@@ -148,13 +178,17 @@ func NewAuthPanel(opts AuthPanelOptions) *AuthPanel {
 			}
 		case constants.AuthTypeAPIKey:
 			addTo := constants.AuthAddToHeader
-			if apiAddTo.Selected == "Body" {
+			if !opts.APIKeyHeaderOnly && apiAddTo.Selected == "Body" {
 				addTo = constants.AuthAddToBody
 			}
 			data = []entity.Variable{
 				{Key: constants.AuthDataKey, Value: apiKey.Text},
 				{Key: constants.AuthDataValue, Value: apiValue.Text},
 				{Key: constants.AuthDataAddTo, Value: addTo},
+			}
+		case constants.AuthTypeJSON:
+			data = []entity.Variable{
+				{Key: constants.AuthDataJSON, Value: jsonBody.Text()},
 			}
 		}
 		return entity.Auth{Type: t, Data: data}
@@ -171,6 +205,7 @@ func NewAuthPanel(opts AuthPanelOptions) *AuthPanel {
 	apiKey.OnChanged = func(string) { notify() }
 	apiValue.OnChanged = func(string) { notify() }
 	apiAddTo.OnChanged = func(string) { notify() }
+	jsonBody.OnChanged(func(string) { notify() })
 
 	if opts.AllowInherited {
 		authSelect.SetSelected(typeToLabel[constants.AuthTypeInherited])
@@ -215,11 +250,14 @@ func NewAuthPanel(opts AuthPanelOptions) *AuthPanel {
 		}
 		apiKey.SetText(entity.AuthVar(auth.Data, constants.AuthDataKey))
 		apiValue.SetText(entity.AuthVar(auth.Data, constants.AuthDataValue))
-		if entity.AuthVar(auth.Data, constants.AuthDataAddTo) == constants.AuthAddToBody {
+		if opts.APIKeyHeaderOnly {
+			apiAddTo.SetSelected("Header")
+		} else if entity.AuthVar(auth.Data, constants.AuthDataAddTo) == constants.AuthAddToBody {
 			apiAddTo.SetSelected("Body")
 		} else {
 			apiAddTo.SetSelected("Header")
 		}
+		jsonBody.SetText(entity.AuthVar(auth.Data, constants.AuthDataJSON))
 		showDetails(t)
 		applying = false
 	}

@@ -9,6 +9,7 @@ type Service struct {
 	Rest      *RestService
 	Workspace *WorkspaceService
 	Ws        *WsService
+	SocketIO  *SocketIOService
 }
 
 func NewService(repos *repository.Repository) *Service {
@@ -19,5 +20,6 @@ func NewService(repos *repository.Repository) *Service {
 		Rest:      NewRestService(),
 		Workspace: newWorkspaceService(repos.Workspace),
 		Ws:        NewWsService(),
+		SocketIO:  NewSocketIOService(),
 	}
 }

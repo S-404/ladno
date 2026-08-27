@@ -100,12 +100,12 @@ func ExtraWSHeaders(resolvedURL string, manual []entity.Variable) http.Header {
 	return out
 }
 
-func ResolveWSURL(raw string, pathParams map[string]string) (string, error) {
+func ResolveWSURL(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", fmt.Errorf("url is empty")
 	}
-	resolved := substitutePathParams(raw, pathParams)
+	resolved := raw
 	if !strings.Contains(resolved, "://") {
 		resolved = "ws://" + resolved
 	}

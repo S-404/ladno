@@ -52,7 +52,7 @@ func ResolveAuth(chain []Auth) Auth {
 func ApplyAuth(req RestRequest, auth Auth) RestRequest {
 	auth.Type = constants.NormalizeAuthType(auth.Type)
 	switch auth.Type {
-	case constants.AuthTypeNoAuth, constants.AuthTypeInherited, "":
+	case constants.AuthTypeNoAuth, constants.AuthTypeInherited, constants.AuthTypeJSON, "":
 		return req
 	case constants.AuthTypeBasic, constants.AuthTypeBearer:
 		for _, h := range AuthGeneratedHeaders(auth) {
@@ -110,6 +110,44 @@ func AuthGeneratedHeaders(auth Auth) []Variable {
 	default:
 		return nil
 	}
+}
+
+// ApplyAuthHeaders merges token/API key headers from auth into the header list.
+func ApplyAuthHeaders(headers []Variable, auth Auth) []Variable {
+	for _, h := range AuthGeneratedHeaders(auth) {
+		headers = upsertHeader(headers, h.Key, h.Value)
+	}
+	return headers
+}
+
+// SocketIOAuthJSON is the CONNECT-packet payload. Token/API key go in headers, not here.
+func SocketIOAuthJSON(auth Auth, legacy string) string {
+	t := constants.NormalizeAuthType(auth.Type)
+	switch t {
+	case constants.AuthTypeJSON:
+		return strings.TrimSpace(AuthVar(auth.Data, constants.AuthDataJSON))
+	case constants.AuthTypeNoAuth, constants.AuthTypeInherited, "":
+		return strings.TrimSpace(legacy)
+	default:
+		return ""
+	}
+}
+
+// EffectiveSocketIOAuth maps a leftover authJson field onto JSON auth when type is unset.
+func EffectiveSocketIOAuth(auth Auth, legacyJSON string) Auth {
+	t := constants.NormalizeAuthType(auth.Type)
+	if t == constants.AuthTypeInherited || t == constants.AuthTypeNoAuth || t == "" {
+		if js := strings.TrimSpace(legacyJSON); js != "" {
+			return Auth{
+				Type: constants.AuthTypeJSON,
+				Data: []Variable{{Key: constants.AuthDataJSON, Value: js, Type: "string"}},
+			}
+		}
+		if t == constants.AuthTypeInherited || t == "" {
+			return Auth{Type: constants.AuthTypeNoAuth}
+		}
+	}
+	return auth
 }
 
 func upsertHeader(headers []Variable, key, value string) []Variable {

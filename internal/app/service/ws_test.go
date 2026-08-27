@@ -74,14 +74,14 @@ func TestExtraWSHeaders(t *testing.T) {
 }
 
 func TestResolveWSURL(t *testing.T) {
-	got, err := ResolveWSURL("ws://example.com/:id/chat", map[string]string{"id": "42"})
+	got, err := ResolveWSURL("ws://example.com/:id/chat")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "ws://example.com/42/chat" {
+	if got != "ws://example.com/:id/chat" {
 		t.Fatalf("got %q", got)
 	}
-	got, err = ResolveWSURL("https://example.com/ws", nil)
+	got, err = ResolveWSURL("https://example.com/ws")
 	if err != nil {
 		t.Fatal(err)
 	}

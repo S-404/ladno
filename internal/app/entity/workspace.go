@@ -81,6 +81,7 @@ type ItemRequest struct {
 	URLEncoded []Variable              `json:"urlencoded,omitempty"`
 	Grpc       *GrpcRequest            `json:"grpc,omitempty"`
 	Ws         *WsRequest              `json:"ws,omitempty"`
+	SocketIO   *SocketIORequest        `json:"socketio,omitempty"`
 	Nats       *NatsRequest            `json:"nats,omitempty"`
 	Kafka      *KafkaRequest           `json:"kafka,omitempty"`
 }
@@ -97,6 +98,9 @@ func (r *ItemRequest) Kind() constants.RequestKind {
 	}
 	if r.Grpc != nil {
 		return constants.RequestKindGRPC
+	}
+	if r.SocketIO != nil {
+		return constants.RequestKindSocketIO
 	}
 	if r.Ws != nil {
 		return constants.RequestKindWS
@@ -119,6 +123,8 @@ func RequestTreeLabel(name string, req *ItemRequest) string {
 		return fmt.Sprintf("[gRPC] %s", name)
 	case constants.RequestKindWS:
 		return fmt.Sprintf("[WS] %s", name)
+	case constants.RequestKindSocketIO:
+		return fmt.Sprintf("[SIO] %s", name)
 	default:
 		return name
 	}
@@ -132,10 +138,21 @@ type GrpcRequest struct {
 }
 
 type WsRequest struct {
-	URL        string     `json:"url"`
-	PathParams []Variable `json:"pathParams,omitempty"`
-	Headers    []Variable `json:"headers"`
-	Message    string     `json:"message"`
+	URL     string     `json:"url"`
+	Headers []Variable `json:"headers"`
+	Message string     `json:"message"`
+}
+
+type SocketIORequest struct {
+	URL       string     `json:"url"`
+	Path      string     `json:"path,omitempty"`
+	Namespace string     `json:"namespace,omitempty"`
+	Query     []Variable `json:"query,omitempty"`
+	Headers   []Variable `json:"headers"`
+	Auth      Auth       `json:"-"`
+	AuthJSON  string     `json:"authJson,omitempty"`
+	Event     string     `json:"event"`
+	Payload   string     `json:"payload"`
 }
 
 type NatsRequest struct {

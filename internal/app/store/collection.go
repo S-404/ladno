@@ -325,7 +325,7 @@ func (s *SelectionStore) AddRequest(collectionID, parentItemID string, kind cons
 	}
 	if constants.IsHTTPCollection(col.Type) {
 		switch kind {
-		case constants.RequestKindREST, constants.RequestKindGRPC, constants.RequestKindWS:
+		case constants.RequestKindREST, constants.RequestKindGRPC, constants.RequestKindWS, constants.RequestKindSocketIO:
 		default:
 			kind = constants.RequestKindREST
 		}
@@ -621,6 +621,8 @@ func newRequestItem(kind constants.RequestKind) entity.CollectionItem {
 		req.Grpc = &entity.GrpcRequest{}
 	case constants.RequestKindWS:
 		req.Ws = &entity.WsRequest{}
+	case constants.RequestKindSocketIO:
+		req.SocketIO = &entity.SocketIORequest{}
 	case constants.RequestKindNATS:
 		req.Nats = &entity.NatsRequest{}
 	case constants.RequestKindKafka:
@@ -659,8 +661,13 @@ func cloneRequestItem(src entity.CollectionItem) entity.CollectionItem {
 	if src.Request.Ws != nil {
 		w := *src.Request.Ws
 		w.Headers = cloneVariables(src.Request.Ws.Headers)
-		w.PathParams = cloneVariables(src.Request.Ws.PathParams)
 		r.Ws = &w
+	}
+	if src.Request.SocketIO != nil {
+		sio := *src.Request.SocketIO
+		sio.Headers = cloneVariables(src.Request.SocketIO.Headers)
+		sio.Query = cloneVariables(src.Request.SocketIO.Query)
+		r.SocketIO = &sio
 	}
 	if src.Request.Nats != nil {
 		n := *src.Request.Nats

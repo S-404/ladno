@@ -1,6 +1,10 @@
 package entity
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/s-404/ladno/internal/app/entity/constants"
+)
 
 func TestWorkspaceFolderNestingLimit(t *testing.T) {
 	var ws *Workspace
@@ -24,5 +28,15 @@ func TestWorkspaceFolderNestingLimit(t *testing.T) {
 	w.FolderNestingLimit = &zero
 	if got := w.GetFolderNestingLimit(); got != 0 {
 		t.Fatalf("explicit zero: got %d", got)
+	}
+}
+
+func TestItemRequestKindSocketIO(t *testing.T) {
+	req := &ItemRequest{SocketIO: &SocketIORequest{URL: "http://localhost:3000"}}
+	if req.Kind() != constants.RequestKindSocketIO {
+		t.Fatalf("kind=%s", req.Kind())
+	}
+	if RequestTreeLabel("Chat", req) != "[SIO] Chat" {
+		t.Fatalf("label=%q", RequestTreeLabel("Chat", req))
 	}
 }

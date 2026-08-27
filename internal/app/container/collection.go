@@ -22,6 +22,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 	natsStore := app.Store.Nats
 	kafkaStore := app.Store.Kafka
 	wsConnStore := app.Store.Ws
+	sioConnStore := app.Store.SocketIO
 	wsItem := wsStore.GetItem()
 	win := app.Window
 
@@ -200,6 +201,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 							natsStore.Disconnect(col.Id)
 							kafkaStore.Disconnect(col.Id)
 							wsConnStore.DisconnectCollection(col.Id)
+							sioConnStore.DisconnectCollection(col.Id)
 							selStore.DeleteCollection(col.Id)
 						}, win)
 					}),
@@ -265,6 +267,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 									kafkaStore.StopConsume(col.Id, item.Id)
 								}
 								wsConnStore.Disconnect(col.Id, item.Id)
+								sioConnStore.Disconnect(col.Id, item.Id)
 								selStore.DeleteItem(col.Id, item.Id)
 							}
 						}, win)
@@ -340,6 +343,14 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 				subIDs[id] = true
 			}
 		}
+		for id, ok := range sioConnStore.ConnectedItemKeys() {
+			if ok {
+				if subIDs == nil {
+					subIDs = map[string]bool{}
+				}
+				subIDs[id] = true
+			}
+		}
 		tree.SetSubscribed(subIDs)
 	}
 	natsStore.AddConnectionListener(func() {
@@ -349,6 +360,9 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 		fyne.Do(refreshConnected)
 	})
 	wsConnStore.AddConnectionListener(func() {
+		fyne.Do(refreshConnected)
+	})
+	sioConnStore.AddConnectionListener(func() {
 		fyne.Do(refreshConnected)
 	})
 
@@ -454,6 +468,9 @@ func addItemMenuItems(
 			}),
 			fyne.NewMenuItem("Add WS connection", func() {
 				addRequest(col.Id, parentItemID, parentUID, constants.RequestKindWS)
+			}),
+			fyne.NewMenuItem("Add Socket.IO connection", func() {
+				addRequest(col.Id, parentItemID, parentUID, constants.RequestKindSocketIO)
 			}),
 			fyne.NewMenuItem("Add gRPC method", func() {
 				addRequest(col.Id, parentItemID, parentUID, constants.RequestKindGRPC)

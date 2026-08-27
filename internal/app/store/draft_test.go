@@ -187,6 +187,9 @@ func TestCreateDefaultNames(t *testing.T) {
 	if newRequestItem(constants.RequestKindWS).Name != "New connection" {
 		t.Fatal("ws name")
 	}
+	if newRequestItem(constants.RequestKindSocketIO).Name != "New Socket.IO" {
+		t.Fatal("socket.io name")
+	}
 	if newFolderItem().Name != entity.DefaultNewFolderName {
 		t.Fatal("folder name")
 	}

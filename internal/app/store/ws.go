@@ -135,7 +135,7 @@ func (s *WsStore) Connect(collectionID, itemID string, req entity.WsRequest, onD
 		vars = s.envStore.ActiveVariables()
 	}
 	req = applyWsEnv(req, vars)
-	resolved, err := service.ResolveWSURL(req.URL, variablesToPathMap(req.PathParams))
+	resolved, err := service.ResolveWSURL(req.URL)
 	if err != nil {
 		s.logConnect(req.URL, false, err.Error())
 		s.finishConnect(onDone, false, "Failed: "+err.Error())
@@ -501,30 +501,5 @@ func applyWsEnv(req entity.WsRequest, vars map[string]string) entity.WsRequest {
 		}
 		req.Headers = out
 	}
-	if len(req.PathParams) > 0 {
-		out := make([]entity.Variable, len(req.PathParams))
-		for i, h := range req.PathParams {
-			out[i] = entity.Variable{
-				Key:   h.Key,
-				Value: utils.SubstituteEnvVars(h.Value, vars),
-				Type:  h.Type,
-			}
-		}
-		req.PathParams = out
-	}
 	return req
-}
-
-func variablesToPathMap(vars []entity.Variable) map[string]string {
-	if len(vars) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(vars))
-	for _, v := range vars {
-		if v.Key == "" {
-			continue
-		}
-		out[v.Key] = v.Value
-	}
-	return out
 }

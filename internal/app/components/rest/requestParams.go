@@ -23,6 +23,15 @@ type RequestParamsView struct {
 //
 // Общий скролл, высота не ограничена (как логи).
 func NewRequestParams(requestURL binding.String, onPathChange func()) *RequestParamsView {
+	return newRequestParams(requestURL, onPathChange, true)
+}
+
+// NewRequestQueryParams — таб Params только с Query Params (без path variables).
+func NewRequestQueryParams(requestURL binding.String) *RequestParamsView {
+	return newRequestParams(requestURL, nil, false)
+}
+
+func newRequestParams(requestURL binding.String, onPathChange func(), includePath bool) *RequestParamsView {
 	var syncing bool
 	var pathParamNames []string
 
@@ -54,7 +63,12 @@ func NewRequestParams(requestURL binding.String, onPathChange func()) *RequestPa
 		queryTable,
 	)
 
-	content := container.NewVBox(pathSection, querySection)
+	var content *fyne.Container
+	if includePath {
+		content = container.NewVBox(pathSection, querySection)
+	} else {
+		content = container.NewVBox(querySection)
+	}
 	scroll := ui.NewListVScroll(content)
 
 	updatePathVisibility := func(names []string) {
@@ -92,14 +106,16 @@ func NewRequestParams(requestURL binding.String, onPathChange func()) *RequestPa
 			}
 			raw, _ := requestURL.Get()
 
-			newNames := extractPathParamNames(raw)
-			if !equalStringSlices(newNames, pathParamNames) {
-				// при ручном редактировании URL сохраняем уже введённые значения
-				existingVals := map[string]string{}
-				for _, r := range pathTable.GetRows() {
-					existingVals[r.Key] = r.Value
+			if includePath {
+				newNames := extractPathParamNames(raw)
+				if !equalStringSlices(newNames, pathParamNames) {
+					// при ручном редактировании URL сохраняем уже введённые значения
+					existingVals := map[string]string{}
+					for _, r := range pathTable.GetRows() {
+						existingVals[r.Key] = r.Value
+					}
+					rebuildPathRows(newNames, existingVals)
 				}
-				rebuildPathRows(newNames, existingVals)
 			}
 
 			newQueryRows := parseQueryOrdered(raw)
@@ -117,6 +133,9 @@ func NewRequestParams(requestURL binding.String, onPathChange func()) *RequestPa
 		Object: container.NewBorder(nil, nil, nil, nil, scroll),
 		GetPathParams: func() map[string]string {
 			vals := map[string]string{}
+			if !includePath {
+				return vals
+			}
 			for _, r := range pathTable.GetRows() {
 				if r.Key != "" {
 					vals[r.Key] = r.Value
@@ -126,6 +145,9 @@ func NewRequestParams(requestURL binding.String, onPathChange func()) *RequestPa
 		},
 		// SetPathParams полностью заменяет значения path variables (без наследования от предыдущего запроса).
 		SetPathParams: func(vals map[string]string) {
+			if !includePath {
+				return
+			}
 			if vals == nil {
 				vals = map[string]string{}
 			}

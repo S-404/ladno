@@ -51,6 +51,14 @@ func TestApplyAuthBasicBearerAPIKey(t *testing.T) {
 		t.Fatalf("custom prefix: %q", AuthVar(customPrefix.Headers, "Authorization"))
 	}
 
+	jsonReq := ApplyAuth(base, Auth{
+		Type: constants.AuthTypeJSON,
+		Data: []Variable{{Key: constants.AuthDataJSON, Value: `{"token":"x"}`}},
+	})
+	if AuthVar(jsonReq.Headers, "Authorization") != "" {
+		t.Fatal("json auth should not add headers")
+	}
+
 	apiH := ApplyAuth(base, Auth{
 		Type: constants.AuthTypeAPIKey,
 		Data: []Variable{
@@ -81,5 +89,32 @@ func TestApplyAuthBasicBearerAPIKey(t *testing.T) {
 	})
 	if len(gen) != 1 || gen[0].Key != "Authorization" || gen[0].Value != "Bearer abc" {
 		t.Fatalf("generated: %+v", gen)
+	}
+}
+
+func TestSocketIOAuthJSON(t *testing.T) {
+	got := SocketIOAuthJSON(Auth{
+		Type: constants.AuthTypeJSON,
+		Data: []Variable{{Key: constants.AuthDataJSON, Value: `{"token":""}`}},
+	}, "legacy")
+	if got != `{"token":""}` {
+		t.Fatalf("json: %q", got)
+	}
+	if got := SocketIOAuthJSON(Auth{Type: constants.AuthTypeBearer}, `{"a":1}`); got != "" {
+		t.Fatalf("token should not use CONNECT auth: %q", got)
+	}
+	if got := SocketIOAuthJSON(Auth{Type: constants.AuthTypeNoAuth}, `{"a":1}`); got != `{"a":1}` {
+		t.Fatalf("legacy: %q", got)
+	}
+}
+
+func TestEffectiveSocketIOAuth(t *testing.T) {
+	got := EffectiveSocketIOAuth(Auth{Type: constants.AuthTypeInherited}, `{"token":"x"}`)
+	if got.Type != constants.AuthTypeJSON || AuthVar(got.Data, constants.AuthDataJSON) != `{"token":"x"}` {
+		t.Fatalf("%+v", got)
+	}
+	got = EffectiveSocketIOAuth(Auth{Type: constants.AuthTypeBearer, Data: []Variable{{Key: constants.AuthDataToken, Value: "t"}}}, `{"x":1}`)
+	if got.Type != constants.AuthTypeBearer {
+		t.Fatalf("keep bearer: %+v", got)
 	}
 }

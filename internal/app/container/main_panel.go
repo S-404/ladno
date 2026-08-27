@@ -11,6 +11,7 @@ import (
 	"github.com/s-404/ladno/internal/app/components/grpcui"
 	"github.com/s-404/ladno/internal/app/components/kafkaui"
 	"github.com/s-404/ladno/internal/app/components/natsui"
+	"github.com/s-404/ladno/internal/app/components/socketioui"
 	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/components/wsui"
 	"github.com/s-404/ladno/internal/app/entity"
@@ -24,6 +25,7 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 	natsStore := app.Store.Nats
 	kafkaStore := app.Store.Kafka
 	wsConnStore := app.Store.Ws
+	sioConnStore := app.Store.SocketIO
 	envStore := app.Store.Env
 
 	empty := container.NewCenter(widget.NewLabel("Select a collection or request"))
@@ -192,7 +194,6 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		wsPanel.SetConnected(now)
 		if dropped {
 			wsPanel.SetConnecting(false)
-			wsPanel.SetStatus("Disconnected")
 		}
 	}
 	wsConnStore.AddConnectionListener(func() {
@@ -208,7 +209,6 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			wsCollectionID = sel.CollectionID
 			wsItemID = sel.ItemID
 			wsPanel.SetConnecting(true)
-			wsPanel.SetStatus("Connecting…")
 			wsConnStore.Connect(sel.CollectionID, sel.ItemID, req, func(ok bool, status string) {
 				selNow := currentSelection(selStore.GetSelection())
 				if selNow == nil || selNow.ItemID != sel.ItemID {
@@ -216,7 +216,6 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 				}
 				wsPanel.SetConnecting(false)
 				wsPanel.SetConnected(ok)
-				wsPanel.SetStatus(status)
 				wsWasConnected = ok
 				refreshWsMessages()
 			})
@@ -229,7 +228,6 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			wsConnStore.Disconnect(sel.CollectionID, sel.ItemID)
 			wsPanel.SetConnecting(false)
 			wsPanel.SetConnected(false)
-			wsPanel.SetStatus("Disconnected")
 			wsWasConnected = false
 		},
 		func(req entity.WsRequest) {
@@ -240,12 +238,6 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			wsCollectionID = sel.CollectionID
 			wsItemID = sel.ItemID
 			wsConnStore.Send(sel.CollectionID, sel.ItemID, req.Message, func(err error) {
-				if err != nil {
-					selNow := currentSelection(selStore.GetSelection())
-					if selNow != nil && selNow.ItemID == sel.ItemID {
-						wsPanel.SetStatus("Send failed: " + err.Error())
-					}
-				}
 				refreshWsMessages()
 			})
 		},
@@ -262,6 +254,122 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			}
 		},
 		wsMessagesView,
+	)
+
+	var sioPanel *socketioui.RequestView
+	var sioCollectionID, sioItemID string
+	var sioWasConnected bool
+	refreshSioMessages := func() {
+		if sioPanel == nil {
+			return
+		}
+		text := sioConnStore.MessagesText(sioCollectionID, sioItemID, sioPanel.Messages.ShowAll())
+		sioPanel.Messages.SetText(text)
+	}
+	sioMessagesView := socketioui.NewMessagesView(
+		func(all bool) { refreshSioMessages() },
+		func() { fyne.CurrentApp().Clipboard().SetContent(sioPanel.Messages.Text()) },
+		func() {
+			sioConnStore.ClearMessages(sioCollectionID, sioItemID)
+			refreshSioMessages()
+		},
+	)
+	sioConnStore.AddMessageListener(func() { fyne.Do(refreshSioMessages) })
+
+	syncSioConnectionUI := func() {
+		if sioPanel == nil {
+			return
+		}
+		sel := currentSelection(selStore.GetSelection())
+		if sel == nil || sel.Kind != entity.SelectionRequest {
+			return
+		}
+		d, _ := drafts.GetRequestDraft(sel.ItemID)
+		if d.Request.Kind() != constants.RequestKindSocketIO {
+			return
+		}
+		now := sioConnStore.IsConnected(sel.CollectionID, sel.ItemID)
+		dropped := sioWasConnected && !now
+		sioWasConnected = now
+		sioPanel.SetConnected(now)
+		if dropped {
+			sioPanel.SetConnecting(false)
+		}
+	}
+	sioConnStore.AddConnectionListener(func() {
+		fyne.Do(syncSioConnectionUI)
+	})
+
+	sioPanel = socketioui.NewRequestView(
+		func(req entity.SocketIORequest) {
+			sel := currentSelection(selStore.GetSelection())
+			if sel == nil || sel.Kind != entity.SelectionRequest {
+				return
+			}
+			sioCollectionID = sel.CollectionID
+			sioItemID = sel.ItemID
+			sioPanel.SetConnecting(true)
+			sioConnStore.Connect(sel.CollectionID, sel.ItemID, req, func(ok bool, status string) {
+				selNow := currentSelection(selStore.GetSelection())
+				if selNow == nil || selNow.ItemID != sel.ItemID {
+					return
+				}
+				sioPanel.SetConnecting(false)
+				sioPanel.SetConnected(ok)
+				sioWasConnected = ok
+				refreshSioMessages()
+			})
+		},
+		func() {
+			sel := currentSelection(selStore.GetSelection())
+			if sel == nil || sel.Kind != entity.SelectionRequest {
+				return
+			}
+			sioConnStore.Disconnect(sel.CollectionID, sel.ItemID)
+			sioPanel.SetConnecting(false)
+			sioPanel.SetConnected(false)
+			sioWasConnected = false
+		},
+		func(req entity.SocketIORequest) {
+			sel := currentSelection(selStore.GetSelection())
+			if sel == nil || sel.Kind != entity.SelectionRequest {
+				return
+			}
+			sioCollectionID = sel.CollectionID
+			sioItemID = sel.ItemID
+			sioConnStore.Emit(sel.CollectionID, sel.ItemID, req.Event, req.Payload, req.Namespace, func(err error) {
+				refreshSioMessages()
+			})
+		},
+		func(req entity.SocketIORequest) {
+			sel := currentSelection(selStore.GetSelection())
+			if sel == nil || sel.Kind != entity.SelectionRequest {
+				return
+			}
+			sioCollectionID = sel.CollectionID
+			sioItemID = sel.ItemID
+			on := !sioConnStore.IsListening(sel.CollectionID, sel.ItemID, req.Event)
+			sioConnStore.Listen(sel.CollectionID, sel.ItemID, req.Event, on, func(err error) {
+				if err == nil {
+					sioPanel.SetListening(sioConnStore.ListeningEvents(sel.CollectionID, sel.ItemID))
+				}
+				refreshSioMessages()
+			})
+		},
+		func(name string, req entity.SocketIORequest) {
+			putRequestDraft(func(d *entity.RequestDraft) {
+				d.Name = name
+				d.Request.Auth = req.Auth
+				d.Request.SocketIO = &req
+			})
+		},
+		func() {
+			sel := currentSelection(selStore.GetSelection())
+			if sel != nil {
+				drafts.SaveRequest(sel.CollectionID, sel.ItemID)
+			}
+		},
+		sioMessagesView,
 	)
 
 	var natsPanel *natsui.RequestView
@@ -450,6 +558,7 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		wsPanel.CanvasObject,
 		natsPanel.CanvasObject,
 		kafkaPanel.CanvasObject,
+		sioPanel.CanvasObject,
 	}
 	stack := container.NewStack(panels...)
 	show := func(idx int) {
@@ -477,6 +586,7 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			dirty := drafts.IsRequestDirty(sel.ItemID)
 			grpcPanel.SetDirty(dirty)
 			wsPanel.SetDirty(dirty)
+			sioPanel.SetDirty(dirty)
 			natsPanel.SetDirty(dirty)
 			kafkaPanel.SetDirty(dirty)
 		}
@@ -555,6 +665,27 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 					show(4)
 					if focusName {
 						fyne.Do(grpcPanel.FocusName)
+					}
+				case constants.RequestKindSocketIO:
+					sioCollectionID = sel.CollectionID
+					sioItemID = sel.ItemID
+					connected := sioConnStore.IsConnected(sel.CollectionID, sel.ItemID)
+					sioWasConnected = connected
+					sioReq := d.Request.SocketIO
+					if sioReq != nil {
+						cp := *sioReq
+						cp.Auth = d.Request.Auth
+						sioPanel.Set(&cp, d.Name, connected)
+						sioPanel.SetListening(sioConnStore.ListeningEvents(sel.CollectionID, sel.ItemID))
+					} else {
+						sioPanel.Set(nil, d.Name, connected)
+						sioPanel.SetListening(nil)
+					}
+					sioPanel.SetDirty(dirty)
+					refreshSioMessages()
+					show(8)
+					if focusName {
+						fyne.Do(sioPanel.FocusName)
 					}
 				case constants.RequestKindWS:
 					wsCollectionID = sel.CollectionID

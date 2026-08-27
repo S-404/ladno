@@ -192,6 +192,15 @@ func TestAddRequestKindsInHTTPCollection(t *testing.T) {
 		t.Fatalf("ws item: %+v", item)
 	}
 
+	id, _, ok = sel.AddRequest("c-http", "", constants.RequestKindSocketIO)
+	if !ok {
+		t.Fatal("add socket.io")
+	}
+	item = findItemByID(&ws.Collections[0].Items, id)
+	if item == nil || item.Request == nil || item.Request.SocketIO == nil || item.Name != "New Socket.IO" {
+		t.Fatalf("socket.io item: %+v", item)
+	}
+
 	id, _, ok = sel.AddRequest("c-http", "", constants.RequestKindNATS)
 	if !ok {
 		t.Fatal("nats kind in HTTP should fall back to rest")

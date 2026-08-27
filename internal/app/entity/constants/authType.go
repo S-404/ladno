@@ -8,6 +8,7 @@ const (
 	AuthTypeBasic     AuthType = "Basic"
 	AuthTypeBearer    AuthType = "Bearer"
 	AuthTypeAPIKey    AuthType = "ApiKey"
+	AuthTypeJSON      AuthType = "Json"
 )
 
 // Auth data keys stored in entity.Auth.Data.
@@ -19,6 +20,7 @@ const (
 	AuthDataKey      = "key"
 	AuthDataValue    = "value"
 	AuthDataAddTo    = "addTo" // "header" | "body"
+	AuthDataJSON     = "json"
 )
 
 const (
@@ -30,7 +32,7 @@ const (
 
 func NormalizeAuthType(t AuthType) AuthType {
 	switch t {
-	case AuthTypeInherited, AuthTypeNoAuth, AuthTypeBasic, AuthTypeBearer, AuthTypeAPIKey:
+	case AuthTypeInherited, AuthTypeNoAuth, AuthTypeBasic, AuthTypeBearer, AuthTypeAPIKey, AuthTypeJSON:
 		return t
 	case "":
 		return AuthTypeNoAuth

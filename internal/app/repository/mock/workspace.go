@@ -142,6 +142,17 @@ func WorkspaceData() []*entity.Workspace {
 								},
 							},
 						},
+						{
+							Id:   "sio-001",
+							Name: "Chat",
+							Request: &entity.ItemRequest{
+								SocketIO: &entity.SocketIORequest{
+									URL:     "http://localhost:3000",
+									Event:   "message",
+									Payload: `{"text":"hello"}`,
+								},
+							},
+						},
 					},
 				},
 				{

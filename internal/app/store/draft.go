@@ -98,6 +98,12 @@ func cloneItemRequest(req *entity.ItemRequest) entity.ItemRequest {
 		w.Headers = cloneVariables(req.Ws.Headers)
 		out.Ws = &w
 	}
+	if req.SocketIO != nil {
+		sio := *req.SocketIO
+		sio.Headers = cloneVariables(req.SocketIO.Headers)
+		sio.Query = cloneVariables(req.SocketIO.Query)
+		out.SocketIO = &sio
+	}
 	if req.Nats != nil {
 		n := *req.Nats
 		n.Headers = cloneVariables(req.Nats.Headers)
@@ -572,6 +578,7 @@ func itemRequestEqual(a, b entity.ItemRequest) bool {
 		authEqual(a.Auth, b.Auth) &&
 		grpcRequestEqual(a.Grpc, b.Grpc) &&
 		wsRequestEqual(a.Ws, b.Ws) &&
+		socketIORequestEqual(a.SocketIO, b.SocketIO) &&
 		natsRequestEqual(a.Nats, b.Nats) &&
 		kafkaRequestEqual(a.Kafka, b.Kafka) &&
 		eventEqual(a.Event, b.Event)
@@ -619,7 +626,17 @@ func wsRequestEqual(a, b *entity.WsRequest) bool {
 		return a == b
 	}
 	return a.URL == b.URL && a.Message == b.Message &&
-		variablesEqual(a.Headers, b.Headers) && variablesEqual(a.PathParams, b.PathParams)
+		variablesEqual(a.Headers, b.Headers)
+}
+
+func socketIORequestEqual(a, b *entity.SocketIORequest) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.URL == b.URL &&
+		a.AuthJSON == b.AuthJSON && a.Event == b.Event && a.Payload == b.Payload &&
+		variablesEqual(a.Headers, b.Headers) &&
+		variablesEqual(a.Query, b.Query)
 }
 
 func natsRequestEqual(a, b *entity.NatsRequest) bool {
@@ -672,6 +689,8 @@ func authEqual(a, b entity.Auth) bool {
 		return entity.AuthVar(a.Data, constants.AuthDataKey) == entity.AuthVar(b.Data, constants.AuthDataKey) &&
 			entity.AuthVar(a.Data, constants.AuthDataValue) == entity.AuthVar(b.Data, constants.AuthDataValue) &&
 			aa == ab
+	case constants.AuthTypeJSON:
+		return entity.AuthVar(a.Data, constants.AuthDataJSON) == entity.AuthVar(b.Data, constants.AuthDataJSON)
 	default:
 		return variablesEqual(a.Data, b.Data)
 	}

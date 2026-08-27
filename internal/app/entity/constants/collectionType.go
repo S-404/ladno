@@ -24,11 +24,12 @@ func IsHTTPCollection(t CollectionType) bool {
 type RequestKind string
 
 const (
-	RequestKindREST  RequestKind = "rest"
-	RequestKindGRPC  RequestKind = "grpc"
-	RequestKindWS    RequestKind = "ws"
-	RequestKindNATS  RequestKind = "nats"
-	RequestKindKafka RequestKind = "kafka"
+	RequestKindREST     RequestKind = "rest"
+	RequestKindGRPC     RequestKind = "grpc"
+	RequestKindWS       RequestKind = "ws"
+	RequestKindSocketIO RequestKind = "socketio"
+	RequestKindNATS     RequestKind = "nats"
+	RequestKindKafka    RequestKind = "kafka"
 )
 
 func RequestKindForCollection(t CollectionType) RequestKind {
@@ -65,6 +66,8 @@ func DefaultNewRequestName(kind RequestKind) string {
 		return "New method"
 	case RequestKindWS:
 		return "New connection"
+	case RequestKindSocketIO:
+		return "New Socket.IO"
 	default:
 		return "New request"
 	}

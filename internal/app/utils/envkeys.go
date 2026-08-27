@@ -99,7 +99,11 @@ func CollectItemRequestEnvKeys(req entity.ItemRequest) []string {
 	if req.Ws != nil {
 		add(req.Ws.URL, req.Ws.Message)
 		appendVarKeys(&out, seen, req.Ws.Headers)
-		appendVarKeys(&out, seen, req.Ws.PathParams)
+	}
+	if req.SocketIO != nil {
+		add(req.SocketIO.URL, req.SocketIO.Path, req.SocketIO.Namespace, req.SocketIO.AuthJSON, req.SocketIO.Event, req.SocketIO.Payload)
+		appendVarKeys(&out, seen, req.SocketIO.Headers)
+		appendVarKeys(&out, seen, req.SocketIO.Query)
 	}
 	if req.Nats != nil {
 		add(req.Nats.Subject, req.Nats.Payload)

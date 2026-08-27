@@ -32,10 +32,7 @@ func TestApplyWsEnv(t *testing.T) {
 		URL:     "wss://{{host}}/:id",
 		Message: "hi {{name}}",
 		Headers: []entity.Variable{{Key: "X-Token", Value: "{{token}}"}},
-		PathParams: []entity.Variable{
-			{Key: "id", Value: "{{id}}"},
-		},
-	}, map[string]string{"host": "example.com", "name": "kot", "token": "abc", "id": "7"})
+	}, map[string]string{"host": "example.com", "name": "kot", "token": "abc"})
 	if req.URL != "wss://example.com/:id" {
 		t.Fatalf("url=%q", req.URL)
 	}
@@ -44,8 +41,5 @@ func TestApplyWsEnv(t *testing.T) {
 	}
 	if req.Headers[0].Value != "abc" {
 		t.Fatalf("header=%q", req.Headers[0].Value)
-	}
-	if req.PathParams[0].Value != "7" {
-		t.Fatalf("path=%q", req.PathParams[0].Value)
 	}
 }

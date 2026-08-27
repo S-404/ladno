@@ -1118,6 +1118,13 @@ func filterItems(items []entity.CollectionItem, q string, keepAll bool) ([]entit
 				any = true
 				continue
 			}
+			if item.Request.SocketIO != nil &&
+				(strings.Contains(strings.ToLower(item.Request.SocketIO.URL), q) ||
+					strings.Contains(strings.ToLower(item.Request.SocketIO.Event), q)) {
+				out = append(out, item)
+				any = true
+				continue
+			}
 			continue
 		}
 		// folder
