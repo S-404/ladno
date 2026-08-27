@@ -10,6 +10,7 @@ type Service struct {
 	Workspace *WorkspaceService
 	Ws        *WsService
 	SocketIO  *SocketIOService
+	Grpc      *GrpcService
 }
 
 func NewService(repos *repository.Repository) *Service {
@@ -21,5 +22,6 @@ func NewService(repos *repository.Repository) *Service {
 		Workspace: newWorkspaceService(repos.Workspace),
 		Ws:        NewWsService(),
 		SocketIO:  NewSocketIOService(),
+		Grpc:      NewGrpcService(),
 	}
 }

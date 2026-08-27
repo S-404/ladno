@@ -15,6 +15,8 @@ type AuthPanelOptions struct {
 	DisableBasic bool
 	// AllowJSON adds a JSON type (Socket.IO CONNECT packet).
 	AllowJSON bool
+	// DisableAPIKey hides API Key (gRPC).
+	DisableAPIKey bool
 	// APIKeyHeaderOnly hides "Add to body" and always uses a header.
 	APIKeyHeaderOnly bool
 	OnChange         func(auth entity.Auth)
@@ -40,8 +42,10 @@ func NewAuthPanel(opts AuthPanelOptions) *AuthPanel {
 	}
 	typeOpts = append(typeOpts,
 		authTypeOption{constants.AuthTypeBearer, "Token"},
-		authTypeOption{constants.AuthTypeAPIKey, "API Key"},
 	)
+	if !opts.DisableAPIKey {
+		typeOpts = append(typeOpts, authTypeOption{constants.AuthTypeAPIKey, "API Key"})
+	}
 	if opts.AllowJSON {
 		typeOpts = append(typeOpts, authTypeOption{constants.AuthTypeJSON, "JSON"})
 	}

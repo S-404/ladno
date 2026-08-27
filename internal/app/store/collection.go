@@ -656,6 +656,7 @@ func cloneRequestItem(src entity.CollectionItem) entity.CollectionItem {
 	if src.Request.Grpc != nil {
 		g := *src.Request.Grpc
 		g.Metadata = cloneVariables(src.Request.Grpc.Metadata)
+		g.ProtoFiles = cloneGrpcProtoFiles(src.Request.Grpc.ProtoFiles)
 		r.Grpc = &g
 	}
 	if src.Request.Ws != nil {

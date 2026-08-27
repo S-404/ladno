@@ -131,10 +131,19 @@ func RequestTreeLabel(name string, req *ItemRequest) string {
 }
 
 type GrpcRequest struct {
-	Target   string     `json:"target"`
-	Method   string     `json:"method"`
-	Metadata []Variable `json:"metadata"`
-	Message  string     `json:"message"`
+	Target      string          `json:"target"`
+	Method      string          `json:"method"`
+	ProtoFiles  []GrpcProtoFile `json:"protoFiles,omitempty"`
+	ActiveProto string          `json:"activeProto,omitempty"`
+	Metadata    []Variable      `json:"metadata"`
+	Message     string          `json:"message"`
+}
+
+// GrpcProtoFile is an imported .proto used to list and invoke methods.
+type GrpcProtoFile struct {
+	Name    string `json:"name"`
+	Path    string `json:"path,omitempty"`
+	Content string `json:"content,omitempty"`
 }
 
 type WsRequest struct {

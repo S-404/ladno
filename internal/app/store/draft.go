@@ -91,6 +91,7 @@ func cloneItemRequest(req *entity.ItemRequest) entity.ItemRequest {
 	if req.Grpc != nil {
 		g := *req.Grpc
 		g.Metadata = cloneVariables(req.Grpc.Metadata)
+		g.ProtoFiles = cloneGrpcProtoFiles(req.Grpc.ProtoFiles)
 		out.Grpc = &g
 	}
 	if req.Ws != nil {
@@ -618,7 +619,30 @@ func grpcRequestEqual(a, b *entity.GrpcRequest) bool {
 		return a == b
 	}
 	return a.Target == b.Target && a.Method == b.Method && a.Message == b.Message &&
-		variablesEqual(a.Metadata, b.Metadata)
+		a.ActiveProto == b.ActiveProto &&
+		variablesEqual(a.Metadata, b.Metadata) &&
+		grpcProtoFilesEqual(a.ProtoFiles, b.ProtoFiles)
+}
+
+func grpcProtoFilesEqual(a, b []entity.GrpcProtoFile) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Name != b[i].Name || a[i].Path != b[i].Path || a[i].Content != b[i].Content {
+			return false
+		}
+	}
+	return true
+}
+
+func cloneGrpcProtoFiles(in []entity.GrpcProtoFile) []entity.GrpcProtoFile {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]entity.GrpcProtoFile, len(in))
+	copy(out, in)
+	return out
 }
 
 func wsRequestEqual(a, b *entity.WsRequest) bool {

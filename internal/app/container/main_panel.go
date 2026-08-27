@@ -28,6 +28,7 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 	kafkaStore := app.Store.Kafka
 	wsConnStore := app.Store.Ws
 	sioConnStore := app.Store.SocketIO
+	grpcStore := app.Store.Grpc
 	envStore := app.Store.Env
 
 	empty := container.NewCenter(widget.NewLabel("Select a collection or request"))
@@ -144,12 +145,33 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 
 	restPanel := RestContainer(app)
 
-	grpcPanel := grpcui.NewRequestView(
-		func(name string, req entity.GrpcRequest) {
+	var grpcPanel *grpcui.RequestView
+	var syncGrpcScriptDot func()
+	var markGrpcScriptResult func(scriptErr string)
+	grpcPanel = grpcui.NewRequestView(
+		app.Window,
+		func(req entity.GrpcRequest, auth entity.Auth, event entity.Event) {
+			syncGrpcScriptDot()
+			grpcStore.Send(entity.GrpcCall{
+				Target:      req.Target,
+				Method:      req.Method,
+				Message:     req.Message,
+				Metadata:    req.Metadata,
+				Auth:        auth,
+				ProtoFiles:  req.ProtoFiles,
+				ActiveProto: req.ActiveProto,
+				PreRequest:  event.PreRequest,
+				PostRequest: event.PostRequest,
+			})
+		},
+		func(name string, req entity.GrpcRequest, auth entity.Auth, event entity.Event) {
 			putRequestDraft(func(d *entity.RequestDraft) {
 				d.Name = name
 				d.Request.Grpc = &req
+				d.Request.Auth = auth
+				d.Request.Event = event
 			})
+			syncGrpcScriptDot()
 		},
 		func() {
 			sel := currentSelection(selStore.GetSelection())
@@ -158,6 +180,65 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			}
 		},
 	)
+	hasGrpcScripts := func() bool {
+		if grpcPanel == nil || grpcPanel.GetEvent == nil {
+			return false
+		}
+		ev := grpcPanel.GetEvent()
+		return len(ev.PreRequest) > 0 || len(ev.PostRequest) > 0
+	}
+	syncGrpcScriptDot = func() {
+		if grpcPanel == nil || grpcPanel.SetScriptIcon == nil {
+			return
+		}
+		if hasGrpcScripts() {
+			grpcPanel.SetScriptIcon(ui.DotGray)
+		} else {
+			grpcPanel.SetScriptIcon(nil)
+		}
+	}
+	markGrpcScriptResult = func(scriptErr string) {
+		if grpcPanel == nil {
+			return
+		}
+		if grpcPanel.SetScriptError != nil {
+			grpcPanel.SetScriptError(scriptErr)
+		}
+		if !hasGrpcScripts() {
+			grpcPanel.SetScriptIcon(nil)
+			return
+		}
+		if strings.TrimSpace(scriptErr) != "" {
+			grpcPanel.SetScriptIcon(ui.DotRed)
+			return
+		}
+		grpcPanel.SetScriptIcon(ui.DotGreen)
+	}
+	refreshGrpcScriptEnvKeys := func() {
+		if grpcPanel != nil && grpcPanel.SetEnvKeys != nil {
+			grpcPanel.SetEnvKeys(envStore.ActiveEnvKeys())
+		}
+	}
+	grpcSending := grpcStore.GetIsSending()
+	(*grpcSending).AddListener(binding.NewDataListener(func() {
+		sending, _ := (*grpcSending).Get()
+		if grpcPanel != nil && grpcPanel.SetSending != nil {
+			grpcPanel.SetSending(sending)
+		}
+	}))
+	grpcStore.GetResponse().AddListener(binding.NewDataListener(func() {
+		val, err := grpcStore.GetResponse().Get()
+		if err != nil || val == nil || grpcPanel == nil {
+			return
+		}
+		resp, ok := val.(*entity.GrpcResponse)
+		if !ok {
+			return
+		}
+		grpcPanel.SetResponse(resp)
+		markGrpcScriptResult(resp.ScriptError)
+	}))
+
 	var wsPanel *wsui.RequestView
 	var wsCollectionID, wsItemID string
 	var wsWasConnected bool
@@ -545,9 +626,11 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		refreshNatsMessages()
 		refreshKafkaMessages()
 		refreshNatsScriptEnvKeys()
+		refreshGrpcScriptEnvKeys()
 	}))
 	(*envStore.GetItems()).AddListener(binding.NewDataListener(func() {
 		refreshNatsScriptEnvKeys()
+		refreshGrpcScriptEnvKeys()
 	}))
 
 	panels := []fyne.CanvasObject{
@@ -661,8 +744,10 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			default:
 				switch d.Request.Kind() {
 				case constants.RequestKindGRPC:
-					grpcPanel.Set(d.Request.Grpc, d.Name)
+					grpcPanel.Set(d.Request.Grpc, d.Name, d.Request.Auth, d.Request.Event)
 					grpcPanel.SetDirty(dirty)
+					syncGrpcScriptDot()
+					refreshGrpcScriptEnvKeys()
 					show(4)
 					if focusName {
 						fyne.Do(grpcPanel.FocusName)
