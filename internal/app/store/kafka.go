@@ -34,6 +34,7 @@ type KafkaMessage struct {
 	Partition int
 	Offset    int64
 	Time      time.Time
+	Dir       string // "in" | "out"
 }
 
 type kafkaConnState struct {
@@ -240,70 +241,53 @@ func (s *KafkaStore) AppendMessage(collectionID string, msg KafkaMessage) {
 	s.notifyMessageChange()
 }
 
-func (s *KafkaStore) MessagesText(collectionID, topic, filter string, showAll bool) string {
+func (s *KafkaStore) Messages(collectionID, topic string) []StreamMessage {
 	s.mu.Lock()
 	list := append([]KafkaMessage(nil), s.messages[collectionID]...)
 	s.mu.Unlock()
 
 	topic = strings.TrimSpace(s.resolveEnvString(topic))
-	filter = strings.ToLower(strings.TrimSpace(filter))
-	matched := make([]KafkaMessage, 0, len(list))
+	out := make([]StreamMessage, 0, len(list))
 	for _, m := range list {
 		if topic != "" && m.Topic != topic {
 			continue
 		}
-		if filter != "" && !kafkaMessageMatchesFilter(m, filter) {
-			continue
-		}
-		matched = append(matched, m)
+		out = append(out, StreamMessage{
+			Time: m.Time,
+			Dir:  kafkaDir(m.Dir),
+			Body: formatKafkaBody(m),
+		})
 	}
-	if !showAll && len(matched) > 0 {
-		matched = matched[len(matched)-1:]
-	}
-
-	var b strings.Builder
-	for i, m := range matched {
-		if i > 0 {
-			b.WriteString("\n\n")
-		}
-		b.WriteString(fmt.Sprintf("[%s] %s p=%d off=%d\n",
-			m.Time.Format("15:04:05.000"), m.Topic, m.Partition, m.Offset))
-		if m.Key != "" {
-			b.WriteString("key: ")
-			b.WriteString(m.Key)
-			b.WriteByte('\n')
-		}
-		if len(m.Headers) > 0 {
-			b.WriteString("headers:\n")
-			for _, h := range m.Headers {
-				b.WriteString("  ")
-				b.WriteString(h.Key)
-				b.WriteString(": ")
-				b.WriteString(h.Value)
-				b.WriteByte('\n')
-			}
-		}
-		b.WriteString(utils.PrettyBody(m.Value, ""))
-	}
-	return b.String()
+	return out
 }
 
-func kafkaMessageMatchesFilter(m KafkaMessage, filter string) bool {
-	if strings.Contains(strings.ToLower(m.Topic), filter) {
-		return true
+func kafkaDir(dir string) string {
+	if dir == "out" {
+		return "out"
 	}
-	if strings.Contains(strings.ToLower(m.Key), filter) {
-		return true
+	return "in"
+}
+
+func formatKafkaBody(m KafkaMessage) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s p=%d off=%d\n", m.Topic, m.Partition, m.Offset)
+	if m.Key != "" {
+		b.WriteString("key: ")
+		b.WriteString(m.Key)
+		b.WriteByte('\n')
 	}
-	if strings.Contains(strings.ToLower(m.Value), filter) {
-		return true
-	}
-	for _, h := range m.Headers {
-		if strings.Contains(strings.ToLower(h.Key), filter) || strings.Contains(strings.ToLower(h.Value), filter) {
-			return true
+	if len(m.Headers) > 0 {
+		b.WriteString("headers:\n")
+		for _, h := range m.Headers {
+			b.WriteString("  ")
+			b.WriteString(h.Key)
+			b.WriteString(": ")
+			b.WriteString(h.Value)
+			b.WriteByte('\n')
 		}
 	}
-	return false
+	b.WriteString(utils.PrettyBody(m.Value, ""))
+	return b.String()
 }
 
 func (s *KafkaStore) ClearMessages(collectionID, topic string) {
@@ -495,6 +479,7 @@ func (s *KafkaStore) runConnected(
 					Value:   req.Payload,
 					Headers: req.Headers,
 					Time:    time.Now(),
+					Dir:     "out",
 				})
 				s.logKafkaProduce(req.Topic, req.Key, req.Payload)
 				if onDone != nil {
@@ -537,6 +522,7 @@ func (s *KafkaStore) runConsume(collectionID, itemID string, conn entity.KafkaCo
 				Partition: in.Partition,
 				Offset:    in.Offset,
 				Time:      in.Time,
+				Dir:       "in",
 			})
 			s.logKafkaInbound(in)
 		})

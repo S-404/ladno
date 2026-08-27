@@ -5,6 +5,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/s-404/ladno/internal/app/components/messages"
 	"github.com/s-404/ladno/internal/app/components/scripttab"
 	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity"
@@ -22,7 +23,7 @@ type RequestView struct {
 	SetEnvKeys     func(keys []string)
 	SetScriptError func(msg string)
 	SetScriptIcon  func(icon fyne.Resource)
-	Messages       *MessagesView
+	Messages       *messages.View
 	Subject        func() string
 	FocusName      func()
 }
@@ -32,7 +33,7 @@ func NewRequestView(
 	onUnsub func(),
 	onChange func(name string, req entity.NatsRequest, event entity.Event),
 	onSave func(),
-	messages *MessagesView,
+	msgPane *messages.View,
 ) *RequestView {
 	var applying bool
 	var header *ui.EntityHeader
@@ -136,11 +137,11 @@ func NewRequestView(
 	)
 	split := container.NewVSplit(
 		ui.NewMinSizeBox(fyne.NewSize(200, 80), container.NewPadded(requestPanel)),
-		ui.NewMinSizeBox(fyne.NewSize(200, 80), messages.Object()),
+		ui.NewMinSizeBox(fyne.NewSize(200, 80), msgPane.Object()),
 	)
 	split.SetOffset(0.55)
 
-	v := &RequestView{CanvasObject: split, Messages: messages, Subject: func() string { return subject.Text() }}
+	v := &RequestView{CanvasObject: split, Messages: msgPane, Subject: func() string { return subject.Text() }}
 	v.Get = getReq
 	v.GetEvent = func() entity.Event {
 		if scriptView == nil {

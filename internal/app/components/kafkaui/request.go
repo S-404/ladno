@@ -5,6 +5,7 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/s-404/ladno/internal/app/components/messages"
 	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity"
 	"github.com/s-404/ladno/internal/app/entity/constants"
@@ -17,7 +18,7 @@ type RequestView struct {
 	SetRunning       func(running bool)
 	SetConsumeActive func(active bool)
 	SetDirty         func(dirty bool)
-	Messages         *MessagesView
+	Messages         *messages.View
 	Topic            func() string
 	FocusName        func()
 }
@@ -27,7 +28,7 @@ func NewRequestView(
 	onStop func(),
 	onChange func(name string, req entity.KafkaRequest),
 	onSave func(),
-	messages *MessagesView,
+	msgPane *messages.View,
 ) *RequestView {
 	var applying bool
 	var header *ui.EntityHeader
@@ -125,11 +126,11 @@ func NewRequestView(
 	)
 	split := container.NewVSplit(
 		ui.NewMinSizeBox(fyne.NewSize(200, 80), container.NewPadded(requestPanel)),
-		ui.NewMinSizeBox(fyne.NewSize(200, 80), messages.Object()),
+		ui.NewMinSizeBox(fyne.NewSize(200, 80), msgPane.Object()),
 	)
 	split.SetOffset(0.55)
 
-	v := &RequestView{CanvasObject: split, Messages: messages, Topic: func() string { return topic.Text() }}
+	v := &RequestView{CanvasObject: split, Messages: msgPane, Topic: func() string { return topic.Text() }}
 	v.Get = getReq
 	v.SetDirty = header.SetDirty
 	v.FocusName = header.FocusName

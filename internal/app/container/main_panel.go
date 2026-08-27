@@ -10,6 +10,7 @@ import (
 	"github.com/s-404/ladno/internal/app/components/collection"
 	"github.com/s-404/ladno/internal/app/components/grpcui"
 	"github.com/s-404/ladno/internal/app/components/kafkaui"
+	"github.com/s-404/ladno/internal/app/components/messages"
 	"github.com/s-404/ladno/internal/app/components/natsui"
 	"github.com/s-404/ladno/internal/app/components/socketioui"
 	"github.com/s-404/ladno/internal/app/components/ui"
@@ -17,6 +18,7 @@ import (
 	"github.com/s-404/ladno/internal/app/entity"
 	"github.com/s-404/ladno/internal/app/entity/constants"
 	"github.com/s-404/ladno/internal/app/entity/shared"
+	"github.com/s-404/ladno/internal/app/store"
 )
 
 func MainPanelContainer(app *shared.App) fyne.CanvasObject {
@@ -163,10 +165,10 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		if wsPanel == nil {
 			return
 		}
-		text := wsConnStore.MessagesText(wsCollectionID, wsItemID, wsPanel.Messages.ShowAll())
-		wsPanel.Messages.SetText(text)
+		wsPanel.Messages.SetItems(toMessageItems(wsConnStore.Messages(wsCollectionID, wsItemID)))
 	}
-	wsMessagesView := wsui.NewMessagesView(
+	wsMessagesView := messages.NewView(
+		"WebSocket messages",
 		func(all bool) { refreshWsMessages() },
 		func() { fyne.CurrentApp().Clipboard().SetContent(wsPanel.Messages.Text()) },
 		func() {
@@ -263,10 +265,10 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		if sioPanel == nil {
 			return
 		}
-		text := sioConnStore.MessagesText(sioCollectionID, sioItemID, sioPanel.Messages.ShowAll())
-		sioPanel.Messages.SetText(text)
+		sioPanel.Messages.SetItems(toMessageItems(sioConnStore.Messages(sioCollectionID, sioItemID)))
 	}
-	sioMessagesView := socketioui.NewMessagesView(
+	sioMessagesView := messages.NewView(
+		"Socket.IO messages",
 		func(all bool) { refreshSioMessages() },
 		func() { fyne.CurrentApp().Clipboard().SetContent(sioPanel.Messages.Text()) },
 		func() {
@@ -378,10 +380,10 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		if natsPanel == nil {
 			return
 		}
-		text := natsStore.MessagesText(natsCollectionID, natsPanel.Subject(), natsPanel.Messages.ShowAll())
-		natsPanel.Messages.SetText(text)
+		natsPanel.Messages.SetItems(toMessageItems(natsStore.Messages(natsCollectionID, natsPanel.Subject())))
 	}
-	natsMessagesView := natsui.NewMessagesView(
+	natsMessagesView := messages.NewView(
+		"Messages for selected subject",
 		func(all bool) { refreshNatsMessages() },
 		func() { fyne.CurrentApp().Clipboard().SetContent(natsPanel.Messages.Text()) },
 		func() {
@@ -487,12 +489,11 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		if kafkaPanel == nil {
 			return
 		}
-		text := kafkaStore.MessagesText(kafkaCollectionID, kafkaPanel.Topic(), kafkaPanel.Messages.Filter(), kafkaPanel.Messages.ShowAll())
-		kafkaPanel.Messages.SetText(text)
+		kafkaPanel.Messages.SetItems(toMessageItems(kafkaStore.Messages(kafkaCollectionID, kafkaPanel.Topic())))
 	}
-	kafkaMessagesView := kafkaui.NewMessagesView(
+	kafkaMessagesView := messages.NewView(
+		"Messages for selected topic",
 		func(all bool) { refreshKafkaMessages() },
-		func(q string) { refreshKafkaMessages() },
 		func() { fyne.CurrentApp().Clipboard().SetContent(kafkaPanel.Messages.Text()) },
 		func() {
 			kafkaStore.ClearMessages(kafkaCollectionID, kafkaPanel.Topic())
@@ -722,4 +723,12 @@ func currentSelection(b binding.Untyped) *entity.Selection {
 		return nil
 	}
 	return sel
+}
+
+func toMessageItems(list []store.StreamMessage) []messages.Item {
+	out := make([]messages.Item, len(list))
+	for i, m := range list {
+		out[i] = messages.Item{Time: m.Time, Dir: m.Dir, Body: m.Body}
+	}
+	return out
 }

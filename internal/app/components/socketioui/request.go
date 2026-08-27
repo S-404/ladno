@@ -8,6 +8,7 @@ import (
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+	"github.com/s-404/ladno/internal/app/components/messages"
 	"github.com/s-404/ladno/internal/app/components/rest"
 	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity"
@@ -23,7 +24,7 @@ type RequestView struct {
 	SetConnected  func(connected bool)
 	SetListening  func(events []string)
 	SetDirty      func(dirty bool)
-	Messages      *MessagesView
+	Messages      *messages.View
 	FocusName     func()
 }
 
@@ -34,7 +35,7 @@ func NewRequestView(
 	onListen func(req entity.SocketIORequest),
 	onChange func(name string, req entity.SocketIORequest),
 	onSave func(),
-	messages *MessagesView,
+	msgPane *messages.View,
 ) *RequestView {
 	var applying = true
 	var connected bool
@@ -245,11 +246,11 @@ func NewRequestView(
 	)
 	split := container.NewVSplit(
 		ui.NewMinSizeBox(fyne.NewSize(200, 80), container.NewPadded(requestPanel)),
-		ui.NewMinSizeBox(fyne.NewSize(200, 80), messages.Object()),
+		ui.NewMinSizeBox(fyne.NewSize(200, 80), msgPane.Object()),
 	)
 	split.SetOffset(0.55)
 
-	v := &RequestView{CanvasObject: split, Messages: messages}
+	v := &RequestView{CanvasObject: split, Messages: msgPane}
 	v.Get = getReq
 	v.SetDirty = header.SetDirty
 	v.FocusName = header.FocusName

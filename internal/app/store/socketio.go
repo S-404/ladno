@@ -413,21 +413,19 @@ func (s *SocketIOStore) appendMessage(key sioKey, msg SIOMessage) {
 	s.notifyMessageChange()
 }
 
-func (s *SocketIOStore) MessagesText(collectionID, itemID string, all bool) string {
+func (s *SocketIOStore) Messages(collectionID, itemID string) []StreamMessage {
 	s.mu.Lock()
 	list := append([]SIOMessage(nil), s.messages[sioKey{collectionID: collectionID, itemID: itemID}]...)
 	s.mu.Unlock()
-	if len(list) == 0 {
-		return ""
+	out := make([]StreamMessage, len(list))
+	for i, m := range list {
+		out[i] = StreamMessage{
+			Time: m.Time,
+			Dir:  m.Dir,
+			Body: utils.PrettyBody(m.Text, ""),
+		}
 	}
-	if !all {
-		list = list[len(list)-1:]
-	}
-	parts := make([]string, 0, len(list))
-	for _, m := range list {
-		parts = append(parts, formatSIOMessage(m))
-	}
-	return strings.Join(parts, "\n")
+	return out
 }
 
 func (s *SocketIOStore) ClearMessages(collectionID, itemID string) {

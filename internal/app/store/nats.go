@@ -407,39 +407,27 @@ func (s *NatsStore) appendMessageLocked(collectionID, subject, data string) {
 	s.mu.Unlock()
 }
 
-func (s *NatsStore) MessagesText(collectionID, subjectPattern string, all bool) string {
+func (s *NatsStore) Messages(collectionID, subjectPattern string) []StreamMessage {
 	subjectPattern = s.resolveEnvString(subjectPattern)
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	list := s.messages[collectionID]
-	matched := make([]NatsMessage, 0, len(list))
+	list := append([]NatsMessage(nil), s.messages[collectionID]...)
+	s.mu.Unlock()
+	out := make([]StreamMessage, 0, len(list))
 	for _, m := range list {
-		if subjectPattern == "" || natsSubjectMatch(subjectPattern, m.Subject) {
-			matched = append(matched, m)
+		if subjectPattern != "" && !natsSubjectMatch(subjectPattern, m.Subject) {
+			continue
 		}
+		out = append(out, StreamMessage{
+			Time: m.Time,
+			Dir:  "in",
+			Body: formatNatsBody(m),
+		})
 	}
-	if len(matched) == 0 {
-		return ""
-	}
-	limit := s.messageLimit()
-	if len(matched) > limit {
-		matched = matched[len(matched)-limit:]
-	}
-	format := func(m NatsMessage) string {
-		ts := m.Time.Format("15:04:05.000")
-		if m.Data == "" {
-			return "[" + ts + "]"
-		}
-		return "[" + ts + "] " + utils.PrettyBody(m.Data, "")
-	}
-	if !all {
-		return format(matched[len(matched)-1])
-	}
-	parts := make([]string, 0, len(matched))
-	for _, m := range matched {
-		parts = append(parts, format(m))
-	}
-	return strings.Join(parts, "\n")
+	return out
+}
+
+func formatNatsBody(m NatsMessage) string {
+	return utils.PrettyBody(m.Data, "")
 }
 
 func (s *NatsStore) ClearMessages(collectionID, subjectPattern string) {
