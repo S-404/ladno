@@ -26,6 +26,7 @@ type WorkspaceRepository struct {
 	mu         sync.RWMutex
 	workspaces []*entity.Workspace
 	store      *storage.Store
+	envRepo    *EnvRepository
 }
 
 func NewWorkspaceRepository(store *storage.Store) *WorkspaceRepository {
@@ -74,6 +75,10 @@ func (r *WorkspaceRepository) persistLocked() error {
 		Workspaces: cloneWorkspaceList(r.workspaces),
 	}
 	return r.store.SaveJSON(workspacesFileName, file)
+}
+
+func (r *WorkspaceRepository) SetEnvRepository(env *EnvRepository) {
+	r.envRepo = env
 }
 
 func (r *WorkspaceRepository) FindById(id string) *entity.Workspace {
@@ -186,6 +191,11 @@ func (r *WorkspaceRepository) Delete(id string) error {
 		if err := r.persistLocked(); err != nil {
 			r.workspaces = prev
 			return err
+		}
+		if r.envRepo != nil {
+			if envErr := r.envRepo.DeleteByWorkspace(id); envErr != nil {
+				log.Printf("[storage] delete workspace envs %s: %v", id, envErr)
+			}
 		}
 		return nil
 	}

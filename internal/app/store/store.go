@@ -20,11 +20,11 @@ type Store struct {
 
 func NewStore(svc *service.Service) *Store {
 	settingsStore := NewSettingsStore()
-	envStore := NewEnvStore(svc.Env, settingsStore)
 	logStore := NewLogStore(settingsStore)
 	wsStore := NewWorkspaceStore(svc.Workspace)
 	selStore := NewSelectionStore(wsStore)
 	cookieStore := NewCookieStore()
+	envStore := NewEnvStore(svc.Env, settingsStore, wsStore)
 	draftStore := NewDraftStore(wsStore, selStore, envStore)
 	envStore.SetDraftSync(draftStore)
 	return &Store{

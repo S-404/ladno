@@ -8,11 +8,12 @@ type EnvVariable struct {
 	IsSecret bool   `json:"isSecret,omitempty"`
 }
 
-// Env — именованный набор переменных для подстановки {{key}} в REST-запросах.
+// Env — именованный набор переменных для подстановки {{key}} в запросах.
 type Env struct {
-	Id        string        `json:"id"`
-	Name      string        `json:"name"`
-	Variables []EnvVariable `json:"variables"`
+	Id          string        `json:"id"`
+	WorkspaceId string        `json:"workspaceId,omitempty"`
+	Name        string        `json:"name"`
+	Variables   []EnvVariable `json:"variables"`
 }
 
 // EnvLightWeight — элемент списка без полного набора переменных.

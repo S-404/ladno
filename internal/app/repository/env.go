@@ -83,13 +83,19 @@ func (r *EnvRepository) persistLocked() error {
 	return nil
 }
 
-func (r *EnvRepository) FindAll() []*entity.Env {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+func (r *EnvRepository) FindAll(workspaceID string) []*entity.Env {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if workspaceID != "" {
+		r.adoptUnscopedLocked(workspaceID)
+	}
 
-	out := make([]*entity.Env, len(r.envs))
-	for i, e := range r.envs {
-		out[i] = cloneEnv(e)
+	out := make([]*entity.Env, 0, len(r.envs))
+	for _, e := range r.envs {
+		if e == nil || e.WorkspaceId != workspaceID {
+			continue
+		}
+		out = append(out, cloneEnv(e))
 	}
 	return out
 }
@@ -106,9 +112,13 @@ func (r *EnvRepository) FindById(id string) *entity.Env {
 	return nil
 }
 
-func (r *EnvRepository) Create(env *entity.Env) (*entity.Env, error) {
+func (r *EnvRepository) Create(workspaceID string, env *entity.Env) (*entity.Env, error) {
 	if env == nil {
 		return nil, fmt.Errorf("env is nil")
+	}
+	workspaceID = strings.TrimSpace(workspaceID)
+	if workspaceID == "" {
+		return nil, fmt.Errorf("workspace id is required")
 	}
 	name := strings.TrimSpace(env.Name)
 	if name == "" {
@@ -119,9 +129,10 @@ func (r *EnvRepository) Create(env *entity.Env) (*entity.Env, error) {
 	defer r.mu.Unlock()
 
 	created := &entity.Env{
-		Id:        newEnvID(),
-		Name:      name,
-		Variables: cloneVariables(env.Variables),
+		Id:          newEnvID(),
+		WorkspaceId: workspaceID,
+		Name:        name,
+		Variables:   cloneVariables(env.Variables),
 	}
 	r.envs = append(r.envs, created)
 	if err := r.persistLocked(); err != nil {
@@ -149,9 +160,10 @@ func (r *EnvRepository) Update(env *entity.Env) (*entity.Env, error) {
 		}
 		prev := r.envs[i]
 		updated := &entity.Env{
-			Id:        existing.Id,
-			Name:      name,
-			Variables: cloneVariables(env.Variables),
+			Id:          existing.Id,
+			WorkspaceId: existing.WorkspaceId,
+			Name:        name,
+			Variables:   cloneVariables(env.Variables),
 		}
 		r.envs[i] = updated
 		if err := r.persistLocked(); err != nil {
@@ -191,9 +203,10 @@ func (r *EnvRepository) Clone(id string) (*entity.Env, error) {
 			continue
 		}
 		cloned := &entity.Env{
-			Id:        newEnvID(),
-			Name:      e.Name + " (copy)",
-			Variables: cloneVariables(e.Variables),
+			Id:          newEnvID(),
+			WorkspaceId: e.WorkspaceId,
+			Name:        e.Name + " (copy)",
+			Variables:   cloneVariables(e.Variables),
 		}
 		r.envs = append(r.envs, cloned)
 		if err := r.persistLocked(); err != nil {
@@ -205,18 +218,35 @@ func (r *EnvRepository) Clone(id string) (*entity.Env, error) {
 	return nil, fmt.Errorf("env %s not found", id)
 }
 
-// Move ставит env с id на позицию toIndex (индекс после удаления из старого места).
-func (r *EnvRepository) Move(id string, toIndex int) error {
+// Move ставит env с id на позицию toIndex внутри workspace (индекс после удаления из старого места).
+func (r *EnvRepository) Move(workspaceID, id string, toIndex int) error {
 	if id == "" {
 		return fmt.Errorf("env id is required")
+	}
+	workspaceID = strings.TrimSpace(workspaceID)
+	if workspaceID == "" {
+		return fmt.Errorf("workspace id is required")
 	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
+	subset := make([]*entity.Env, 0, len(r.envs))
+	rest := make([]*entity.Env, 0, len(r.envs))
+	for _, e := range r.envs {
+		if e == nil {
+			continue
+		}
+		if e.WorkspaceId == workspaceID {
+			subset = append(subset, e)
+		} else {
+			rest = append(rest, e)
+		}
+	}
+
 	from := -1
-	for i, e := range r.envs {
-		if e != nil && e.Id == id {
+	for i, e := range subset {
+		if e.Id == id {
 			from = i
 			break
 		}
@@ -227,20 +257,114 @@ func (r *EnvRepository) Move(id string, toIndex int) error {
 	if toIndex < 0 {
 		toIndex = 0
 	}
-	if toIndex >= len(r.envs) {
-		toIndex = len(r.envs) - 1
+	if toIndex >= len(subset) {
+		toIndex = len(subset) - 1
 	}
 	if from == toIndex {
 		return nil
 	}
 
 	prev := append([]*entity.Env(nil), r.envs...)
-	r.envs = moveEnvSlice(r.envs, from, toIndex)
+	subset = moveEnvSlice(subset, from, toIndex)
+	r.envs = append(rest, subset...)
 	if err := r.persistLocked(); err != nil {
 		r.envs = prev
 		return err
 	}
 	return nil
+}
+
+func (r *EnvRepository) DeleteByWorkspace(workspaceID string) error {
+	workspaceID = strings.TrimSpace(workspaceID)
+	if workspaceID == "" {
+		return fmt.Errorf("workspace id is required")
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	next := make([]*entity.Env, 0, len(r.envs))
+	removed := false
+	for _, e := range r.envs {
+		if e != nil && e.WorkspaceId == workspaceID {
+			removed = true
+			continue
+		}
+		next = append(next, e)
+	}
+	if !removed {
+		return nil
+	}
+	prev := r.envs
+	r.envs = next
+	if err := r.persistLocked(); err != nil {
+		r.envs = prev
+		return err
+	}
+	return nil
+}
+
+// MigrateUnscoped copies envs without workspaceId into every known workspace.
+// The first workspace keeps original IDs so a stored active env still resolves.
+func (r *EnvRepository) MigrateUnscoped(workspaceIDs []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(workspaceIDs) == 0 {
+		return
+	}
+
+	unscoped := make([]*entity.Env, 0)
+	scoped := make([]*entity.Env, 0, len(r.envs))
+	for _, e := range r.envs {
+		if e == nil {
+			continue
+		}
+		if strings.TrimSpace(e.WorkspaceId) == "" {
+			unscoped = append(unscoped, cloneEnv(e))
+		} else {
+			scoped = append(scoped, e)
+		}
+	}
+	if len(unscoped) == 0 {
+		return
+	}
+
+	next := scoped
+	for i, wsID := range workspaceIDs {
+		wsID = strings.TrimSpace(wsID)
+		if wsID == "" {
+			continue
+		}
+		for _, e := range unscoped {
+			cp := cloneEnv(e)
+			cp.WorkspaceId = wsID
+			if i > 0 {
+				cp.Id = newEnvID()
+			}
+			next = append(next, cp)
+		}
+	}
+	r.envs = next
+	if err := r.persistLocked(); err != nil {
+		log.Printf("[storage] env migrate unscoped: %v", err)
+	}
+}
+
+func (r *EnvRepository) adoptUnscopedLocked(workspaceID string) {
+	changed := false
+	for _, e := range r.envs {
+		if e == nil || strings.TrimSpace(e.WorkspaceId) != "" {
+			continue
+		}
+		e.WorkspaceId = workspaceID
+		changed = true
+	}
+	if !changed {
+		return
+	}
+	if err := r.persistLocked(); err != nil {
+		log.Printf("[storage] env adopt unscoped: %v", err)
+	}
 }
 
 func moveEnvSlice(items []*entity.Env, from, to int) []*entity.Env {
@@ -273,9 +397,10 @@ func cloneEnv(e *entity.Env) *entity.Env {
 		return nil
 	}
 	return &entity.Env{
-		Id:        e.Id,
-		Name:      e.Name,
-		Variables: cloneVariables(e.Variables),
+		Id:          e.Id,
+		WorkspaceId: e.WorkspaceId,
+		Name:        e.Name,
+		Variables:   cloneVariables(e.Variables),
 	}
 }
 

@@ -1,19 +1,22 @@
 package store
 
 import (
+	"encoding/json"
+
 	"fyne.io/fyne/v2"
 	uitheme "github.com/s-404/ladno/internal/app/theme"
 )
 
 const (
-	prefMessageLimitKey    = "messageHistoryLimit"
-	prefThemeKey           = "uiTheme"
-	prefFontSizeKey        = "uiFontSize"
-	prefLastWorkspaceKey   = "lastWorkspaceId"
-	prefActiveEnvKey       = "activeEnvId"
-	defaultMessageLimit    = 1000
-	minMessageLimit        = 10
-	maxMessageLimitAllowed = 100000
+	prefMessageLimitKey         = "messageHistoryLimit"
+	prefThemeKey                = "uiTheme"
+	prefFontSizeKey             = "uiFontSize"
+	prefLastWorkspaceKey        = "lastWorkspaceId"
+	prefActiveEnvKey            = "activeEnvId"
+	prefActiveEnvByWorkspaceKey = "activeEnvByWorkspace"
+	defaultMessageLimit         = 1000
+	minMessageLimit             = 10
+	maxMessageLimitAllowed      = 100000
 
 	ThemeLight = "light"
 	ThemeDark  = "dark"
@@ -86,12 +89,45 @@ func (s *SettingsStore) SetLastWorkspaceID(id string) {
 	s.prefs().SetString(prefLastWorkspaceKey, id)
 }
 
-func (s *SettingsStore) GetActiveEnvID() string {
+func (s *SettingsStore) GetActiveEnvID(workspaceID string) string {
+	if workspaceID == "" {
+		return ""
+	}
+	m := s.activeEnvByWorkspace()
+	if id := m[workspaceID]; id != "" {
+		return id
+	}
 	return s.prefs().String(prefActiveEnvKey)
 }
 
-func (s *SettingsStore) SetActiveEnvID(id string) {
-	s.prefs().SetString(prefActiveEnvKey, id)
+func (s *SettingsStore) SetActiveEnvID(workspaceID, id string) {
+	if workspaceID == "" {
+		return
+	}
+	m := s.activeEnvByWorkspace()
+	if id == "" {
+		delete(m, workspaceID)
+	} else {
+		m[workspaceID] = id
+	}
+	raw, err := json.Marshal(m)
+	if err != nil {
+		return
+	}
+	s.prefs().SetString(prefActiveEnvByWorkspaceKey, string(raw))
+}
+
+func (s *SettingsStore) activeEnvByWorkspace() map[string]string {
+	m := map[string]string{}
+	raw := s.prefs().String(prefActiveEnvByWorkspaceKey)
+	if raw == "" {
+		return m
+	}
+	_ = json.Unmarshal([]byte(raw), &m)
+	if m == nil {
+		return map[string]string{}
+	}
+	return m
 }
 
 func clampMessageLimit(n int) int {

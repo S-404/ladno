@@ -6,13 +6,13 @@ import (
 
 // envRepository is the persistence surface EnvService needs.
 type envRepository interface {
-	FindAll() []*entity.Env
+	FindAll(workspaceID string) []*entity.Env
 	FindById(id string) *entity.Env
-	Create(env *entity.Env) (*entity.Env, error)
+	Create(workspaceID string, env *entity.Env) (*entity.Env, error)
 	Update(env *entity.Env) (*entity.Env, error)
 	Delete(id string) error
 	Clone(id string) (*entity.Env, error)
-	Move(id string, toIndex int) error
+	Move(workspaceID, id string, toIndex int) error
 }
 
 type EnvService struct {
@@ -23,9 +23,9 @@ func NewEnvService(repo envRepository) *EnvService {
 	return &EnvService{repo: repo}
 }
 
-func (s *EnvService) List(cb func([]*entity.Env, error)) {
+func (s *EnvService) List(workspaceID string, cb func([]*entity.Env, error)) {
 	go func() {
-		cb(s.repo.FindAll(), nil)
+		cb(s.repo.FindAll(workspaceID), nil)
 	}()
 }
 
@@ -35,9 +35,9 @@ func (s *EnvService) Find(id string, cb func(*entity.Env, error)) {
 	}()
 }
 
-func (s *EnvService) Create(env *entity.Env, cb func(*entity.Env, error)) {
+func (s *EnvService) Create(workspaceID string, env *entity.Env, cb func(*entity.Env, error)) {
 	go func() {
-		cb(s.repo.Create(env))
+		cb(s.repo.Create(workspaceID, env))
 	}()
 }
 
@@ -59,8 +59,8 @@ func (s *EnvService) Clone(id string, cb func(*entity.Env, error)) {
 	}()
 }
 
-func (s *EnvService) Move(id string, toIndex int, cb func(error)) {
+func (s *EnvService) Move(workspaceID, id string, toIndex int, cb func(error)) {
 	go func() {
-		cb(s.repo.Move(id, toIndex))
+		cb(s.repo.Move(workspaceID, id, toIndex))
 	}()
 }

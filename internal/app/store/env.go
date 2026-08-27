@@ -13,18 +13,24 @@ import (
 
 // envService is the async persistence surface EnvStore needs.
 type envService interface {
-	List(cb func([]*entity.Env, error))
-	Create(env *entity.Env, cb func(*entity.Env, error))
+	List(workspaceID string, cb func([]*entity.Env, error))
+	Create(workspaceID string, env *entity.Env, cb func(*entity.Env, error))
 	Update(env *entity.Env, cb func(*entity.Env, error))
 	Delete(id string, cb func(error))
 	Clone(id string, cb func(*entity.Env, error))
-	Move(id string, toIndex int, cb func(error))
+	Move(workspaceID, id string, toIndex int, cb func(error))
 }
 
 // envSettings is the preferences surface EnvStore needs.
 type envSettings interface {
-	GetActiveEnvID() string
-	SetActiveEnvID(id string)
+	GetActiveEnvID(workspaceID string) string
+	SetActiveEnvID(workspaceID, id string)
+}
+
+// envWorkspace is the current workspace EnvStore scopes envs to.
+type envWorkspace interface {
+	GetItem() binding.Untyped
+	GetSelectedWorkspace() *entity.Workspace
 }
 
 // envDraftSync keeps open env drafts in sync with script-driven env writes.
@@ -34,16 +40,19 @@ type envDraftSync interface {
 }
 
 type EnvStore struct {
-	Items      binding.UntypedList
-	Selected   binding.Untyped
-	ActiveID   binding.String
-	IsFetching binding.Bool
-	envService envService
-	settings   envSettings
-	draftSync  envDraftSync
+	Items       binding.UntypedList
+	Selected    binding.Untyped
+	ActiveID    binding.String
+	IsFetching  binding.Bool
+	envService  envService
+	settings    envSettings
+	workspace   envWorkspace
+	draftSync   envDraftSync
+	workspaceID string
+	listGen     uint64
 }
 
-func NewEnvStore(svc envService, settings envSettings) *EnvStore {
+func NewEnvStore(svc envService, settings envSettings, workspace envWorkspace) *EnvStore {
 	s := &EnvStore{
 		Items:      binding.NewUntypedList(),
 		Selected:   binding.NewUntyped(),
@@ -51,11 +60,10 @@ func NewEnvStore(svc envService, settings envSettings) *EnvStore {
 		IsFetching: binding.NewBool(),
 		envService: svc,
 		settings:   settings,
+		workspace:  workspace,
 	}
-	if settings != nil {
-		if id := settings.GetActiveEnvID(); id != "" {
-			_ = s.ActiveID.Set(id)
-		}
+	if workspace != nil {
+		workspace.GetItem().AddListener(binding.NewDataListener(s.onWorkspaceChanged))
 	}
 	return s
 }
@@ -80,13 +88,49 @@ func (s *EnvStore) GetIsFetching() *binding.Bool {
 	return &s.IsFetching
 }
 
-func (s *EnvStore) FetchList() {
-	if fetching, _ := s.IsFetching.Get(); fetching {
+func (s *EnvStore) onWorkspaceChanged() {
+	id := ""
+	if s.workspace != nil {
+		if ws := s.workspace.GetSelectedWorkspace(); ws != nil {
+			id = ws.Id
+		}
+	}
+	if id == s.workspaceID {
 		return
 	}
+	s.workspaceID = id
+	s.listGen++
+	_ = s.Selected.Set(nil)
+	if id == "" {
+		_ = s.IsFetching.Set(false)
+		_ = s.Items.Set(nil)
+		_ = s.ActiveID.Set("")
+		return
+	}
+	active := ""
+	if s.settings != nil {
+		active = s.settings.GetActiveEnvID(id)
+	}
+	_ = s.ActiveID.Set(active)
+	s.FetchList()
+}
+
+func (s *EnvStore) FetchList() {
+	if s.workspaceID == "" {
+		_ = s.Items.Set(nil)
+		_ = s.ActiveID.Set("")
+		_ = s.Selected.Set(nil)
+		return
+	}
+	s.listGen++
+	gen := s.listGen
+	wsID := s.workspaceID
 	_ = s.IsFetching.Set(true)
-	s.envService.List(func(data []*entity.Env, err error) {
+	s.envService.List(wsID, func(data []*entity.Env, err error) {
 		fyne.Do(func() {
+			if gen != s.listGen {
+				return
+			}
 			defer s.IsFetching.Set(false)
 			if err != nil {
 				fmt.Printf("env list error: %v\n", err)
@@ -106,7 +150,6 @@ func (s *EnvStore) FetchList() {
 				activeID = data[0].Id
 			}
 			if sel := s.selectedEnv(); sel == nil && len(data) > 0 {
-				// Prefer active env as selected when opening list.
 				for _, env := range data {
 					if env != nil && env.Id == activeID {
 						_ = s.Selected.Set(env)
@@ -139,7 +182,10 @@ func (s *EnvStore) SetActive(id string) {
 }
 
 func (s *EnvStore) Create(name string) {
-	s.envService.Create(&entity.Env{Name: name, Variables: []entity.EnvVariable{}}, func(created *entity.Env, err error) {
+	if s.workspaceID == "" {
+		return
+	}
+	s.envService.Create(s.workspaceID, &entity.Env{Name: name, Variables: []entity.EnvVariable{}}, func(created *entity.Env, err error) {
 		fyne.Do(func() {
 			if err != nil {
 				fmt.Printf("env create error: %v\n", err)
@@ -302,7 +348,7 @@ func (s *EnvStore) MoveEnv(id string, toIndex int) bool {
 	// EnvList applies the order locally; we still update Items for Get()/persist path.
 	_ = s.Items.Set(items)
 
-	s.envService.Move(id, toIndex, func(err error) {
+	s.envService.Move(s.workspaceID, id, toIndex, func(err error) {
 		if err != nil {
 			fyne.Do(func() {
 				fmt.Printf("env move error: %v\n", err)
@@ -452,8 +498,8 @@ func (s *EnvStore) removeItem(id string) {
 }
 
 func (s *EnvStore) persistActiveID(id string) {
-	if s.settings != nil {
-		s.settings.SetActiveEnvID(id)
+	if s.settings != nil && s.workspaceID != "" {
+		s.settings.SetActiveEnvID(s.workspaceID, id)
 	}
 }
 

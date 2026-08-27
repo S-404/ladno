@@ -171,3 +171,25 @@ func TestWorkspaceRepositoryDeletePersists(t *testing.T) {
 		t.Fatal("deleted workspace still present after reload")
 	}
 }
+
+func TestWorkspaceDeleteRemovesEnvs(t *testing.T) {
+	store, err := storage.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	repos := NewRepositoryWithStorage(store)
+	ws, err := repos.Workspace.Create("Other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env, err := repos.Env.Create(ws.Id, &entity.Env{Name: "Only here"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := repos.Workspace.Delete(ws.Id); err != nil {
+		t.Fatal(err)
+	}
+	if repos.Env.FindById(env.Id) != nil {
+		t.Fatal("env should be deleted with workspace")
+	}
+}
