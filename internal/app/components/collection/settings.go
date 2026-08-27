@@ -66,7 +66,7 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 
 	var currentType constants.CollectionType
 	var connected bool
-	var authPanel *ui.AuthPanel
+	var authPanelFor func(t constants.CollectionType) *ui.AuthPanel
 	content := container.NewStack()
 
 	notify := func() {
@@ -106,17 +106,45 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 			}
 			out.Auth = entity.Auth{Type: constants.AuthTypeNoAuth}
 		default:
-			if authPanel != nil {
-				out.Auth = authPanel.Get()
+			if authPanelFor == nil {
+				break
+			}
+			if p := authPanelFor(currentType); p != nil {
+				out.Auth = p.Get()
 			}
 		}
 		return out
 	}
 
-	authPanel = ui.NewAuthPanel(ui.AuthPanelOptions{
+	authNotify := func(entity.Auth) { notify() }
+	applying = true
+	restAuthPanel := ui.NewAuthPanel(ui.AuthPanelOptions{
 		AllowInherited: false,
-		OnChange:       func(entity.Auth) { notify() },
+		OnChange:       authNotify,
 	})
+	grpcAuthPanel := ui.NewAuthPanel(ui.AuthPanelOptions{
+		AllowInherited: false,
+		DisableAPIKey:  true,
+		OnChange:       authNotify,
+	})
+	sioAuthPanel := ui.NewAuthPanel(ui.AuthPanelOptions{
+		AllowInherited:   false,
+		DisableBasic:     true,
+		AllowJSON:        true,
+		APIKeyHeaderOnly: true,
+		OnChange:         authNotify,
+	})
+	authPanelFor = func(t constants.CollectionType) *ui.AuthPanel {
+		switch constants.NormalizeCollectionType(t) {
+		case constants.CollectionTypeGRPC:
+			return grpcAuthPanel
+		case constants.CollectionTypeSocketIO:
+			return sioAuthPanel
+		default:
+			return restAuthPanel
+		}
+	}
+	applying = false
 
 	hostEntry.OnChanged(func(string) { notify() })
 	portEntry.OnChanged(func(string) { notify() })
@@ -197,7 +225,7 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 			))
 			tabs := container.NewAppTabs(
 				container.NewTabItem("General", general),
-				container.NewTabItem("Auth", authPanel.CanvasObject),
+				container.NewTabItem("Auth", authPanelFor(currentType).CanvasObject),
 			)
 			content.Objects = []fyne.CanvasObject{
 				container.NewBorder(header.Object, nil, nil, nil, tabs),
@@ -217,7 +245,7 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 		applying = true
 		currentType = constants.NormalizeCollectionType(colType)
 		header.SetName(name)
-		typeLabel.SetText(string(currentType))
+		typeLabel.SetText(constants.CollectionTypeLabel(currentType))
 		connStatus.SetText("")
 		setConnected(isConnected)
 		if isConnected && isConnectable() {
@@ -246,7 +274,7 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 			passwordEntry.SetText(kafka.Password)
 			tlsCheck.SetChecked(kafka.TLS)
 		default:
-			authPanel.Set(auth)
+			authPanelFor(currentType).Set(auth)
 		}
 		applying = false
 		render()

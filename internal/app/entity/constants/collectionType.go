@@ -3,22 +3,32 @@ package constants
 type CollectionType string
 
 const (
-	CollectionTypeHTTP  CollectionType = "http"
-	CollectionTypeNATS  CollectionType = "nats"
-	CollectionTypeKafka CollectionType = "kafka"
+	CollectionTypeREST     CollectionType = "rest"
+	CollectionTypeWS       CollectionType = "ws"
+	CollectionTypeSocketIO CollectionType = "socketio"
+	CollectionTypeGRPC     CollectionType = "grpc"
+	CollectionTypeNATS     CollectionType = "nats"
+	CollectionTypeKafka    CollectionType = "kafka"
 )
 
 func NormalizeCollectionType(t CollectionType) CollectionType {
 	switch t {
-	case CollectionTypeNATS, CollectionTypeKafka:
+	case CollectionTypeREST, CollectionTypeWS, CollectionTypeSocketIO, CollectionTypeGRPC,
+		CollectionTypeNATS, CollectionTypeKafka:
 		return t
 	default:
-		return CollectionTypeHTTP
+		return CollectionTypeREST
 	}
 }
 
+// IsHTTPCollection is true for REST, WebSocket, Socket.IO, and gRPC collections.
 func IsHTTPCollection(t CollectionType) bool {
-	return NormalizeCollectionType(t) == CollectionTypeHTTP
+	switch NormalizeCollectionType(t) {
+	case CollectionTypeREST, CollectionTypeWS, CollectionTypeSocketIO, CollectionTypeGRPC:
+		return true
+	default:
+		return false
+	}
 }
 
 type RequestKind string
@@ -38,24 +48,60 @@ func RequestKindForCollection(t CollectionType) RequestKind {
 		return RequestKindNATS
 	case CollectionTypeKafka:
 		return RequestKindKafka
+	case CollectionTypeGRPC:
+		return RequestKindGRPC
+	case CollectionTypeWS:
+		return RequestKindWS
+	case CollectionTypeSocketIO:
+		return RequestKindSocketIO
 	default:
 		return RequestKindREST
 	}
 }
 
-// AddRequestMenuLabel — пункт контекстного меню «добавить» для NATS/Kafka.
+func CollectionTypeForKind(k RequestKind) CollectionType {
+	switch k {
+	case RequestKindNATS:
+		return CollectionTypeNATS
+	case RequestKindKafka:
+		return CollectionTypeKafka
+	case RequestKindGRPC:
+		return CollectionTypeGRPC
+	case RequestKindWS:
+		return CollectionTypeWS
+	case RequestKindSocketIO:
+		return CollectionTypeSocketIO
+	default:
+		return CollectionTypeREST
+	}
+}
+
+func CollectionTypeLabel(t CollectionType) string {
+	switch NormalizeCollectionType(t) {
+	case CollectionTypeSocketIO:
+		return "socket.io"
+	default:
+		return string(NormalizeCollectionType(t))
+	}
+}
+
 func AddRequestMenuLabel(t CollectionType) string {
 	switch NormalizeCollectionType(t) {
 	case CollectionTypeNATS:
 		return "Add subject"
 	case CollectionTypeKafka:
 		return "Add topic"
+	case CollectionTypeGRPC:
+		return "Add method"
+	case CollectionTypeWS:
+		return "Add connection"
+	case CollectionTypeSocketIO:
+		return "Add Socket.IO"
 	default:
 		return "Add request"
 	}
 }
 
-// DefaultNewRequestName — имя нового item по виду запроса.
 func DefaultNewRequestName(kind RequestKind) string {
 	switch kind {
 	case RequestKindNATS:

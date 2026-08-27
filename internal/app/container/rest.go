@@ -173,7 +173,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 			headersView.SetAuto(nil)
 			return
 		}
-		resolved := resolveRESTAuth(app, sel.CollectionID, sel.ItemID, authPanel.Get())
+		resolved := resolveInheritedAuth(app, sel.CollectionID, sel.ItemID, authPanel.Get())
 		auto := entity.AuthGeneratedHeaders(resolved)
 		rows := make([]ui.KVRow, 0, len(auto)+1)
 		for _, h := range auto {
@@ -489,9 +489,6 @@ func uniqueCookieName(existing []entity.Cookie, domain, base string) string {
 
 func isRESTRequest(sel *entity.Selection) bool {
 	if sel == nil || sel.Kind != entity.SelectionRequest {
-		return false
-	}
-	if !constants.IsHTTPCollection(sel.CollectionType) {
 		return false
 	}
 	return sel.Request != nil && sel.Request.Kind() == constants.RequestKindREST

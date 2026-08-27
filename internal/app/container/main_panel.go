@@ -152,12 +152,17 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		app.Window,
 		func(req entity.GrpcRequest, auth entity.Auth, event entity.Event) {
 			syncGrpcScriptDot()
+			sel := currentSelection(selStore.GetSelection())
+			resolved := auth
+			if sel != nil {
+				resolved = resolveInheritedAuth(app, sel.CollectionID, sel.ItemID, auth)
+			}
 			grpcStore.Send(entity.GrpcCall{
 				Target:      req.Target,
 				Method:      req.Method,
 				Message:     req.Message,
 				Metadata:    req.Metadata,
-				Auth:        auth,
+				Auth:        resolved,
 				ProtoFiles:  req.ProtoFiles,
 				ActiveProto: req.ActiveProto,
 				PreRequest:  event.PreRequest,
@@ -391,6 +396,7 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			}
 			sioCollectionID = sel.CollectionID
 			sioItemID = sel.ItemID
+			req.Auth = resolveInheritedAuth(app, sel.CollectionID, sel.ItemID, req.Auth)
 			sioPanel.SetConnecting(true)
 			sioConnStore.Connect(sel.CollectionID, sel.ItemID, req, func(ok bool, status string) {
 				selNow := currentSelection(selStore.GetSelection())

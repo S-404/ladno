@@ -206,7 +206,7 @@ func (ct *Tree) updateTreeRow(uid widget.TreeNodeID, obj fyne.CanvasObject) {
 		label = ct.dirty.ResolveLabel(n.collectionID, itemID, isCol, isFolder, n.label)
 	}
 	if isCol {
-		row.typeLabel.SetText(string(constants.NormalizeCollectionType(n.colType)))
+		row.typeLabel.SetText(constants.CollectionTypeLabel(n.colType))
 		row.typeLabel.Show()
 	} else {
 		row.typeLabel.SetText("")
@@ -334,7 +334,7 @@ func (ct *Tree) beginDrag(uid string) {
 	res := theme.DocumentIcon()
 	if kind == nodeCollection {
 		res = theme.ListIcon()
-		label = string(constants.NormalizeCollectionType(colType)) + " " + label
+		label = constants.CollectionTypeLabel(colType) + " " + label
 	} else if kind == nodeFolder {
 		res = theme.FolderIcon()
 	}

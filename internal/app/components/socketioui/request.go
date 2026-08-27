@@ -75,6 +75,7 @@ func NewRequestView(
 	headersView = rest.NewRequestHeaders(nil, func([]ui.KVRow) { notify() })
 	paramsView = rest.NewRequestQueryParams(requestURL)
 	authPanel = ui.NewAuthPanel(ui.AuthPanelOptions{
+		AllowInherited:   true,
 		DisableBasic:     true,
 		AllowJSON:        true,
 		APIKeyHeaderOnly: true,

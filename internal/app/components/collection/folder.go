@@ -38,7 +38,7 @@ func NewFolderView(onChange func(name string, auth entity.Auth), onSave func(nam
 		AllowInherited: true,
 		OnChange:       func(entity.Auth) { notify() },
 	})
-	noAuthHint := widget.NewLabel("Auth is available only for HTTP collections.")
+	noAuthHint := widget.NewLabel("Auth is available only for REST, WebSocket, Socket.IO, and gRPC collections.")
 	noAuthHint.TextStyle = fyne.TextStyle{Italic: true}
 	body := container.NewStack(authPanel.CanvasObject, container.NewPadded(noAuthHint))
 

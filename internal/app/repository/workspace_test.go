@@ -27,7 +27,7 @@ func TestWorkspaceRepositoryPersistsCollectionsAcrossReload(t *testing.T) {
 	ws.Collections = append(ws.Collections, entity.Collection{
 		Id:   "col-persist-1",
 		Name: "API",
-		Type: constants.CollectionTypeHTTP,
+		Type: constants.CollectionTypeREST,
 		Items: []entity.CollectionItem{
 			{
 				Id:   "req-1",
@@ -78,7 +78,7 @@ func TestWorkspaceRepositoryPersistsCollectionsAcrossReload(t *testing.T) {
 	if found == nil {
 		t.Fatal("collection missing after reload")
 	}
-	if found.Name != "API" || found.Type != constants.CollectionTypeHTTP {
+	if found.Name != "API" || found.Type != constants.CollectionTypeREST {
 		t.Fatalf("unexpected collection: %+v", found)
 	}
 	if len(found.Items) != 2 {
@@ -104,7 +104,7 @@ func TestWorkspaceRepositorySaveIsIsolatedFromCaller(t *testing.T) {
 	ws.Collections = append(ws.Collections, entity.Collection{
 		Id:   "iso-1",
 		Name: "Iso",
-		Type: constants.CollectionTypeHTTP,
+		Type: constants.CollectionTypeREST,
 	})
 	if err := repo.Save(ws); err != nil {
 		t.Fatal(err)

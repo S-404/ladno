@@ -136,16 +136,18 @@ func SocketIOAuthJSON(auth Auth, legacy string) string {
 // EffectiveSocketIOAuth maps a leftover authJson field onto JSON auth when type is unset.
 func EffectiveSocketIOAuth(auth Auth, legacyJSON string) Auth {
 	t := constants.NormalizeAuthType(auth.Type)
-	if t == constants.AuthTypeInherited || t == constants.AuthTypeNoAuth || t == "" {
-		if js := strings.TrimSpace(legacyJSON); js != "" {
-			return Auth{
-				Type: constants.AuthTypeJSON,
-				Data: []Variable{{Key: constants.AuthDataJSON, Value: js, Type: "string"}},
-			}
+	js := strings.TrimSpace(legacyJSON)
+	if t == constants.AuthTypeJSON {
+		return auth
+	}
+	if js != "" && (t == constants.AuthTypeNoAuth || t == "" || t == constants.AuthTypeInherited) {
+		return Auth{
+			Type: constants.AuthTypeJSON,
+			Data: []Variable{{Key: constants.AuthDataJSON, Value: js, Type: "string"}},
 		}
-		if t == constants.AuthTypeInherited || t == "" {
-			return Auth{Type: constants.AuthTypeNoAuth}
-		}
+	}
+	if t == "" {
+		return Auth{Type: constants.AuthTypeNoAuth}
 	}
 	return auth
 }

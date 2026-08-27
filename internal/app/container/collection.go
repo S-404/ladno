@@ -367,7 +367,10 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 	})
 
 	addMenu := fyne.NewMenu("",
-		fyne.NewMenuItem("HTTP collection", func() { createCollection(constants.CollectionTypeHTTP) }),
+		fyne.NewMenuItem("REST collection", func() { createCollection(constants.CollectionTypeREST) }),
+		fyne.NewMenuItem("WebSocket collection", func() { createCollection(constants.CollectionTypeWS) }),
+		fyne.NewMenuItem("Socket.IO collection", func() { createCollection(constants.CollectionTypeSocketIO) }),
+		fyne.NewMenuItem("gRPC collection", func() { createCollection(constants.CollectionTypeGRPC) }),
 		fyne.NewMenuItem("NATS collection", func() { createCollection(constants.CollectionTypeNATS) }),
 		fyne.NewMenuItem("Kafka collection", func() { createCollection(constants.CollectionTypeKafka) }),
 	)
@@ -453,29 +456,11 @@ func addItemMenuItems(
 	parentItemID, parentUID string,
 	addRequest func(collectionID, parentItemID, parentUID string, kind constants.RequestKind),
 ) []*fyne.MenuItem {
-	switch constants.NormalizeCollectionType(col.Type) {
-	case constants.CollectionTypeNATS, constants.CollectionTypeKafka:
-		kind := constants.RequestKindForCollection(col.Type)
-		return []*fyne.MenuItem{
-			fyne.NewMenuItem(constants.AddRequestMenuLabel(col.Type), func() {
-				addRequest(col.Id, parentItemID, parentUID, kind)
-			}),
-		}
-	default:
-		return []*fyne.MenuItem{
-			fyne.NewMenuItem("Add request", func() {
-				addRequest(col.Id, parentItemID, parentUID, constants.RequestKindREST)
-			}),
-			fyne.NewMenuItem("Add WS connection", func() {
-				addRequest(col.Id, parentItemID, parentUID, constants.RequestKindWS)
-			}),
-			fyne.NewMenuItem("Add Socket.IO connection", func() {
-				addRequest(col.Id, parentItemID, parentUID, constants.RequestKindSocketIO)
-			}),
-			fyne.NewMenuItem("Add gRPC method", func() {
-				addRequest(col.Id, parentItemID, parentUID, constants.RequestKindGRPC)
-			}),
-		}
+	kind := constants.RequestKindForCollection(col.Type)
+	return []*fyne.MenuItem{
+		fyne.NewMenuItem(constants.AddRequestMenuLabel(col.Type), func() {
+			addRequest(col.Id, parentItemID, parentUID, kind)
+		}),
 	}
 }
 

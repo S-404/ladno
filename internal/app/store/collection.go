@@ -323,15 +323,7 @@ func (s *SelectionStore) AddRequest(collectionID, parentItemID string, kind cons
 	if !ok {
 		return "", nil, false
 	}
-	if constants.IsHTTPCollection(col.Type) {
-		switch kind {
-		case constants.RequestKindREST, constants.RequestKindGRPC, constants.RequestKindWS, constants.RequestKindSocketIO:
-		default:
-			kind = constants.RequestKindREST
-		}
-	} else {
-		kind = constants.RequestKindForCollection(col.Type)
-	}
+	kind = constants.RequestKindForCollection(col.Type)
 	return s.addItem(collectionID, parentItemID, newRequestItem(kind))
 }
 

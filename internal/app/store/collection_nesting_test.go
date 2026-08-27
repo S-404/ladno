@@ -20,7 +20,7 @@ func httpWorkspace(items ...entity.CollectionItem) *entity.Workspace {
 			{
 				Id:    "c1",
 				Name:  "HTTP",
-				Type:  constants.CollectionTypeHTTP,
+				Type:  constants.CollectionTypeREST,
 				Items: items,
 			},
 		},

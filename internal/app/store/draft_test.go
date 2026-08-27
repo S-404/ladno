@@ -49,7 +49,7 @@ func TestDraftRequestSaveAndDirty(t *testing.T) {
 		Id: "ws",
 		Collections: []entity.Collection{{
 			Id:   "c1",
-			Type: constants.CollectionTypeHTTP,
+			Type: constants.CollectionTypeREST,
 			Name: entity.DefaultNewCollectionName,
 			Items: []entity.CollectionItem{{
 				Id:   "r1",
@@ -196,7 +196,7 @@ func TestCreateDefaultNames(t *testing.T) {
 	ws := &entity.Workspace{Id: "ws"}
 	mem := &memWS{ws: ws}
 	sel := newDraftTestSelection(mem)
-	id, ok := sel.CreateCollection(constants.CollectionTypeHTTP)
+	id, ok := sel.CreateCollection(constants.CollectionTypeREST)
 	if !ok || id == "" {
 		t.Fatal("create collection")
 	}
@@ -213,7 +213,7 @@ func TestDirtyOnlyEditedIDs(t *testing.T) {
 		Id: "ws",
 		Collections: []entity.Collection{{
 			Id:   "c1",
-			Type: constants.CollectionTypeHTTP,
+			Type: constants.CollectionTypeREST,
 			Name: "Col",
 			Items: []entity.CollectionItem{
 				{Id: "r1", Name: "A", Request: &entity.ItemRequest{Method: constants.GET}},
@@ -259,7 +259,7 @@ func TestPutRequestDraftEquivalentNotDirty(t *testing.T) {
 		Id: "ws",
 		Collections: []entity.Collection{{
 			Id:    "c1",
-			Type:  constants.CollectionTypeHTTP,
+			Type:  constants.CollectionTypeREST,
 			Items: []entity.CollectionItem{{Id: "r1", Name: "R", Request: req}},
 		}},
 	}

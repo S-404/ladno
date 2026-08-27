@@ -5,8 +5,8 @@ import (
 	"github.com/s-404/ladno/internal/app/entity/shared"
 )
 
-// resolveRESTAuth walks request → parent folders → collection, preferring drafts.
-func resolveRESTAuth(app *shared.App, collectionID, itemID string, requestAuth entity.Auth) entity.Auth {
+// resolveInheritedAuth walks request → parent folders → collection, preferring drafts.
+func resolveInheritedAuth(app *shared.App, collectionID, itemID string, requestAuth entity.Auth) entity.Auth {
 	ws := app.Store.Workspace.GetSelectedWorkspace()
 	if ws == nil {
 		return entity.ResolveAuth([]entity.Auth{requestAuth})
@@ -59,6 +59,6 @@ func itemPath(items []entity.CollectionItem, id string) []string {
 }
 
 func applyRESTAuth(app *shared.App, req entity.RestRequest, collectionID, itemID string, requestAuth entity.Auth) entity.RestRequest {
-	req.Auth = resolveRESTAuth(app, collectionID, itemID, requestAuth)
+	req.Auth = resolveInheritedAuth(app, collectionID, itemID, requestAuth)
 	return req
 }

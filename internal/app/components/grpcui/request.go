@@ -74,8 +74,9 @@ func NewRequestView(
 	meta = ui.NewKVTable(nil, func([]ui.KVRow) { notify() })
 	scriptView = scripttab.NewScriptView(func(entity.Event) { notify() })
 	authPanel = ui.NewAuthPanel(ui.AuthPanelOptions{
-		DisableAPIKey: true,
-		OnChange:      func(entity.Auth) { notify() },
+		AllowInherited: true,
+		DisableAPIKey:  true,
+		OnChange:       func(entity.Auth) { notify() },
 	})
 	responseView = NewResponseView()
 

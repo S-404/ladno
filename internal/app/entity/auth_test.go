@@ -113,6 +113,10 @@ func TestEffectiveSocketIOAuth(t *testing.T) {
 	if got.Type != constants.AuthTypeJSON || AuthVar(got.Data, constants.AuthDataJSON) != `{"token":"x"}` {
 		t.Fatalf("%+v", got)
 	}
+	got = EffectiveSocketIOAuth(Auth{Type: constants.AuthTypeInherited}, "")
+	if got.Type != constants.AuthTypeInherited {
+		t.Fatalf("keep inherited: %+v", got)
+	}
 	got = EffectiveSocketIOAuth(Auth{Type: constants.AuthTypeBearer, Data: []Variable{{Key: constants.AuthDataToken, Value: "t"}}}, `{"x":1}`)
 	if got.Type != constants.AuthTypeBearer {
 		t.Fatalf("keep bearer: %+v", got)

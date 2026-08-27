@@ -35,7 +35,7 @@ func TestRelocateItemIntoNestedFolderBeforeSibling(t *testing.T) {
 			{
 				Id:   "c-rest",
 				Name: "REST",
-				Type: constants.CollectionTypeHTTP,
+				Type: constants.CollectionTypeREST,
 				Items: []entity.CollectionItem{
 					{
 						Id:   "f-1",
@@ -85,7 +85,7 @@ func TestRelocateItemIntoFolderAppend(t *testing.T) {
 		Collections: []entity.Collection{
 			{
 				Id:   "c-rest",
-				Type: constants.CollectionTypeHTTP,
+				Type: constants.CollectionTypeREST,
 				Items: []entity.CollectionItem{
 					{Id: "r-1", Name: "req", Request: &entity.ItemRequest{Method: constants.GET}},
 					{Id: "f-1", Name: "folder", Item: []entity.CollectionItem{}},
@@ -107,23 +107,26 @@ func TestRelocateItemIntoFolderAppend(t *testing.T) {
 	}
 }
 
-func TestRelocateHTTPMixedKindsBetweenCollections(t *testing.T) {
+func TestRelocateAcrossCollectionTypes(t *testing.T) {
 	ws := &entity.Workspace{
 		Id: "ws-1",
 		Collections: []entity.Collection{
 			{
-				Id:   "c-http-1",
-				Type: constants.CollectionTypeHTTP,
+				Id:   "c-rest",
+				Type: constants.CollectionTypeREST,
 				Items: []entity.CollectionItem{
 					{Id: "r-rest", Name: "req", Request: &entity.ItemRequest{Method: constants.GET}},
-					{Id: "r-grpc", Name: "GetUser", Request: &entity.ItemRequest{Grpc: &entity.GrpcRequest{Method: "svc/Get"}}},
-					{Id: "r-ws", Name: "Echo", Request: &entity.ItemRequest{Ws: &entity.WsRequest{URL: "ws://localhost"}}},
 					{Id: "f-1", Name: "folder", Item: []entity.CollectionItem{}},
 				},
 			},
 			{
-				Id:    "c-http-2",
-				Type:  constants.CollectionTypeHTTP,
+				Id:    "c-rest-2",
+				Type:  constants.CollectionTypeREST,
+				Items: []entity.CollectionItem{},
+			},
+			{
+				Id:    "c-grpc",
+				Type:  constants.CollectionTypeGRPC,
 				Items: []entity.CollectionItem{},
 			},
 			{
@@ -135,78 +138,69 @@ func TestRelocateHTTPMixedKindsBetweenCollections(t *testing.T) {
 	}
 	sel := newTestSelectionStore(ws)
 
-	if !sel.RelocateItem("c-http-1", "r-grpc", "c-http-2", "", 0) {
-		t.Fatal("grpc should move between HTTP collections")
+	if !sel.RelocateItem("c-rest", "r-rest", "c-rest-2", "", 0) {
+		t.Fatal("rest item should move between rest collections")
 	}
-	if !sel.RelocateItem("c-http-1", "r-ws", "c-http-1", "f-1", 0) {
-		t.Fatal("ws should move into folder in same HTTP collection")
+	if sel.RelocateItem("c-rest-2", "r-rest", "c-grpc", "", 0) {
+		t.Fatal("must not move rest item into grpc collection")
 	}
-	if sel.RelocateItem("c-http-1", "r-rest", "c-nats", "", 0) {
-		t.Fatal("must not move HTTP item into NATS collection")
+	if sel.RelocateItem("c-rest-2", "r-rest", "c-nats", "", 0) {
+		t.Fatal("must not move rest item into NATS collection")
+	}
+	if sel.RelocateItem("c-rest", "f-1", "c-grpc", "", 0) {
+		t.Fatal("must not move folder across collection types")
 	}
 
-	http2 := findItemByID(&ws.Collections[1].Items, "r-grpc")
-	if http2 == nil || http2.Request == nil || http2.Request.Grpc == nil {
-		t.Fatalf("grpc item missing in dest: %+v", ws.Collections[1].Items)
-	}
-	f1 := findItemByID(&ws.Collections[0].Items, "f-1")
-	if f1 == nil || len(f1.Item) != 1 || f1.Item[0].Id != "r-ws" {
-		t.Fatalf("ws should be in folder, got %+v", f1)
+	if findItemByID(&ws.Collections[1].Items, "r-rest") == nil {
+		t.Fatalf("rest item missing in dest: %+v", ws.Collections[1].Items)
 	}
 }
 
-func TestAddRequestKindsInHTTPCollection(t *testing.T) {
+func TestAddRequestKindsMatchCollection(t *testing.T) {
 	ws := &entity.Workspace{
 		Id: "ws-1",
-		Collections: []entity.Collection{{
-			Id:   "c-http",
-			Type: constants.CollectionTypeHTTP,
-		}},
+		Collections: []entity.Collection{
+			{Id: "c-rest", Type: constants.CollectionTypeREST},
+			{Id: "c-grpc", Type: constants.CollectionTypeGRPC},
+			{Id: "c-ws", Type: constants.CollectionTypeWS},
+			{Id: "c-sio", Type: constants.CollectionTypeSocketIO},
+		},
 	}
 	sel := newTestSelectionStore(ws)
 
-	id, _, ok := sel.AddRequest("c-http", "", constants.RequestKindREST)
+	id, _, ok := sel.AddRequest("c-rest", "", constants.RequestKindGRPC)
 	if !ok {
 		t.Fatal("add rest")
 	}
 	item := findItemByID(&ws.Collections[0].Items, id)
 	if item == nil || item.Request == nil || item.Request.Kind() != constants.RequestKindREST || item.Name != "New request" {
-		t.Fatalf("rest item: %+v", item)
+		t.Fatalf("rest collection must force rest: %+v", item)
 	}
 
-	id, _, ok = sel.AddRequest("c-http", "", constants.RequestKindGRPC)
+	id, _, ok = sel.AddRequest("c-grpc", "", constants.RequestKindREST)
 	if !ok {
 		t.Fatal("add grpc")
 	}
-	item = findItemByID(&ws.Collections[0].Items, id)
+	item = findItemByID(&ws.Collections[1].Items, id)
 	if item == nil || item.Request == nil || item.Request.Grpc == nil || item.Name != "New method" {
-		t.Fatalf("grpc item: %+v", item)
+		t.Fatalf("grpc collection must force grpc: %+v", item)
 	}
 
-	id, _, ok = sel.AddRequest("c-http", "", constants.RequestKindWS)
+	id, _, ok = sel.AddRequest("c-ws", "", constants.RequestKindREST)
 	if !ok {
 		t.Fatal("add ws")
 	}
-	item = findItemByID(&ws.Collections[0].Items, id)
+	item = findItemByID(&ws.Collections[2].Items, id)
 	if item == nil || item.Request == nil || item.Request.Ws == nil || item.Name != "New connection" {
-		t.Fatalf("ws item: %+v", item)
+		t.Fatalf("ws collection must force ws: %+v", item)
 	}
 
-	id, _, ok = sel.AddRequest("c-http", "", constants.RequestKindSocketIO)
+	id, _, ok = sel.AddRequest("c-sio", "", constants.RequestKindREST)
 	if !ok {
 		t.Fatal("add socket.io")
 	}
-	item = findItemByID(&ws.Collections[0].Items, id)
+	item = findItemByID(&ws.Collections[3].Items, id)
 	if item == nil || item.Request == nil || item.Request.SocketIO == nil || item.Name != "New Socket.IO" {
-		t.Fatalf("socket.io item: %+v", item)
-	}
-
-	id, _, ok = sel.AddRequest("c-http", "", constants.RequestKindNATS)
-	if !ok {
-		t.Fatal("nats kind in HTTP should fall back to rest")
-	}
-	item = findItemByID(&ws.Collections[0].Items, id)
-	if item == nil || item.Request.Kind() != constants.RequestKindREST {
-		t.Fatalf("nats kind should not create nats item in HTTP col: %+v", item)
+		t.Fatalf("socket.io collection must force socketio: %+v", item)
 	}
 }
