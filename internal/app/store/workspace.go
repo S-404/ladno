@@ -173,13 +173,14 @@ func (s *WorkspaceStore) refreshListItemName(id, name string) {
 	}
 }
 
-func (s *WorkspaceStore) UpdateSelectedWorkspace(name, connectionConfig string) bool {
+func (s *WorkspaceStore) UpdateSelectedWorkspace(name, connectionConfig string, folderNestingLimit int) bool {
 	ws := s.GetSelectedWorkspace()
 	if ws == nil {
 		return false
 	}
 	ws.Name = name
 	ws.ConnectionConfig = connectionConfig
+	ws.SetFolderNestingLimit(folderNestingLimit)
 	s.PublishWorkspace(ws)
 	return true
 }

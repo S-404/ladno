@@ -190,7 +190,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 			OnCollection: func(col entity.Collection, pos fyne.Position) {
 				colUID := tree.CollectionUID(col.Id)
 				items := append(addItemMenuItems(col, "", colUID, addRequest),
-					fyne.NewMenuItem("Add folder", func() { addFolder(col.Id, "", colUID) }),
+					addFolderMenuItem(selStore, col.Id, "", func() { addFolder(col.Id, "", colUID) }),
 					fyne.NewMenuItemSeparator(),
 					fyne.NewMenuItem("Delete", func() {
 						dialog.ShowConfirm("Delete collection", "Delete \""+col.Name+"\"?", func(ok bool) {
@@ -209,6 +209,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 			OnFolder: func(col entity.Collection, item entity.CollectionItem, path []string, pos fyne.Position) {
 				itemUID := tree.ItemUID(item.Id)
 				items := append(addItemMenuItems(col, item.Id, itemUID, addRequest),
+					addFolderMenuItem(selStore, col.Id, item.Id, func() { addFolder(col.Id, item.Id, itemUID) }),
 					fyne.NewMenuItemSeparator(),
 					fyne.NewMenuItem("Delete", func() {
 						dialog.ShowConfirm("Delete folder", "Delete \""+item.Name+"\"?", func(ok bool) {
@@ -459,6 +460,16 @@ func addItemMenuItems(
 			}),
 		}
 	}
+}
+
+func addFolderMenuItem(selStore interface {
+	CanAddFolder(collectionID, parentItemID string) bool
+}, collectionID, parentItemID string, onAdd func()) *fyne.MenuItem {
+	item := fyne.NewMenuItem("Add folder", onAdd)
+	if !selStore.CanAddFolder(collectionID, parentItemID) {
+		item.Disabled = true
+	}
+	return item
 }
 
 func findCollectionItem(items []entity.CollectionItem, id string) *entity.CollectionItem {

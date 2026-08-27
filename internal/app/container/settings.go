@@ -9,6 +9,7 @@ import (
 	"fyne.io/fyne/v2/data/binding"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"github.com/s-404/ladno/internal/app/entity"
 	"github.com/s-404/ladno/internal/app/entity/shared"
 	"github.com/s-404/ladno/internal/app/store"
 )
@@ -32,6 +33,11 @@ func workspaceSettingsTab(app *shared.App) fyne.CanvasObject {
 	connEntry := widget.NewMultiLineEntry()
 	connEntry.SetPlaceHolder("Connection config (optional)")
 	connEntry.SetMinRowsVisible(4)
+	nestingEntry := widget.NewEntry()
+	nestingEntry.SetPlaceHolder(strconv.Itoa(entity.DefaultFolderNestingLimit))
+	nestingHint := widget.NewLabel("Max folder depth in collection trees. -1 means unlimited. Default is 5.")
+	nestingHint.Wrapping = fyne.TextWrapWord
+	nestingHint.TextStyle = fyne.TextStyle{Italic: true}
 
 	idLabel := widget.NewLabel("")
 	idLabel.TextStyle = fyne.TextStyle{Italic: true}
@@ -40,11 +46,18 @@ func workspaceSettingsTab(app *shared.App) fyne.CanvasObject {
 	status.TextStyle = fyne.TextStyle{Italic: true}
 
 	saveBtn := widget.NewButton("Save", func() {
-		if !wsStore.UpdateSelectedWorkspace(nameEntry.Text, connEntry.Text) {
+		depth, err := strconv.Atoi(nestingEntry.Text)
+		if err != nil {
+			status.SetText("Enter a valid folder nesting limit")
+			return
+		}
+		depth = entity.ClampFolderNestingLimit(depth)
+		if !wsStore.UpdateSelectedWorkspace(nameEntry.Text, connEntry.Text, depth) {
 			status.SetText("No workspace selected")
 			return
 		}
-		status.SetText("Workspace saved")
+		nestingEntry.SetText(strconv.Itoa(depth))
+		status.SetText(fmt.Sprintf("Workspace saved, folder depth %d", depth))
 	})
 	saveBtn.Importance = widget.HighImportance
 
@@ -79,7 +92,9 @@ func workspaceSettingsTab(app *shared.App) fyne.CanvasObject {
 			widget.NewFormItem("ID", idLabel),
 			widget.NewFormItem("Name", nameEntry),
 			widget.NewFormItem("Connection config", connEntry),
+			widget.NewFormItem("Folder nesting limit", nestingEntry),
 		),
+		nestingHint,
 		container.NewHBox(saveBtn, deleteBtn),
 		status,
 	))
@@ -107,6 +122,7 @@ func workspaceSettingsTab(app *shared.App) fyne.CanvasObject {
 		idLabel.SetText(ws.Id)
 		nameEntry.SetText(ws.Name)
 		connEntry.SetText(ws.ConnectionConfig)
+		nestingEntry.SetText(strconv.Itoa(ws.GetFolderNestingLimit()))
 		status.SetText("")
 		showEmpty(false)
 	}
@@ -127,7 +143,6 @@ func generalSettingsTab(app *shared.App) fyne.CanvasObject {
 	limitEntry := widget.NewEntry()
 	limitEntry.SetText(strconv.Itoa(settings.GetMessageLimit()))
 	limitEntry.SetPlaceHolder("1000")
-
 	limitHint := widget.NewLabel("Applies to Logs, NATS, Kafka and WebSocket Messages (10–100000). Only the newest entries are kept.")
 	limitHint.Wrapping = fyne.TextWrapWord
 	limitHint.TextStyle = fyne.TextStyle{Italic: true}

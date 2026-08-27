@@ -7,11 +7,38 @@ import (
 	"github.com/s-404/ladno/internal/app/entity/constants"
 )
 
+const DefaultFolderNestingLimit = 5
+
 type Workspace struct {
-	Id               string       `json:"id"`
-	Name             string       `json:"name"`
-	ConnectionConfig string       `json:"connectionConfig"`
-	Collections      []Collection `json:"collections"`
+	Id                 string       `json:"id"`
+	Name               string       `json:"name"`
+	ConnectionConfig   string       `json:"connectionConfig"`
+	FolderNestingLimit *int         `json:"folderNestingLimit,omitempty"`
+	Collections        []Collection `json:"collections"`
+}
+
+// ClampFolderNestingLimit keeps -1 as unlimited and rejects values below that.
+func ClampFolderNestingLimit(n int) int {
+	if n < -1 {
+		return -1
+	}
+	return n
+}
+
+func (w *Workspace) GetFolderNestingLimit() int {
+	if w == nil || w.FolderNestingLimit == nil {
+		return DefaultFolderNestingLimit
+	}
+	return ClampFolderNestingLimit(*w.FolderNestingLimit)
+}
+
+func (w *Workspace) SetFolderNestingLimit(n int) int {
+	n = ClampFolderNestingLimit(n)
+	if w == nil {
+		return n
+	}
+	w.FolderNestingLimit = &n
+	return n
 }
 
 type WorkspaceLightWeight struct {

@@ -172,6 +172,42 @@ func TestWorkspaceRepositoryDeletePersists(t *testing.T) {
 	}
 }
 
+func TestWorkspaceRepositoryPersistsFolderNestingLimit(t *testing.T) {
+	store, err := storage.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	repo := NewWorkspaceRepository(store)
+	ws := repo.FindAll()[0]
+	if got := ws.GetFolderNestingLimit(); got != entity.DefaultFolderNestingLimit {
+		t.Fatalf("unset should default to %d, got %d", entity.DefaultFolderNestingLimit, got)
+	}
+
+	ws.SetFolderNestingLimit(2)
+	if err := repo.Save(ws); err != nil {
+		t.Fatal(err)
+	}
+
+	reloaded := NewWorkspaceRepository(store)
+	got := reloaded.FindById(ws.Id)
+	if got == nil {
+		t.Fatal("workspace missing after reload")
+	}
+	if got.GetFolderNestingLimit() != 2 {
+		t.Fatalf("limit after reload: got %d", got.GetFolderNestingLimit())
+	}
+
+	got.SetFolderNestingLimit(-1)
+	if err := reloaded.Save(got); err != nil {
+		t.Fatal(err)
+	}
+	again := NewWorkspaceRepository(store).FindById(ws.Id)
+	if again == nil || again.GetFolderNestingLimit() != -1 {
+		t.Fatalf("unlimited after reload: %+v", again)
+	}
+}
+
 func TestWorkspaceDeleteRemovesEnvs(t *testing.T) {
 	store, err := storage.Open(t.TempDir())
 	if err != nil {

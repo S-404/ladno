@@ -286,7 +286,32 @@ func (s *SelectionStore) MoveCollection(id string, steps int) bool {
 }
 
 func (s *SelectionStore) AddFolder(collectionID, parentItemID string) (string, []string, bool) {
+	ws := s.workspace.GetSelectedWorkspace()
+	if ws == nil {
+		return "", nil, false
+	}
+	col, ok := findCollection(ws, collectionID)
+	if !ok {
+		return "", nil, false
+	}
+	if !s.folderNestingAllowed(col.Items, parentItemID, 1) {
+		log.Printf("[collections] AddFolder: nesting limit reached col=%s parent=%s", collectionID, parentItemID)
+		return "", nil, false
+	}
 	return s.addItem(collectionID, parentItemID, newFolderItem())
+}
+
+// CanAddFolder reports whether a new folder may be created under parentItemID.
+func (s *SelectionStore) CanAddFolder(collectionID, parentItemID string) bool {
+	ws := s.workspace.GetSelectedWorkspace()
+	if ws == nil {
+		return false
+	}
+	col, ok := findCollection(ws, collectionID)
+	if !ok {
+		return false
+	}
+	return s.folderNestingAllowed(col.Items, parentItemID, 1)
 }
 
 func (s *SelectionStore) AddRequest(collectionID, parentItemID string, kind constants.RequestKind) (string, []string, bool) {
@@ -463,6 +488,19 @@ func (s *SelectionStore) RelocateItem(fromCollectionID, itemID, toCollectionID, 
 	src := findItemByID(&fromCol.Items, itemID)
 	if src == nil {
 		return false
+	}
+
+	srcPath := findItemPath(fromCol.Items, itemID)
+	currentParentID := ""
+	if len(srcPath) > 1 {
+		currentParentID = srcPath[len(srcPath)-2]
+	}
+	sameParent := fromCollectionID == toCollectionID && currentParentID == toParentItemID
+	if src.Request == nil && !sameParent {
+		if !s.folderNestingAllowed(toCol.Items, toParentItemID, subtreeFolderDepth(*src)) {
+			log.Printf("[collections] RelocateItem: nesting limit item=%s under=%s", itemID, toParentItemID)
+			return false
+		}
 	}
 
 	// Prevent moving a folder into itself or its descendants.
@@ -692,6 +730,41 @@ func findItemByID(items *[]entity.CollectionItem, id string) *entity.CollectionI
 		}
 	}
 	return nil
+}
+
+func (s *SelectionStore) folderNestingLimit() int {
+	if s == nil || s.workspace == nil {
+		return entity.DefaultFolderNestingLimit
+	}
+	return s.workspace.GetSelectedWorkspace().GetFolderNestingLimit()
+}
+
+func (s *SelectionStore) folderNestingAllowed(items []entity.CollectionItem, parentItemID string, extraDepth int) bool {
+	limit := s.folderNestingLimit()
+	if limit < 0 {
+		return true
+	}
+	return parentFolderDepth(items, parentItemID)+extraDepth <= limit
+}
+
+func parentFolderDepth(items []entity.CollectionItem, parentItemID string) int {
+	if parentItemID == "" {
+		return 0
+	}
+	return len(findItemPath(items, parentItemID))
+}
+
+func subtreeFolderDepth(item entity.CollectionItem) int {
+	if item.Request != nil {
+		return 0
+	}
+	maxChild := 0
+	for _, ch := range item.Item {
+		if d := subtreeFolderDepth(ch); d > maxChild {
+			maxChild = d
+		}
+	}
+	return 1 + maxChild
 }
 
 func findItemPath(items []entity.CollectionItem, id string) []string {
