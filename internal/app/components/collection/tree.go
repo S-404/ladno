@@ -62,19 +62,21 @@ type DirtyResolver struct {
 type Tree struct {
 	widget.BaseWidget
 
-	mu         sync.RWMutex
-	childIDs   map[string][]string
-	nodes      map[string]treeNode
-	cols       map[string]entity.Collection
-	connected  map[string]bool
-	subscribed map[string]bool // "collectionID/itemID" for active NATS subscriptions
-	source     []entity.Collection
-	filter     string
-	handler    SelectHandler
-	context    ContextHandler
-	reorder    ReorderHandler
-	dirty      DirtyResolver
-	tree       *widget.Tree
+	mu          sync.RWMutex
+	childIDs    map[string][]string
+	nodes       map[string]treeNode
+	cols        map[string]entity.Collection
+	connected   map[string]bool
+	subscribed  map[string]bool // "collectionID/itemID" for active NATS subscriptions
+	source      []entity.Collection
+	filter      string
+	handler     SelectHandler
+	context     ContextHandler
+	reorder     ReorderHandler
+	dirty       DirtyResolver
+	tree        *widget.Tree
+	inner       *fyne.Container
+	selectedUID string
 
 	rowsByUID map[string]*treeRow
 
@@ -111,9 +113,27 @@ func NewTree(handler SelectHandler, context ContextHandler, reorder ReorderHandl
 		context:    context,
 		reorder:    reorder,
 	}
+	ct.inner = container.NewStack()
 	ct.ExtendBaseWidget(ct)
+	ct.resetInnerTree()
+	return ct
+}
 
-	ct.tree = widget.NewTree(
+// resetInnerTree replaces the Fyne Tree so cached branch/leaf indent is dropped.
+// widget.Tree only applies depth when a node is first inserted into its visible map.
+func (ct *Tree) resetInnerTree() {
+	ct.mu.Lock()
+	ct.rowsByUID = map[string]*treeRow{}
+	ct.mu.Unlock()
+	ct.tree = ct.newInnerTree()
+	if ct.inner != nil {
+		ct.inner.Objects = []fyne.CanvasObject{ct.tree}
+		ct.inner.Refresh()
+	}
+}
+
+func (ct *Tree) newInnerTree() *widget.Tree {
+	t := widget.NewTree(
 		func(uid widget.TreeNodeID) []widget.TreeNodeID {
 			ct.mu.RLock()
 			defer ct.mu.RUnlock()
@@ -135,94 +155,99 @@ func NewTree(handler SelectHandler, context ContextHandler, reorder ReorderHandl
 			return newTreeRow(ct)
 		},
 		func(uid widget.TreeNodeID, branch bool, obj fyne.CanvasObject) {
-			ct.mu.RLock()
-			n := ct.nodes[uid]
-			connected := ct.connected[n.collectionID]
-			subscribed := false
-			if n.kind == nodeRequest {
-				subscribed = ct.subscribed[n.collectionID+"/"+n.item.Id]
-			}
-			filterOn := ct.filter != ""
-			dragSource := ct.dragSourceUID
-			dropUID := ct.dropLineUID
-			dropBefore := ct.dropLineBefore
-			dropInto := ct.dropIntoUID
-			ct.mu.RUnlock()
-
-			row := obj.(*treeRow)
-			row.SetUID(uid)
-			row.SetReorderEnabled(!filterOn)
-
-			res := theme.DocumentIcon()
-			if n.kind == nodeCollection {
-				res = theme.ListIcon()
-			}
-			if n.kind == nodeFolder {
-				res = theme.FolderIcon()
-			}
-
-			row.icon.SetResource(res)
-			label := n.label
-			isCol := n.kind == nodeCollection
-			isFolder := n.kind == nodeFolder
-			itemID := ""
-			if !isCol {
-				itemID = n.item.Id
-			}
-			if ct.dirty.ResolveLabel != nil {
-				label = ct.dirty.ResolveLabel(n.collectionID, itemID, isCol, isFolder, n.label)
-			}
-			if isCol {
-				row.typeLabel.SetText(string(constants.NormalizeCollectionType(n.colType)))
-				row.typeLabel.Show()
-			} else {
-				row.typeLabel.SetText("")
-				row.typeLabel.Hide()
-			}
-			row.label.SetText(label)
-			row.SetDraggingSource(uid != "" && uid == dragSource)
-			if uid != "" && uid == dropInto {
-				row.SetDropIndicator(dropIntoIndicator)
-			} else if uid != "" && uid == dropUID {
-				if dropBefore {
-					row.SetDropIndicator(dropBeforeIndicator)
-				} else {
-					row.SetDropIndicator(dropAfterIndicator)
-				}
-			} else {
-				row.SetDropIndicator(dropNone)
-			}
-
-			dirty := ct.dirty.IsDirty != nil && ct.dirty.IsDirty(n.collectionID, itemID, isCol, isFolder)
-			if dirty {
-				row.status.FillColor = colorDirty
-				row.status.StrokeColor = colorDirty
-				row.status.Show()
-				row.dot.Show()
-			} else if n.kind == nodeCollection && connected {
-				row.status.FillColor = colorConnected
-				row.status.StrokeColor = colorConnected
-				row.status.Show()
-				row.dot.Show()
-			} else if n.kind == nodeRequest && subscribed {
-				row.status.FillColor = colorSubscribed
-				row.status.StrokeColor = colorSubscribed
-				row.status.Show()
-				row.dot.Show()
-			} else {
-				row.status.Hide()
-				row.dot.Hide()
-			}
-			row.status.Refresh()
-			row.dot.Refresh()
+			ct.updateTreeRow(uid, obj)
 		},
 	)
-
-	ct.tree.OnSelected = func(uid widget.TreeNodeID) {
+	t.OnSelected = func(uid widget.TreeNodeID) {
+		ct.mu.Lock()
+		ct.selectedUID = uid
+		ct.mu.Unlock()
 		ct.fireSelect(uid)
 	}
+	return t
+}
 
-	return ct
+func (ct *Tree) updateTreeRow(uid widget.TreeNodeID, obj fyne.CanvasObject) {
+	ct.mu.RLock()
+	n := ct.nodes[uid]
+	connected := ct.connected[n.collectionID]
+	subscribed := false
+	if n.kind == nodeRequest {
+		subscribed = ct.subscribed[n.collectionID+"/"+n.item.Id]
+	}
+	filterOn := ct.filter != ""
+	dragSource := ct.dragSourceUID
+	dropUID := ct.dropLineUID
+	dropBefore := ct.dropLineBefore
+	dropInto := ct.dropIntoUID
+	ct.mu.RUnlock()
+
+	row := obj.(*treeRow)
+	row.SetUID(uid)
+	row.SetReorderEnabled(!filterOn)
+
+	res := theme.DocumentIcon()
+	if n.kind == nodeCollection {
+		res = theme.ListIcon()
+	}
+	if n.kind == nodeFolder {
+		res = theme.FolderIcon()
+	}
+
+	row.icon.SetResource(res)
+	label := n.label
+	isCol := n.kind == nodeCollection
+	isFolder := n.kind == nodeFolder
+	itemID := ""
+	if !isCol {
+		itemID = n.item.Id
+	}
+	if ct.dirty.ResolveLabel != nil {
+		label = ct.dirty.ResolveLabel(n.collectionID, itemID, isCol, isFolder, n.label)
+	}
+	if isCol {
+		row.typeLabel.SetText(string(constants.NormalizeCollectionType(n.colType)))
+		row.typeLabel.Show()
+	} else {
+		row.typeLabel.SetText("")
+		row.typeLabel.Hide()
+	}
+	row.label.SetText(label)
+	row.SetDraggingSource(uid != "" && uid == dragSource)
+	if uid != "" && uid == dropInto {
+		row.SetDropIndicator(dropIntoIndicator)
+	} else if uid != "" && uid == dropUID {
+		if dropBefore {
+			row.SetDropIndicator(dropBeforeIndicator)
+		} else {
+			row.SetDropIndicator(dropAfterIndicator)
+		}
+	} else {
+		row.SetDropIndicator(dropNone)
+	}
+
+	dirty := ct.dirty.IsDirty != nil && ct.dirty.IsDirty(n.collectionID, itemID, isCol, isFolder)
+	if dirty {
+		row.status.FillColor = colorDirty
+		row.status.StrokeColor = colorDirty
+		row.status.Show()
+		row.dot.Show()
+	} else if n.kind == nodeCollection && connected {
+		row.status.FillColor = colorConnected
+		row.status.StrokeColor = colorConnected
+		row.status.Show()
+		row.dot.Show()
+	} else if n.kind == nodeRequest && subscribed {
+		row.status.FillColor = colorSubscribed
+		row.status.StrokeColor = colorSubscribed
+		row.status.Show()
+		row.dot.Show()
+	} else {
+		row.status.Hide()
+		row.dot.Hide()
+	}
+	row.status.Refresh()
+	row.dot.Refresh()
 }
 
 func (ct *Tree) onRowPrimary(uid string) {
@@ -853,16 +878,12 @@ func (ct *Tree) OpenUID(uid string) {
 	ct.tree.OpenBranch(uid)
 }
 
-// RevealItem opens collection/folder ancestors and reloads the destination branch
-// so a relocated node appears under its new parent immediately.
+// RevealItem opens collection/folder ancestors so a relocated node is visible.
 func (ct *Tree) RevealItem(collectionID, parentItemID, itemID string) {
 	if collectionID == "" {
 		return
 	}
-	colUID := ct.CollectionUID(collectionID)
-	ct.tree.OpenBranch(colUID)
-
-	parentUID := colUID
+	ct.tree.OpenBranch(ct.CollectionUID(collectionID))
 	if parentItemID != "" {
 		ct.mu.RLock()
 		n, ok := ct.nodes[ct.ItemUID(parentItemID)]
@@ -874,21 +895,10 @@ func (ct *Tree) RevealItem(collectionID, parentItemID, itemID string) {
 		for _, id := range path {
 			ct.tree.OpenBranch(ct.ItemUID(id))
 		}
-		parentUID = ct.ItemUID(parentItemID)
-		// Force Fyne Tree to reload children after UID parent change.
-		ct.tree.CloseBranch(parentUID)
-		ct.tree.OpenBranch(parentUID)
-	} else {
-		ct.tree.CloseBranch(colUID)
-		ct.tree.OpenBranch(colUID)
 	}
-
 	if itemID != "" {
 		ct.tree.Select(ct.ItemUID(itemID))
-		ct.tree.RefreshItem(ct.ItemUID(itemID))
 	}
-	ct.tree.RefreshItem(parentUID)
-	ct.tree.Refresh()
 }
 
 func (ct *Tree) SetConnected(ids map[string]bool) {
@@ -939,6 +949,11 @@ func (ct *Tree) rebuild() {
 	for uid := range ct.nodes {
 		prevNodes = append(prevNodes, uid)
 	}
+	oldChildIDs := make(map[string][]string, len(ct.childIDs))
+	for parent, kids := range ct.childIDs {
+		oldChildIDs[parent] = kids
+	}
+	selectedUID := ct.selectedUID
 	ct.mu.RUnlock()
 
 	opened := make([]string, 0, len(prevNodes))
@@ -981,10 +996,15 @@ func (ct *Tree) rebuild() {
 	ct.cols = cols
 	ct.mu.Unlock()
 
-	log.Printf("[collections] Tree.rebuild filter=%q collections=%d nodes=%d roots=%v opened=%d",
-		filter, len(visible), len(nodes), childIDs[""], len(opened))
+	parentMoved := existingUIDChangedParent(oldChildIDs, childIDs)
+	log.Printf("[collections] Tree.rebuild filter=%q collections=%d nodes=%d roots=%v opened=%d parentMoved=%v",
+		filter, len(visible), len(nodes), childIDs[""], len(opened), parentMoved)
 
-	ct.tree.Refresh()
+	if parentMoved {
+		ct.resetInnerTree()
+	} else {
+		ct.tree.Refresh()
+	}
 
 	ct.mu.RLock()
 	roots := append([]string{}, ct.childIDs[""]...)
@@ -1014,6 +1034,14 @@ func (ct *Tree) rebuild() {
 			ct.tree.OpenBranch(uid)
 		}
 	}
+	if parentMoved && selectedUID != "" {
+		ct.mu.RLock()
+		_, exists := ct.nodes[selectedUID]
+		ct.mu.RUnlock()
+		if exists {
+			ct.tree.Select(selectedUID)
+		}
+	}
 }
 
 func (ct *Tree) openAllUnder(uid string) {
@@ -1027,7 +1055,7 @@ func (ct *Tree) openAllUnder(uid string) {
 }
 
 func (ct *Tree) CreateRenderer() fyne.WidgetRenderer {
-	return widget.NewSimpleRenderer(ct.tree)
+	return widget.NewSimpleRenderer(ct.inner)
 }
 
 func normalizeCol(col entity.Collection) entity.Collection {
@@ -1106,6 +1134,23 @@ func filterItems(items []entity.CollectionItem, q string, keepAll bool) ([]entit
 		}
 	}
 	return out, any
+}
+
+func existingUIDChangedParent(oldIDs, newIDs map[string][]string) bool {
+	prev := make(map[string]string, len(oldIDs))
+	for parent, kids := range oldIDs {
+		for _, id := range kids {
+			prev[id] = parent
+		}
+	}
+	for parent, kids := range newIDs {
+		for _, id := range kids {
+			if op, ok := prev[id]; ok && op != parent {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func fillItems(
