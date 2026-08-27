@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	fyne.io/fyne/v2 v2.8.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/nats-io/nats.go v1.52.0
 )
 

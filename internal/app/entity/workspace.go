@@ -105,9 +105,10 @@ type GrpcRequest struct {
 }
 
 type WsRequest struct {
-	URL     string     `json:"url"`
-	Headers []Variable `json:"headers"`
-	Message string     `json:"message"`
+	URL        string     `json:"url"`
+	PathParams []Variable `json:"pathParams,omitempty"`
+	Headers    []Variable `json:"headers"`
+	Message    string     `json:"message"`
 }
 
 type NatsRequest struct {

@@ -15,6 +15,7 @@ type Store struct {
 	Selection *SelectionStore
 	Settings  *SettingsStore
 	Workspace *WorkspaceStore
+	Ws        *WsStore
 }
 
 func NewStore(svc *service.Service) *Store {
@@ -37,5 +38,6 @@ func NewStore(svc *service.Service) *Store {
 		Selection: selStore,
 		Settings:  settingsStore,
 		Workspace: wsStore,
+		Ws:        NewWsStore(svc.Ws, envStore, logStore, wsStore, settingsStore),
 	}
 }

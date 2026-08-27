@@ -22,11 +22,16 @@ type RequestParamsView struct {
 //   - Query Params — сразу после path
 //
 // Общий скролл, высота не ограничена (как логи).
-func NewRequestParams(requestURL binding.String) *RequestParamsView {
+func NewRequestParams(requestURL binding.String, onPathChange func()) *RequestParamsView {
 	var syncing bool
 	var pathParamNames []string
 
-	pathTable := ui.NewKVTablePathVars(nil, nil)
+	pathTable := ui.NewKVTablePathVars(nil, func([]ui.KVRow) {
+		if syncing || onPathChange == nil {
+			return
+		}
+		onPathChange()
+	})
 
 	var queryRows []ui.KVRow
 	queryTable := ui.NewKVTable(nil, func(rows []ui.KVRow) {

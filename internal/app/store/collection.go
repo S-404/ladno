@@ -621,6 +621,7 @@ func cloneRequestItem(src entity.CollectionItem) entity.CollectionItem {
 	if src.Request.Ws != nil {
 		w := *src.Request.Ws
 		w.Headers = cloneVariables(src.Request.Ws.Headers)
+		w.PathParams = cloneVariables(src.Request.Ws.PathParams)
 		r.Ws = &w
 	}
 	if src.Request.Nats != nil {

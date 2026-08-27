@@ -144,7 +144,7 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 	requestInput = rest.NewRequestInput(methods, requestURL, send, func(string) {
 		flushDraft(true)
 	})
-	paramsView = rest.NewRequestParams(requestURL)
+	paramsView = rest.NewRequestParams(requestURL, func() { flushDraft(true) })
 	headersView = rest.NewRequestHeaders(nil, func(rows []ui.KVRow) {
 		headers = rows
 		flushDraft(true)

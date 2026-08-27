@@ -8,6 +8,7 @@ type Service struct {
 	Nats      *NatsService
 	Rest      *RestService
 	Workspace *WorkspaceService
+	Ws        *WsService
 }
 
 func NewService(repos *repository.Repository) *Service {
@@ -17,5 +18,6 @@ func NewService(repos *repository.Repository) *Service {
 		Nats:      NewNatsService(),
 		Rest:      NewRestService(),
 		Workspace: newWorkspaceService(repos.Workspace),
+		Ws:        NewWsService(),
 	}
 }

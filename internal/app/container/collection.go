@@ -21,6 +21,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 	restStore := app.Store.Rest
 	natsStore := app.Store.Nats
 	kafkaStore := app.Store.Kafka
+	wsConnStore := app.Store.Ws
 	wsItem := wsStore.GetItem()
 	win := app.Window
 
@@ -198,6 +199,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 							}
 							natsStore.Disconnect(col.Id)
 							kafkaStore.Disconnect(col.Id)
+							wsConnStore.DisconnectCollection(col.Id)
 							selStore.DeleteCollection(col.Id)
 						}, win)
 					}),
@@ -261,6 +263,7 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 								if col.Type == constants.CollectionTypeKafka {
 									kafkaStore.StopConsume(col.Id, item.Id)
 								}
+								wsConnStore.Disconnect(col.Id, item.Id)
 								selStore.DeleteItem(col.Id, item.Id)
 							}
 						}, win)
@@ -328,12 +331,23 @@ func CollectionContainer(app *shared.App) fyne.CanvasObject {
 				subIDs[id] = true
 			}
 		}
+		for id, ok := range wsConnStore.ConnectedItemKeys() {
+			if ok {
+				if subIDs == nil {
+					subIDs = map[string]bool{}
+				}
+				subIDs[id] = true
+			}
+		}
 		tree.SetSubscribed(subIDs)
 	}
 	natsStore.AddConnectionListener(func() {
 		fyne.Do(refreshConnected)
 	})
 	kafkaStore.AddConnectionListener(func() {
+		fyne.Do(refreshConnected)
+	})
+	wsConnStore.AddConnectionListener(func() {
 		fyne.Do(refreshConnected)
 	})
 

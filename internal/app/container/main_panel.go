@@ -23,6 +23,7 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 	drafts := app.Store.Draft
 	natsStore := app.Store.Nats
 	kafkaStore := app.Store.Kafka
+	wsConnStore := app.Store.Ws
 	envStore := app.Store.Env
 
 	empty := container.NewCenter(widget.NewLabel("Select a collection or request"))
@@ -153,7 +154,101 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			}
 		},
 	)
-	wsPanel := wsui.NewRequestView(
+	var wsPanel *wsui.RequestView
+	var wsCollectionID, wsItemID string
+	var wsWasConnected bool
+	refreshWsMessages := func() {
+		if wsPanel == nil {
+			return
+		}
+		text := wsConnStore.MessagesText(wsCollectionID, wsItemID, wsPanel.Messages.ShowAll())
+		wsPanel.Messages.SetText(text)
+	}
+	wsMessagesView := wsui.NewMessagesView(
+		func(all bool) { refreshWsMessages() },
+		func() { fyne.CurrentApp().Clipboard().SetContent(wsPanel.Messages.Text()) },
+		func() {
+			wsConnStore.ClearMessages(wsCollectionID, wsItemID)
+			refreshWsMessages()
+		},
+	)
+	wsConnStore.AddMessageListener(func() { fyne.Do(refreshWsMessages) })
+
+	syncWsConnectionUI := func() {
+		if wsPanel == nil {
+			return
+		}
+		sel := currentSelection(selStore.GetSelection())
+		if sel == nil || sel.Kind != entity.SelectionRequest {
+			return
+		}
+		d, _ := drafts.GetRequestDraft(sel.ItemID)
+		if d.Request.Kind() != constants.RequestKindWS {
+			return
+		}
+		now := wsConnStore.IsConnected(sel.CollectionID, sel.ItemID)
+		dropped := wsWasConnected && !now
+		wsWasConnected = now
+		wsPanel.SetConnected(now)
+		if dropped {
+			wsPanel.SetConnecting(false)
+			wsPanel.SetStatus("Disconnected")
+		}
+	}
+	wsConnStore.AddConnectionListener(func() {
+		fyne.Do(syncWsConnectionUI)
+	})
+
+	wsPanel = wsui.NewRequestView(
+		func(req entity.WsRequest) {
+			sel := currentSelection(selStore.GetSelection())
+			if sel == nil || sel.Kind != entity.SelectionRequest {
+				return
+			}
+			wsCollectionID = sel.CollectionID
+			wsItemID = sel.ItemID
+			wsPanel.SetConnecting(true)
+			wsPanel.SetStatus("Connecting…")
+			wsConnStore.Connect(sel.CollectionID, sel.ItemID, req, func(ok bool, status string) {
+				selNow := currentSelection(selStore.GetSelection())
+				if selNow == nil || selNow.ItemID != sel.ItemID {
+					return
+				}
+				wsPanel.SetConnecting(false)
+				wsPanel.SetConnected(ok)
+				wsPanel.SetStatus(status)
+				wsWasConnected = ok
+				refreshWsMessages()
+			})
+		},
+		func() {
+			sel := currentSelection(selStore.GetSelection())
+			if sel == nil || sel.Kind != entity.SelectionRequest {
+				return
+			}
+			wsConnStore.Disconnect(sel.CollectionID, sel.ItemID)
+			wsPanel.SetConnecting(false)
+			wsPanel.SetConnected(false)
+			wsPanel.SetStatus("Disconnected")
+			wsWasConnected = false
+		},
+		func(req entity.WsRequest) {
+			sel := currentSelection(selStore.GetSelection())
+			if sel == nil || sel.Kind != entity.SelectionRequest {
+				return
+			}
+			wsCollectionID = sel.CollectionID
+			wsItemID = sel.ItemID
+			wsConnStore.Send(sel.CollectionID, sel.ItemID, req.Message, func(err error) {
+				if err != nil {
+					selNow := currentSelection(selStore.GetSelection())
+					if selNow != nil && selNow.ItemID == sel.ItemID {
+						wsPanel.SetStatus("Send failed: " + err.Error())
+					}
+				}
+				refreshWsMessages()
+			})
+		},
 		func(name string, req entity.WsRequest) {
 			putRequestDraft(func(d *entity.RequestDraft) {
 				d.Name = name
@@ -166,6 +261,7 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 				drafts.SaveRequest(sel.CollectionID, sel.ItemID)
 			}
 		},
+		wsMessagesView,
 	)
 
 	var natsPanel *natsui.RequestView
@@ -461,8 +557,13 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 						fyne.Do(grpcPanel.FocusName)
 					}
 				case constants.RequestKindWS:
-					wsPanel.Set(d.Request.Ws, d.Name)
+					wsCollectionID = sel.CollectionID
+					wsItemID = sel.ItemID
+					connected := wsConnStore.IsConnected(sel.CollectionID, sel.ItemID)
+					wsWasConnected = connected
+					wsPanel.Set(d.Request.Ws, d.Name, connected)
 					wsPanel.SetDirty(dirty)
+					refreshWsMessages()
 					show(5)
 					if focusName {
 						fyne.Do(wsPanel.FocusName)

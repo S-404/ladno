@@ -122,12 +122,13 @@ func generalSettingsTab(app *shared.App) fyne.CanvasObject {
 	logStore := app.Store.Log
 	natsStore := app.Store.Nats
 	kafkaStore := app.Store.Kafka
+	wsConnStore := app.Store.Ws
 
 	limitEntry := widget.NewEntry()
 	limitEntry.SetText(strconv.Itoa(settings.GetMessageLimit()))
 	limitEntry.SetPlaceHolder("1000")
 
-	limitHint := widget.NewLabel("Applies to Logs, NATS and Kafka Messages (10–100000). Only the newest entries are kept.")
+	limitHint := widget.NewLabel("Applies to Logs, NATS, Kafka and WebSocket Messages (10–100000). Only the newest entries are kept.")
 	limitHint.Wrapping = fyne.TextWrapWord
 	limitHint.TextStyle = fyne.TextStyle{Italic: true}
 
@@ -188,6 +189,7 @@ func generalSettingsTab(app *shared.App) fyne.CanvasObject {
 		logStore.TrimToLimit()
 		natsStore.TrimMessagesToLimit()
 		kafkaStore.TrimMessagesToLimit()
+		wsConnStore.TrimMessagesToLimit()
 
 		themeName := store.ThemeDark
 		if themeSelect.Selected == "Light" {

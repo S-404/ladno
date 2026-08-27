@@ -618,7 +618,8 @@ func wsRequestEqual(a, b *entity.WsRequest) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
-	return a.URL == b.URL && a.Message == b.Message && variablesEqual(a.Headers, b.Headers)
+	return a.URL == b.URL && a.Message == b.Message &&
+		variablesEqual(a.Headers, b.Headers) && variablesEqual(a.PathParams, b.PathParams)
 }
 
 func natsRequestEqual(a, b *entity.NatsRequest) bool {

@@ -24,7 +24,7 @@ func NewRequestHeaders(initial []ui.KVRow, onChange func(rows []ui.KVRow)) *Requ
 	showAuto := true
 	var syncing bool
 
-	warnHint := widget.NewLabel("⚠ Duplicate of auto-generated — will be overwritten by Auth on send.")
+	warnHint := widget.NewLabel("⚠ Duplicate of auto-generated — will be overwritten on send.")
 	warnHint.Importance = widget.WarningImportance
 	warnHint.Wrapping = fyne.TextWrapWord
 	warnHint.Hide()

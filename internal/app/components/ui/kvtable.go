@@ -29,6 +29,8 @@ type KVRow struct {
 	Secret bool
 	// Warn — highlight overwrite conflict (e.g. duplicates auto-generated header).
 	Warn bool
+	// ValueHint — placeholder shown in the value field (e.g. calculated at runtime).
+	ValueHint string
 }
 
 // KVTableOptions — поведение таблицы.
@@ -398,6 +400,11 @@ func (t *KVTable) makeRow(idx int) fyne.CanvasObject {
 			}
 		}
 		valObj = ListWheelField(valEntry)
+	} else if row.Auto && row.ValueHint != "" && row.Value == "" {
+		hint := widget.NewLabel(row.ValueHint)
+		hint.TextStyle = fyne.TextStyle{Italic: true}
+		hint.Importance = widget.LowImportance
+		valObj = hint
 	} else {
 		valEntry := NewEnvInput()
 		valEntry.SetPlaceHolder("Value")

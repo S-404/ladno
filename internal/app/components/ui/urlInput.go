@@ -270,6 +270,14 @@ func (h *highlightDisplay) SetText(raw string) {
 	h.box.Refresh()
 }
 
+func (h *highlightDisplay) SetPlaceholder(s string) {
+	txt := canvas.NewText(s, theme.Color(theme.ColorNamePlaceHolder))
+	txt.TextStyle = fyne.TextStyle{Italic: true, Monospace: true}
+	txt.TextSize = theme.TextSize()
+	h.box.Objects = []fyne.CanvasObject{txt}
+	h.box.Refresh()
+}
+
 func (h *highlightDisplay) CreateRenderer() fyne.WidgetRenderer {
 	return widget.NewSimpleRenderer(h.box)
 }
@@ -323,8 +331,9 @@ func (e *urlEntry) KeyDown(key *fyne.KeyEvent) {
 type UrlInput struct {
 	widget.BaseWidget
 
-	value   binding.String
-	focused bool
+	value       binding.String
+	placeholder string
+	focused     bool
 
 	entry   *urlEntry
 	display *highlightDisplay
@@ -355,12 +364,27 @@ func NewUrlInput(value binding.String) *UrlInput {
 
 	value.AddListener(binding.NewDataListener(func() {
 		raw, _ := value.Get()
-		u.display.SetText(raw)
+		u.updateDisplay(raw)
 	}))
 
 	u.entry.Hide()
 
 	return u
+}
+
+func (u *UrlInput) SetPlaceHolder(s string) {
+	u.placeholder = s
+	u.entry.SetPlaceHolder(s)
+	raw, _ := u.value.Get()
+	u.updateDisplay(raw)
+}
+
+func (u *UrlInput) updateDisplay(raw string) {
+	if strings.TrimSpace(raw) == "" && u.placeholder != "" {
+		u.display.SetPlaceholder(u.placeholder)
+		return
+	}
+	u.display.SetText(raw)
 }
 
 func (u *UrlInput) Tapped(_ *fyne.PointEvent) {
@@ -401,7 +425,7 @@ func (u *UrlInput) Refresh() {
 	} else {
 		u.entry.Hide()
 		raw, _ := u.value.Get()
-		u.display.SetText(raw)
+		u.updateDisplay(raw)
 		u.bg.Show()
 		u.border.Show()
 		u.scroll.Show()
