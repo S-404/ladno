@@ -396,15 +396,8 @@ func (s *KafkaStore) StopConsume(collectionID, itemID string) {
 	}
 }
 
-func (s *KafkaStore) Run(collectionID, itemID string, method constants.KafkaMethod, req entity.KafkaRequest, event entity.Event, onDone func(err error, scriptErr string)) {
+func (s *KafkaStore) Run(collectionID, itemID string, method constants.KafkaMethod, req entity.KafkaRequest, onDone func(err error)) {
 	method = constants.NormalizeKafkaMethod(method)
-
-	var scriptErr error
-	if method == constants.KafkaMethodProduce && len(event.PreRequest) > 0 {
-		if err := ApplyPreRequest(event.PreRequest, s.envStore); err != nil {
-			scriptErr = err
-		}
-	}
 
 	req = applyKafkaRequestEnv(req, s.envStore.ActiveVariables())
 
@@ -417,19 +410,8 @@ func (s *KafkaStore) Run(collectionID, itemID string, method constants.KafkaMeth
 	}
 	s.mu.Unlock()
 
-	finish := func(err error) {
-		msg := ""
-		if scriptErr != nil {
-			msg = scriptErr.Error()
-			s.logScriptError(msg)
-		}
-		if onDone != nil {
-			onDone(err, msg)
-		}
-	}
-
 	if connected {
-		s.runConnected(collectionID, itemID, method, req, event, &scriptErr, conn, finish)
+		s.runConnected(collectionID, itemID, method, req, conn, onDone)
 		return
 	}
 
@@ -437,12 +419,16 @@ func (s *KafkaStore) Run(collectionID, itemID string, method constants.KafkaMeth
 	if !ok {
 		err := fmt.Errorf("not connected and no Kafka collection settings")
 		s.logKafkaError(req.Topic, err.Error())
-		finish(err)
+		if onDone != nil {
+			onDone(err)
+		}
 		return
 	}
 	s.Connect(collectionID, colName, conn, func(ok bool, status string) {
 		if !ok {
-			finish(fmt.Errorf("%s", status))
+			if onDone != nil {
+				onDone(fmt.Errorf("%s", status))
+			}
 			return
 		}
 		s.mu.Lock()
@@ -455,10 +441,12 @@ func (s *KafkaStore) Run(collectionID, itemID string, method constants.KafkaMeth
 		if st == nil || len(st.brokers) == 0 {
 			err := fmt.Errorf("connect succeeded but brokers missing")
 			s.logKafkaError(req.Topic, err.Error())
-			finish(err)
+			if onDone != nil {
+				onDone(err)
+			}
 			return
 		}
-		s.runConnected(collectionID, itemID, method, req, event, &scriptErr, conn, finish)
+		s.runConnected(collectionID, itemID, method, req, conn, onDone)
 	})
 }
 
@@ -483,24 +471,10 @@ func (s *KafkaStore) runConnected(
 	collectionID, itemID string,
 	method constants.KafkaMethod,
 	req entity.KafkaRequest,
-	event entity.Event,
-	scriptErr *error,
 	conn entity.KafkaConnection,
 	onDone func(err error),
 ) {
 	headers := variablesToKafkaHeaders(req.Headers)
-	applyPost := func(body string) {
-		if method != constants.KafkaMethodProduce || len(event.PostRequest) == 0 {
-			return
-		}
-		if err := ApplyPostRequest(body, event.PostRequest, s.envStore); err != nil {
-			if scriptErr != nil && *scriptErr == nil {
-				*scriptErr = err
-			} else if scriptErr != nil && *scriptErr != nil {
-				*scriptErr = fmt.Errorf("%w; %v", *scriptErr, err)
-			}
-		}
-	}
 	switch method {
 	case constants.KafkaMethodConsume:
 		s.runConsume(collectionID, itemID, conn, req.Topic, onDone)
@@ -523,7 +497,6 @@ func (s *KafkaStore) runConnected(
 					Time:    time.Now(),
 				})
 				s.logKafkaProduce(req.Topic, req.Key, req.Payload)
-				applyPost(req.Payload)
 				if onDone != nil {
 					onDone(nil)
 				}
@@ -674,18 +647,6 @@ func (s *KafkaStore) logKafkaError(topic, errMsg string) {
 		Kind:    "kafka",
 		Message: fmt.Sprintf("Kafka error %s: %s", topic, errMsg),
 		Detail:  fmt.Sprintf("── KAFKA ERROR ──\nTopic: %s\nError: %s\n", topic, errMsg),
-		IsError: true,
-	})
-}
-
-func (s *KafkaStore) logScriptError(errMsg string) {
-	if s.logStore == nil || errMsg == "" {
-		return
-	}
-	s.logStore.Append(&entity.LogEntry{
-		Kind:    "script",
-		Message: "Script error: " + errMsg,
-		Detail:  errMsg,
 		IsError: true,
 	})
 }

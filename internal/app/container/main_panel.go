@@ -297,27 +297,18 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 	)
 	kafkaStore.AddMessageListener(func() { fyne.Do(refreshKafkaMessages) })
 
-	var syncKafkaScriptDot func()
-	var markKafkaScriptResult func(scriptErr string)
-
 	kafkaPanel = kafkaui.NewRequestView(
-		func(method constants.KafkaMethod, req entity.KafkaRequest, event entity.Event) {
+		func(method constants.KafkaMethod, req entity.KafkaRequest) {
 			sel := currentSelection(selStore.GetSelection())
 			if sel == nil || sel.Kind != entity.SelectionRequest {
 				return
 			}
 			kafkaCollectionID = sel.CollectionID
-			if method == constants.KafkaMethodProduce {
-				syncKafkaScriptDot()
-			}
 			kafkaPanel.SetRunning(true)
-			kafkaStore.Run(sel.CollectionID, sel.ItemID, method, req, event, func(err error, scriptErr string) {
+			kafkaStore.Run(sel.CollectionID, sel.ItemID, method, req, func(err error) {
 				kafkaPanel.SetRunning(false)
 				if method == constants.KafkaMethodConsume && err == nil {
 					kafkaPanel.SetConsumeActive(true)
-				}
-				if method == constants.KafkaMethodProduce {
-					markKafkaScriptResult(scriptErr)
 				}
 				refreshKafkaMessages()
 			})
@@ -330,13 +321,11 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 			kafkaStore.StopConsume(sel.CollectionID, sel.ItemID)
 			kafkaPanel.SetConsumeActive(false)
 		},
-		func(name string, req entity.KafkaRequest, event entity.Event) {
+		func(name string, req entity.KafkaRequest) {
 			putRequestDraft(func(d *entity.RequestDraft) {
 				d.Name = name
 				d.Request.Kafka = &req
-				d.Request.Event = event
 			})
-			syncKafkaScriptDot()
 		},
 		func() {
 			sel := currentSelection(selStore.GetSelection())
@@ -347,55 +336,13 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 		kafkaMessagesView,
 	)
 
-	hasKafkaScripts := func() bool {
-		if kafkaPanel == nil || kafkaPanel.GetEvent == nil {
-			return false
-		}
-		ev := kafkaPanel.GetEvent()
-		return len(ev.PreRequest) > 0 || len(ev.PostRequest) > 0
-	}
-	syncKafkaScriptDot = func() {
-		if kafkaPanel == nil || kafkaPanel.SetScriptIcon == nil {
-			return
-		}
-		if hasKafkaScripts() {
-			kafkaPanel.SetScriptIcon(ui.DotGray)
-		} else {
-			kafkaPanel.SetScriptIcon(nil)
-		}
-	}
-	markKafkaScriptResult = func(scriptErr string) {
-		if kafkaPanel == nil {
-			return
-		}
-		if kafkaPanel.SetScriptError != nil {
-			kafkaPanel.SetScriptError(scriptErr)
-		}
-		if !hasKafkaScripts() {
-			kafkaPanel.SetScriptIcon(nil)
-			return
-		}
-		if strings.TrimSpace(scriptErr) != "" {
-			kafkaPanel.SetScriptIcon(ui.DotRed)
-			return
-		}
-		kafkaPanel.SetScriptIcon(ui.DotGreen)
-	}
-	refreshKafkaScriptEnvKeys := func() {
-		if kafkaPanel != nil && kafkaPanel.SetEnvKeys != nil {
-			kafkaPanel.SetEnvKeys(envStore.ActiveEnvKeys())
-		}
-	}
-
 	app.Store.Env.GetActiveID().AddListener(binding.NewDataListener(func() {
 		refreshNatsMessages()
 		refreshKafkaMessages()
 		refreshNatsScriptEnvKeys()
-		refreshKafkaScriptEnvKeys()
 	}))
 	(*envStore.GetItems()).AddListener(binding.NewDataListener(func() {
 		refreshNatsScriptEnvKeys()
-		refreshKafkaScriptEnvKeys()
 	}))
 
 	panels := []fyne.CanvasObject{
@@ -497,10 +444,8 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 				}
 			case constants.CollectionTypeKafka:
 				kafkaCollectionID = sel.CollectionID
-				kafkaPanel.Set(d.Request.Kafka, d.Name, kafkaStore.IsConsuming(sel.CollectionID, sel.ItemID), d.Request.Event)
+				kafkaPanel.Set(d.Request.Kafka, d.Name, kafkaStore.IsConsuming(sel.CollectionID, sel.ItemID))
 				kafkaPanel.SetDirty(dirty)
-				refreshKafkaScriptEnvKeys()
-				syncKafkaScriptDot()
 				refreshKafkaMessages()
 				show(7)
 				if focusName {

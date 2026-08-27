@@ -5,7 +5,6 @@ import (
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
-	"github.com/s-404/ladno/internal/app/components/scripttab"
 	"github.com/s-404/ladno/internal/app/components/ui"
 	"github.com/s-404/ladno/internal/app/entity"
 	"github.com/s-404/ladno/internal/app/entity/constants"
@@ -13,24 +12,20 @@ import (
 
 type RequestView struct {
 	fyne.CanvasObject
-	Set              func(req *entity.KafkaRequest, name string, consuming bool, event entity.Event)
+	Set              func(req *entity.KafkaRequest, name string, consuming bool)
 	Get              func() entity.KafkaRequest
-	GetEvent         func() entity.Event
 	SetRunning       func(running bool)
 	SetConsumeActive func(active bool)
 	SetDirty         func(dirty bool)
-	SetEnvKeys       func(keys []string)
-	SetScriptError   func(msg string)
-	SetScriptIcon    func(icon fyne.Resource)
 	Messages         *MessagesView
 	Topic            func() string
 	FocusName        func()
 }
 
 func NewRequestView(
-	onRun func(method constants.KafkaMethod, req entity.KafkaRequest, event entity.Event),
+	onRun func(method constants.KafkaMethod, req entity.KafkaRequest),
 	onStop func(),
-	onChange func(name string, req entity.KafkaRequest, event entity.Event),
+	onChange func(name string, req entity.KafkaRequest),
 	onSave func(),
 	messages *MessagesView,
 ) *RequestView {
@@ -48,22 +43,18 @@ func NewRequestView(
 	payload.SetMinRowsVisible(8)
 
 	var headers *ui.KVTable
-	var scriptView *scripttab.ScriptView
-	var scriptTab *container.TabItem
-	var requestTabs *container.AppTabs
 	var getReq func() entity.KafkaRequest
 
 	notify := func() {
-		if applying || onChange == nil || header == nil || getReq == nil || scriptView == nil {
+		if applying || onChange == nil || header == nil || getReq == nil {
 			return
 		}
-		onChange(header.GetName(), getReq(), scriptView.Get())
+		onChange(header.GetName(), getReq())
 	}
 
 	header = ui.NewEntityHeader(theme.DocumentIcon(), "Request name", func(string) { notify() }, onSave)
 
 	headers = ui.NewKVTable(nil, func([]ui.KVRow) { notify() })
-	scriptView = scripttab.NewScriptView(func(entity.Event) { notify() })
 
 	getReq = func() entity.KafkaRequest {
 		rows := headers.GetRows()
@@ -82,7 +73,7 @@ func NewRequestView(
 
 	produceBtn := widget.NewButton("Produce", func() {
 		if onRun != nil {
-			onRun(constants.KafkaMethodProduce, getReq(), scriptView.Get())
+			onRun(constants.KafkaMethodProduce, getReq())
 		}
 	})
 	produceBtn.Importance = widget.MediumImportance
@@ -106,7 +97,7 @@ func NewRequestView(
 			return
 		}
 		if onRun != nil {
-			onRun(constants.KafkaMethodConsume, getReq(), entity.Event{})
+			onRun(constants.KafkaMethodConsume, getReq())
 		}
 	})
 	applyConsumeBtn()
@@ -116,11 +107,9 @@ func NewRequestView(
 		ui.NewListVScroll(container.NewVBox(headers)),
 	)
 	payloadPanel := container.NewBorder(nil, nil, nil, nil, payload)
-	scriptTab = container.NewTabItem("Script", scriptView.Object)
-	requestTabs = container.NewAppTabs(
+	requestTabs := container.NewAppTabs(
 		container.NewTabItem("Headers", headersPanel),
 		container.NewTabItem("Payload", payloadPanel),
-		scriptTab,
 	)
 
 	actions := container.NewBorder(nil, nil, container.NewHBox(produceBtn, consumeBtn), statusLabel, nil)
@@ -142,21 +131,8 @@ func NewRequestView(
 
 	v := &RequestView{CanvasObject: split, Messages: messages, Topic: func() string { return topic.Text() }}
 	v.Get = getReq
-	v.GetEvent = func() entity.Event {
-		if scriptView == nil {
-			return entity.Event{}
-		}
-		return scriptView.Get()
-	}
 	v.SetDirty = header.SetDirty
 	v.FocusName = header.FocusName
-	v.SetEnvKeys = scriptView.SetEnvKeys
-	v.SetScriptError = scriptView.SetError
-	v.SetScriptIcon = func(icon fyne.Resource) {
-		scriptTab.Icon = icon
-		scriptTab.Text = "Script"
-		requestTabs.Refresh()
-	}
 	v.SetRunning = func(running bool) {
 		if running {
 			produceBtn.Disable()
@@ -177,7 +153,7 @@ func NewRequestView(
 		}
 		statusLabel.SetText("")
 	}
-	v.Set = func(req *entity.KafkaRequest, name string, isConsuming bool, event entity.Event) {
+	v.Set = func(req *entity.KafkaRequest, name string, isConsuming bool) {
 		applying = true
 		header.SetName(name)
 		statusLabel.SetText("")
@@ -186,7 +162,6 @@ func NewRequestView(
 			key.SetText("")
 			payload.SetText("")
 			headers.SetRows(nil)
-			scriptView.Set(entity.Event{})
 			v.SetConsumeActive(false)
 		} else {
 			topic.SetText(req.Topic)
@@ -197,10 +172,8 @@ func NewRequestView(
 				rows = append(rows, ui.KVRow{Enabled: true, Key: h.Key, Value: h.Value})
 			}
 			headers.SetRows(rows)
-			scriptView.Set(event)
 			v.SetConsumeActive(isConsuming)
 		}
-		scriptView.SetError("")
 		applying = false
 	}
 	return v
