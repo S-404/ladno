@@ -96,7 +96,7 @@ func AddRequestMenuLabel(t CollectionType) string {
 	case CollectionTypeWS:
 		return "Add connection"
 	case CollectionTypeSocketIO:
-		return "Add Socket.IO"
+		return "Add connection"
 	default:
 		return "Add request"
 	}

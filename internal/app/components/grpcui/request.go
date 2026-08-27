@@ -240,7 +240,10 @@ func NewRequestView(
 	sendBtn.Importance = widget.MediumImportance
 
 	urlRow := container.NewBorder(nil, nil, nil, sendBtn,
-		container.NewGridWithColumns(2, target, methodBar),
+		container.NewGridWithColumns(2,
+			widget.NewForm(widget.NewFormItem("Target", target)),
+			widget.NewForm(widget.NewFormItem("Method", methodBar)),
+		),
 	)
 	requestPanel := container.NewBorder(
 		container.NewVBox(header.Object, urlRow),

@@ -712,7 +712,7 @@ func MainPanelContainer(app *shared.App) fyne.CanvasObject {
 				fyne.Do(colSettings.FocusName)
 			}
 		case entity.SelectionFolder:
-			folderSettings.Set(sel.Name, sel.Auth, constants.IsHTTPCollection(sel.CollectionType))
+			folderSettings.Set(sel.Name, sel.Auth, sel.CollectionType)
 			folderSettings.SetDirty(drafts.IsFolderDirty(sel.ItemID))
 			show(2)
 			if sel.FocusName {

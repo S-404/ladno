@@ -120,11 +120,13 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 	applying = true
 	restAuthPanel := ui.NewAuthPanel(ui.AuthPanelOptions{
 		AllowInherited: false,
+		TypeLabel:      "Auth",
 		OnChange:       authNotify,
 	})
 	grpcAuthPanel := ui.NewAuthPanel(ui.AuthPanelOptions{
 		AllowInherited: false,
 		DisableAPIKey:  true,
+		TypeLabel:      "Auth",
 		OnChange:       authNotify,
 	})
 	sioAuthPanel := ui.NewAuthPanel(ui.AuthPanelOptions{
@@ -132,6 +134,7 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 		DisableBasic:     true,
 		AllowJSON:        true,
 		APIKeyHeaderOnly: true,
+		TypeLabel:        "Auth",
 		OnChange:         authNotify,
 	})
 	authPanelFor = func(t constants.CollectionType) *ui.AuthPanel {
@@ -218,17 +221,14 @@ func NewSettingsView(cb SettingsCallbacks) *SettingsView {
 				),
 			}
 		default:
-			general := container.NewPadded(container.NewVBox(
-				widget.NewForm(
-					widget.NewFormItem("Type", typeLabel),
-				),
-			))
-			tabs := container.NewAppTabs(
-				container.NewTabItem("General", general),
-				container.NewTabItem("Auth", authPanelFor(currentType).CanvasObject),
-			)
 			content.Objects = []fyne.CanvasObject{
-				container.NewBorder(header.Object, nil, nil, nil, tabs),
+				container.NewBorder(header.Object, nil, nil, nil,
+					container.NewPadded(container.NewBorder(
+						widget.NewForm(widget.NewFormItem("Type", typeLabel)),
+						nil, nil, nil,
+						authPanelFor(currentType).CanvasObject,
+					)),
+				),
 			}
 		}
 		content.Refresh()

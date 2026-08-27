@@ -166,7 +166,9 @@ func NewRequestView(
 		container.NewTabItem("Message", messagePanel),
 	)
 
-	urlRow := container.NewBorder(nil, nil, nil, connectBtn, urlInput)
+	urlRow := container.NewBorder(nil, nil, nil, connectBtn,
+		widget.NewForm(widget.NewFormItem("Url", urlInput)),
+	)
 	requestPanel := container.NewBorder(
 		container.NewVBox(header.Object, urlRow),
 		nil, nil, nil,

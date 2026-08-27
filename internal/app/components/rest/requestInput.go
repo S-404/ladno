@@ -44,9 +44,9 @@ func NewRequestInput(methods []string, requestString binding.String, onSend func
 	border := container.NewBorder(
 		nil,
 		nil,
-		methodSelect,
+		widget.NewForm(widget.NewFormItem("Method", methodSelect)),
 		requestButton,
-		input,
+		widget.NewForm(widget.NewFormItem("Url", input)),
 	)
 
 	return &RequestInputView{

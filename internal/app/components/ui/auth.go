@@ -19,7 +19,9 @@ type AuthPanelOptions struct {
 	DisableAPIKey bool
 	// APIKeyHeaderOnly hides "Add to body" and always uses a header.
 	APIKeyHeaderOnly bool
-	OnChange         func(auth entity.Auth)
+	// TypeLabel overrides the auth-type form label (default "Type").
+	TypeLabel string
+	OnChange  func(auth entity.Auth)
 }
 
 type AuthPanel struct {
@@ -218,8 +220,12 @@ func NewAuthPanel(opts AuthPanelOptions) *AuthPanel {
 	}
 	showDetails(selectedType())
 
+	typeLabel := opts.TypeLabel
+	if typeLabel == "" {
+		typeLabel = "Type"
+	}
 	form := container.NewVBox(
-		widget.NewForm(widget.NewFormItem("Type", authSelect)),
+		widget.NewForm(widget.NewFormItem(typeLabel, authSelect)),
 		details,
 	)
 	root := container.NewBorder(nil, nil, nil, nil, container.NewPadded(NewListVScroll(form)))
