@@ -183,7 +183,7 @@ func NewAuthPanel(opts AuthPanelOptions) *AuthPanel {
 		widget.NewForm(widget.NewFormItem("Type", authSelect)),
 		details,
 	)
-	root := container.NewPadded(NewListVScroll(form))
+	root := container.NewBorder(nil, nil, nil, nil, container.NewPadded(NewListVScroll(form)))
 
 	p := &AuthPanel{CanvasObject: root}
 	p.Set = func(auth entity.Auth) {

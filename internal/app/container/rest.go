@@ -314,10 +314,9 @@ func RestContainer(app *shared.App) fyne.CanvasObject {
 		}
 	}
 
-	tabsWithCookies := container.NewBorder(
-		nil, nil, nil,
-		container.NewBorder(container.NewPadded(cookiesLink), nil, nil, nil, nil),
+	tabsWithCookies := ui.NewPinTopRight(
 		requestTabs,
+		container.NewPadded(cookiesLink),
 	)
 
 	request := container.NewBorder(

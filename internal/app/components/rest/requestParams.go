@@ -109,7 +109,7 @@ func NewRequestParams(requestURL binding.String) *RequestParamsView {
 	}
 
 	return &RequestParamsView{
-		Object: scroll,
+		Object: container.NewBorder(nil, nil, nil, nil, scroll),
 		GetPathParams: func() map[string]string {
 			vals := map[string]string{}
 			for _, r := range pathTable.GetRows() {

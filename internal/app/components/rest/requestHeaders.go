@@ -112,7 +112,7 @@ func NewRequestHeaders(initial []ui.KVRow, onChange func(rows []ui.KVRow)) *Requ
 	scroll := ui.NewListVScroll(content)
 	rebuild()
 
-	v := &RequestHeadersView{Object: scroll}
+	v := &RequestHeadersView{Object: container.NewBorder(nil, nil, nil, nil, scroll)}
 	v.SetManual = func(rows []ui.KVRow) {
 		manual = cloneRows(rows)
 		rebuild()
