@@ -1,0 +1,300 @@
+package collection
+
+import (
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/widget"
+	"github.com/s-404/ladno/internal/app/components/ui"
+	"github.com/s-404/ladno/internal/app/entity"
+	"github.com/s-404/ladno/internal/app/entity/constants"
+)
+
+type SettingsSave struct {
+	Name  string
+	Auth  entity.Auth
+	Nats  *entity.NatsConnection
+	Kafka *entity.KafkaConnection
+}
+
+type SettingsCallbacks struct {
+	OnChange     func(SettingsSave)
+	OnSave       func(SettingsSave)
+	OnConnect    func(SettingsSave)
+	OnDisconnect func()
+}
+
+type SettingsView struct {
+	fyne.CanvasObject
+	Set              func(name string, auth entity.Auth, nats *entity.NatsConnection, kafka *entity.KafkaConnection, colType constants.CollectionType, connected bool)
+	Get              func() SettingsSave
+	Save             func()
+	SetDirty         func(dirty bool)
+	SetConnectStatus func(text string)
+	SetConnected     func(connected bool)
+	FocusName        func()
+}
+
+func NewSettingsView(cb SettingsCallbacks) *SettingsView {
+	var applying bool
+	var getSave func() SettingsSave
+	var header *ui.EntityHeader
+
+	typeLabel := widget.NewLabel("")
+	typeLabel.TextStyle = fyne.TextStyle{Italic: true}
+
+	hostEntry := ui.NewEnvInput()
+	hostEntry.SetPlaceHolder("{{natsHost}} or localhost")
+	portEntry := ui.NewEnvInput()
+	portEntry.SetPlaceHolder("{{natsPort}} or 4222")
+	tokenEntry := ui.NewEnvInput()
+	tokenEntry.SetPlaceHolder("{{natsToken}}")
+	brokersEntry := ui.NewEnvInput()
+	brokersEntry.SetPlaceHolder("{{kafkaBrokers}} or localhost:9092")
+	saslSelect := widget.NewSelect([]string{"none", constants.KafkaSASLPlain, constants.KafkaSASLSCRAM256, constants.KafkaSASLSCRAM512}, nil)
+	saslSelect.PlaceHolder = "none"
+	usernameEntry := ui.NewEnvInput()
+	usernameEntry.SetPlaceHolder("{{kafkaUser}}")
+	usernameEntry.SetPassword(true)
+	passwordEntry := ui.NewEnvInput()
+	passwordEntry.SetPlaceHolder("{{kafkaPassword}}")
+	passwordEntry.SetPassword(true)
+	tlsCheck := widget.NewCheck("Enable TLS", nil)
+
+	connStatus := widget.NewLabel("")
+	connStatus.TextStyle = fyne.TextStyle{Italic: true}
+
+	var currentType constants.CollectionType
+	var connected bool
+	var authPanelFor func(t constants.CollectionType) *ui.AuthPanel
+	content := container.NewStack()
+
+	notify := func() {
+		if applying || cb.OnChange == nil || getSave == nil {
+			return
+		}
+		cb.OnChange(getSave())
+	}
+
+	header = ui.NewEntityHeader(theme.ListIcon(), "Collection name", func(string) { notify() }, func() {
+		if cb.OnSave != nil && getSave != nil {
+			cb.OnSave(getSave())
+		}
+	})
+
+	getSave = func() SettingsSave {
+		out := SettingsSave{Name: header.GetName()}
+		switch currentType {
+		case constants.CollectionTypeNATS:
+			out.Nats = &entity.NatsConnection{
+				Host:  hostEntry.Text(),
+				Port:  portEntry.Text(),
+				Token: tokenEntry.Text(),
+			}
+			out.Auth = entity.Auth{Type: constants.AuthTypeNoAuth}
+		case constants.CollectionTypeKafka:
+			sasl := saslSelect.Selected
+			if sasl == "none" {
+				sasl = ""
+			}
+			out.Kafka = &entity.KafkaConnection{
+				Brokers:  brokersEntry.Text(),
+				SASL:     constants.NormalizeKafkaSASL(sasl),
+				Username: usernameEntry.Text(),
+				Password: passwordEntry.Text(),
+				TLS:      tlsCheck.Checked,
+			}
+			out.Auth = entity.Auth{Type: constants.AuthTypeNoAuth}
+		default:
+			if authPanelFor == nil {
+				break
+			}
+			if p := authPanelFor(currentType); p != nil {
+				out.Auth = p.Get()
+			}
+		}
+		return out
+	}
+
+	authNotify := func(entity.Auth) { notify() }
+	applying = true
+	restAuthPanel := ui.NewAuthPanel(ui.AuthPanelOptions{
+		AllowInherited: false,
+		TypeLabel:      "Auth",
+		OnChange:       authNotify,
+	})
+	grpcAuthPanel := ui.NewAuthPanel(ui.AuthPanelOptions{
+		AllowInherited: false,
+		DisableAPIKey:  true,
+		TypeLabel:      "Auth",
+		OnChange:       authNotify,
+	})
+	sioAuthPanel := ui.NewAuthPanel(ui.AuthPanelOptions{
+		AllowInherited:   false,
+		DisableBasic:     true,
+		AllowJSON:        true,
+		APIKeyHeaderOnly: true,
+		TypeLabel:        "Auth",
+		OnChange:         authNotify,
+	})
+	authPanelFor = func(t constants.CollectionType) *ui.AuthPanel {
+		switch constants.NormalizeCollectionType(t) {
+		case constants.CollectionTypeGRPC:
+			return grpcAuthPanel
+		case constants.CollectionTypeSocketIO:
+			return sioAuthPanel
+		default:
+			return restAuthPanel
+		}
+	}
+	applying = false
+
+	hostEntry.OnChanged(func(string) { notify() })
+	portEntry.OnChanged(func(string) { notify() })
+	tokenEntry.OnChanged(func(string) { notify() })
+	brokersEntry.OnChanged(func(string) { notify() })
+	saslSelect.OnChanged = func(string) { notify() }
+	usernameEntry.OnChanged(func(string) { notify() })
+	passwordEntry.OnChanged(func(string) { notify() })
+	tlsCheck.OnChanged = func(bool) { notify() }
+
+	connBtn := widget.NewButton("Connect", nil)
+	applyConnBtn := func() {
+		if connected {
+			connBtn.SetText("Disconnect")
+			connBtn.Importance = widget.DangerImportance
+			return
+		}
+		connBtn.SetText("Connect")
+		connBtn.Importance = widget.MediumImportance
+	}
+	connBtn.OnTapped = func() {
+		if connected {
+			if cb.OnDisconnect != nil {
+				cb.OnDisconnect()
+			}
+			return
+		}
+		if cb.OnConnect != nil {
+			cb.OnConnect(getSave())
+		}
+	}
+	applyConnBtn()
+
+	isConnectable := func() bool {
+		return currentType == constants.CollectionTypeNATS || currentType == constants.CollectionTypeKafka
+	}
+
+	render := func() {
+		content.Objects = nil
+		switch currentType {
+		case constants.CollectionTypeNATS:
+			content.Objects = []fyne.CanvasObject{
+				container.NewBorder(header.Object, nil, nil, nil,
+					container.NewPadded(container.NewVBox(
+						widget.NewForm(
+							widget.NewFormItem("Type", typeLabel),
+							widget.NewFormItem("Host", hostEntry),
+							widget.NewFormItem("Port", portEntry),
+							widget.NewFormItem("Token", tokenEntry),
+						),
+						connBtn,
+						connStatus,
+					)),
+				),
+			}
+		case constants.CollectionTypeKafka:
+			content.Objects = []fyne.CanvasObject{
+				container.NewBorder(header.Object, nil, nil, nil,
+					container.NewPadded(container.NewVBox(
+						widget.NewForm(
+							widget.NewFormItem("Type", typeLabel),
+							widget.NewFormItem("Brokers", brokersEntry),
+							widget.NewFormItem("SASL", saslSelect),
+							widget.NewFormItem("Username", usernameEntry),
+							widget.NewFormItem("Password", passwordEntry),
+							widget.NewFormItem("TLS", tlsCheck),
+						),
+						connBtn,
+						connStatus,
+					)),
+				),
+			}
+		default:
+			content.Objects = []fyne.CanvasObject{
+				container.NewBorder(header.Object, nil, nil, nil,
+					container.NewPadded(container.NewBorder(
+						widget.NewForm(widget.NewFormItem("Type", typeLabel)),
+						nil, nil, nil,
+						authPanelFor(currentType).CanvasObject,
+					)),
+				),
+			}
+		}
+		content.Refresh()
+	}
+
+	setConnected := func(ok bool) {
+		connected = ok
+		applyConnBtn()
+		connBtn.Refresh()
+	}
+
+	v := &SettingsView{CanvasObject: content}
+	v.Set = func(name string, auth entity.Auth, nats *entity.NatsConnection, kafka *entity.KafkaConnection, colType constants.CollectionType, isConnected bool) {
+		applying = true
+		currentType = constants.NormalizeCollectionType(colType)
+		header.SetName(name)
+		typeLabel.SetText(constants.CollectionTypeLabel(currentType))
+		connStatus.SetText("")
+		setConnected(isConnected)
+		if isConnected && isConnectable() {
+			connStatus.SetText("Connected")
+		}
+		switch currentType {
+		case constants.CollectionTypeNATS:
+			if nats == nil {
+				nats = &entity.NatsConnection{}
+			}
+			hostEntry.SetText(nats.Host)
+			portEntry.SetText(nats.Port)
+			tokenEntry.SetText(nats.Token)
+		case constants.CollectionTypeKafka:
+			if kafka == nil {
+				kafka = &entity.KafkaConnection{}
+			}
+			brokersEntry.SetText(kafka.Brokers)
+			sasl := constants.NormalizeKafkaSASL(kafka.SASL)
+			if sasl == "" {
+				saslSelect.SetSelected("none")
+			} else {
+				saslSelect.SetSelected(sasl)
+			}
+			usernameEntry.SetText(kafka.Username)
+			passwordEntry.SetText(kafka.Password)
+			tlsCheck.SetChecked(kafka.TLS)
+		default:
+			authPanelFor(currentType).Set(auth)
+		}
+		applying = false
+		render()
+	}
+	v.Get = getSave
+	v.Save = func() {
+		if cb.OnSave != nil {
+			cb.OnSave(getSave())
+		}
+	}
+	v.SetDirty = header.SetDirty
+	v.FocusName = header.FocusName
+	v.SetConnectStatus = func(text string) { connStatus.SetText(text) }
+	v.SetConnected = func(ok bool) {
+		setConnected(ok)
+		if ok {
+			connStatus.SetText("Connected")
+		} else if connStatus.Text == "Connected" || connStatus.Text == "Connecting…" {
+			connStatus.SetText("")
+		}
+	}
+	return v
+}
