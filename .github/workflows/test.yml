@@ -1,0 +1,40 @@
+name: Test
+
+on:
+  pull_request:
+    branches: [main, dev]
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Fyne dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends \
+            gcc \
+            libgl1-mesa-dev \
+            libwayland-dev \
+            libx11-dev \
+            libxkbcommon-dev \
+            xorg-dev \
+            xvfb
+
+      - name: Run tests
+        run: xvfb-run -a go test ./...

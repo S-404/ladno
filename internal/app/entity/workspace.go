@@ -1,0 +1,222 @@
+package entity
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/s-404/ladno/internal/app/entity/constants"
+)
+
+const DefaultFolderNestingLimit = 5
+
+type Workspace struct {
+	Id                 string       `json:"id"`
+	Name               string       `json:"name"`
+	ConnectionConfig   string       `json:"connectionConfig"`
+	FolderNestingLimit *int         `json:"folderNestingLimit,omitempty"`
+	Collections        []Collection `json:"collections"`
+}
+
+// ClampFolderNestingLimit keeps -1 as unlimited and rejects values below that.
+func ClampFolderNestingLimit(n int) int {
+	if n < -1 {
+		return -1
+	}
+	return n
+}
+
+func (w *Workspace) GetFolderNestingLimit() int {
+	if w == nil || w.FolderNestingLimit == nil {
+		return DefaultFolderNestingLimit
+	}
+	return ClampFolderNestingLimit(*w.FolderNestingLimit)
+}
+
+func (w *Workspace) SetFolderNestingLimit(n int) int {
+	n = ClampFolderNestingLimit(n)
+	if w == nil {
+		return n
+	}
+	w.FolderNestingLimit = &n
+	return n
+}
+
+type WorkspaceLightWeight struct {
+	Id   string `json:"id"`
+	Name string `json:"name"`
+}
+
+type Collection struct {
+	Id        string                   `json:"id"`
+	Version   int                      `json:"version"`
+	Type      constants.CollectionType `json:"type"`
+	Name      string                   `json:"name"`
+	Auth      Auth                     `json:"auth"`
+	Nats      *NatsConnection          `json:"nats,omitempty"`
+	Kafka     *KafkaConnection         `json:"kafka,omitempty"`
+	Event     Event                    `json:"event"`
+	Items     []CollectionItem         `json:"items"`
+	CreatedAt time.Time                `json:"createdAt"`
+	UpdatedAt time.Time                `json:"updatedAt"`
+	DeletedAt *time.Time               `json:"deletedAt"`
+}
+
+type CollectionItem struct {
+	Id      string           `json:"id"`
+	Name    string           `json:"name"`
+	Auth    Auth             `json:"auth"`
+	Request *ItemRequest     `json:"request"`
+	Item    []CollectionItem `json:"item"`
+}
+
+type ItemRequest struct {
+	Method     constants.RequestMethod `json:"method"`
+	Header     []Variable              `json:"header"`
+	Auth       Auth                    `json:"auth"`
+	Event      Event                   `json:"event"`
+	Url        RequestUrl              `json:"url"`
+	BodyMode   RestBodyMode            `json:"bodyMode,omitempty"`
+	Body       string                  `json:"body,omitempty"`
+	FormData   []Variable              `json:"formData,omitempty"`
+	URLEncoded []Variable              `json:"urlencoded,omitempty"`
+	Grpc       *GrpcRequest            `json:"grpc,omitempty"`
+	Ws         *WsRequest              `json:"ws,omitempty"`
+	SocketIO   *SocketIORequest        `json:"socketio,omitempty"`
+	Nats       *NatsRequest            `json:"nats,omitempty"`
+	Kafka      *KafkaRequest           `json:"kafka,omitempty"`
+}
+
+func (r *ItemRequest) Kind() constants.RequestKind {
+	if r == nil {
+		return constants.RequestKindREST
+	}
+	if r.Nats != nil {
+		return constants.RequestKindNATS
+	}
+	if r.Kafka != nil {
+		return constants.RequestKindKafka
+	}
+	if r.Grpc != nil {
+		return constants.RequestKindGRPC
+	}
+	if r.SocketIO != nil {
+		return constants.RequestKindSocketIO
+	}
+	if r.Ws != nil {
+		return constants.RequestKindWS
+	}
+	return constants.RequestKindREST
+}
+
+func RequestTreeLabel(name string, req *ItemRequest) string {
+	if req == nil {
+		return name
+	}
+	switch req.Kind() {
+	case constants.RequestKindREST:
+		m := req.Method
+		if m == "" {
+			m = constants.GET
+		}
+		return fmt.Sprintf("[%s] %s", m, name)
+	case constants.RequestKindGRPC:
+		return fmt.Sprintf("[gRPC] %s", name)
+	case constants.RequestKindWS:
+		return fmt.Sprintf("[WS] %s", name)
+	case constants.RequestKindSocketIO:
+		return fmt.Sprintf("[SIO] %s", name)
+	default:
+		return name
+	}
+}
+
+type GrpcRequest struct {
+	Target      string          `json:"target"`
+	Method      string          `json:"method"`
+	ProtoFiles  []GrpcProtoFile `json:"protoFiles,omitempty"`
+	ActiveProto string          `json:"activeProto,omitempty"`
+	Metadata    []Variable      `json:"metadata"`
+	Message     string          `json:"message"`
+}
+
+// GrpcProtoFile is an imported .proto used to list and invoke methods.
+type GrpcProtoFile struct {
+	Name    string `json:"name"`
+	Path    string `json:"path,omitempty"`
+	Content string `json:"content,omitempty"`
+}
+
+type WsRequest struct {
+	URL     string     `json:"url"`
+	Headers []Variable `json:"headers"`
+	Message string     `json:"message"`
+}
+
+type SocketIORequest struct {
+	URL       string     `json:"url"`
+	Path      string     `json:"path,omitempty"`
+	Namespace string     `json:"namespace,omitempty"`
+	Query     []Variable `json:"query,omitempty"`
+	Headers   []Variable `json:"headers"`
+	Auth      Auth       `json:"-"`
+	AuthJSON  string     `json:"authJson,omitempty"`
+	Event     string     `json:"event"`
+	Payload   string     `json:"payload"`
+}
+
+type NatsRequest struct {
+	Subject string     `json:"subject"`
+	Headers []Variable `json:"headers"`
+	Payload string     `json:"payload"`
+}
+
+// NatsConnection — подключение на уровне NATS-коллекции (host/port/token).
+type NatsConnection struct {
+	Host  string `json:"host"`
+	Port  string `json:"port"`
+	Token string `json:"token"`
+}
+
+type KafkaRequest struct {
+	Topic   string     `json:"topic"`
+	Key     string     `json:"key"`
+	Headers []Variable `json:"headers"`
+	Payload string     `json:"payload"`
+}
+
+// KafkaConnection — подключение на уровне Kafka-коллекции.
+type KafkaConnection struct {
+	Brokers  string `json:"brokers"`        // "localhost:9092" or comma-separated
+	SASL     string `json:"sasl,omitempty"` // "", "PLAIN", "SCRAM-SHA-256", "SCRAM-SHA-512"
+	Username string `json:"username,omitempty"`
+	Password string `json:"password,omitempty"`
+	TLS      bool   `json:"tls,omitempty"`
+}
+
+type RequestUrl struct {
+	Raw      string     `json:"raw"`
+	Variable []Variable `json:"variable"`
+}
+
+type Auth struct {
+	Type constants.AuthType `json:"type"`
+	Data []Variable         `json:"data"`
+}
+
+type Event struct {
+	PreRequest  []PreRequestEnvEvent  `json:"preRequestEvents"`
+	PostRequest []PostRequestEnvEvent `json:"postRequestEvents"`
+}
+
+type PreRequestEnvEvent struct {
+	EnvKey string                   `json:"envKey"`
+	Action constants.EnvEventAction `json:"action"`
+	Value  string                   `json:"value"`
+}
+
+type PostRequestEnvEvent struct {
+	EnvKey   string                   `json:"envKey"`
+	Action   constants.EnvEventAction `json:"action"`
+	Value    string                   `json:"value"`
+	JSONPath string                   `json:"JSONPath"`
+}

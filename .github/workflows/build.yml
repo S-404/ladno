@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: ladno-linux
+            binary: ladno
+          - os: macos-latest
+            artifact: ladno-macos
+            binary: ladno
+          - os: windows-latest
+            artifact: ladno-windows
+            binary: ladno.exe
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Install Fyne dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends \
+            gcc \
+            libgl1-mesa-dev \
+            libwayland-dev \
+            libx11-dev \
+            libxkbcommon-dev \
+            xorg-dev
+
+      - name: Install MinGW (Windows)
+        if: runner.os == 'Windows'
+        run: choco install mingw --no-progress
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(tr -d '[:space:]' < internal/buildinfo/VERSION)"
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "$VERSION" != "$TAG" ]; then
+            echo "VERSION file ($VERSION) does not match tag ($TAG)"
+            exit 1
+          fi
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: go build -o ${{ matrix.binary }} ./cmd
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-${{ steps.version.outputs.value }}
+          path: ${{ matrix.binary }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Read version
+        id: version
+        run: echo "value=$(tr -d '[:space:]' < internal/buildinfo/VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Pack release files
+        run: |
+          VERSION="${{ steps.version.outputs.value }}"
+          mkdir -p release
+          cp "artifacts/ladno-linux-${VERSION}/ladno" "release/ladno-${VERSION}-linux"
+          cp "artifacts/ladno-macos-${VERSION}/ladno" "release/ladno-${VERSION}-macos"
+          cp "artifacts/ladno-windows-${VERSION}/ladno.exe" "release/ladno-${VERSION}-windows.exe"
+          chmod +x "release/ladno-${VERSION}-linux" "release/ladno-${VERSION}-macos"
+
+      - name: Create GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            release/*
