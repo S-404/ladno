@@ -12,6 +12,7 @@ import (
 	"github.com/s-404/ladno/internal/app/entity"
 	"github.com/s-404/ladno/internal/app/entity/shared"
 	"github.com/s-404/ladno/internal/app/store"
+	"github.com/s-404/ladno/internal/buildinfo"
 )
 
 func SettingsContainer(app *shared.App) fyne.CanvasObject {
@@ -221,6 +222,10 @@ func generalSettingsTab(app *shared.App) fyne.CanvasObject {
 	saveBtn.Importance = widget.HighImportance
 
 	form := container.NewVBox(
+		widget.NewLabelWithStyle("About", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
+		widget.NewForm(
+			widget.NewFormItem("Version", widget.NewLabel(buildinfo.Version())),
+		),
 		widget.NewLabelWithStyle("Appearance", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}),
 		widget.NewForm(
 			widget.NewFormItem("Theme", themeSelect),
